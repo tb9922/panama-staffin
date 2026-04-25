@@ -155,8 +155,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
       const created = await userService.createUser(username, password, role, displayName, req.user.username, client);
       // Assign role at this home (defaults to viewer if no specific role requested)
       const effectiveRole = homeRoleId || 'viewer';
-      await userHomeRepo.assignRole(username, req.home.id, effectiveRole, null, req.user.username, client);
-      await auditService.log('user_create', req.home.slug, req.user.username, { username, role, homeRoleId }, client);
+      await userHomeRepo.assignRole(created.username, req.home.id, effectiveRole, null, req.user.username, client);
+      await auditService.log('user_create', req.home.slug, req.user.username, { username: created.username, role, homeRoleId }, client);
       return created;
     });
     res.status(201).json(user);

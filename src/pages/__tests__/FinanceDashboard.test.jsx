@@ -119,10 +119,10 @@ describe('FinanceDashboard', () => {
 
   it('shows finance alerts when present', async () => {
     api.getFinanceAlerts.mockResolvedValue([
-      { type: 'warning', message: 'Outstanding balance exceeds Â£5,000' },
+      { type: 'warning', message: 'Outstanding balance exceeds £5,000' },
     ]);
     renderWithProviders(<FinanceDashboard />);
-    await waitFor(() => expect(screen.getByText('Outstanding balance exceeds Â£5,000')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Outstanding balance exceeds £5,000')).toBeInTheDocument());
   });
 
   it('shows a degraded-data warning when optional finance inputs are unavailable', async () => {

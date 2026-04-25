@@ -533,7 +533,7 @@ export default function RotationGrid() {
 
 
   return (
-    <div className="p-4 max-w-full mx-auto">
+    <div className="max-w-full overflow-x-hidden p-4">
       {error && (
         <ErrorState
           title="Some roster actions could not be completed"
@@ -548,9 +548,12 @@ export default function RotationGrid() {
         <p className="text-xs text-gray-500">{monthDates.length} days | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-3 print:hidden">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">Roster</h1>
+      <div className="mb-4 flex flex-col gap-3 print:hidden xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Scheduling</p>
+            <h1 className="text-2xl font-bold text-[var(--ink)]">Roster</h1>
+          </div>
           {/* Month Navigation */}
           <div className="flex items-center gap-1">
             <button
@@ -568,11 +571,11 @@ export default function RotationGrid() {
               onClick={() => setMonthOffset(monthOffset + 1)}
               className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&rarr;</button>
           </div>
-          <span className="text-sm font-medium text-gray-600">{monthLabel}</span>
-          <span className="text-xs text-gray-400">({monthDates.length} days)</span>
-          {saving && <span className="text-xs text-blue-500">Saving...</span>}
+          <span className="text-sm font-medium text-[var(--ink-2)]">{monthLabel}</span>
+          <span className="text-xs text-[var(--ink-4)]">({monthDates.length} days)</span>
+          {saving && <span className="text-xs font-medium text-[var(--info)]">Saving...</span>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
             className={`${INPUT.select} w-auto ${BTN.xs}`}>
             <option value="All">All Teams</option>
@@ -588,12 +591,12 @@ export default function RotationGrid() {
             className={`${BTN.secondary} ${BTN.xs}`}>Export CSV</button>
           <button onClick={() => window.print()}
             className={`${BTN.secondary} ${BTN.xs}`}>Print</button>
-          <span className="text-xs text-gray-500">{activeStaff.length} staff</span>
+          <span className="text-xs text-[var(--ink-3)]">{activeStaff.length} staff</span>
         </div>
       </div>
 
       {overrideWarnings.length > 0 && (
-        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-3 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3 text-sm text-[var(--caution)]">
           <div className="font-medium mb-1">Training warnings</div>
           <ul className="list-disc pl-5 space-y-1">
             {overrideWarnings.map((warning, idx) => <li key={idx}>{warning}</li>)}
@@ -602,7 +605,7 @@ export default function RotationGrid() {
       )}
 
       {showLockPrompt && (
-        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="mb-3 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-amber-800">Past dates are locked — enter the edit PIN to continue.</span>
             <input
@@ -623,33 +626,33 @@ export default function RotationGrid() {
             >
               Cancel
             </button>
-            {lockError && <span className="text-xs text-red-600">{lockError}</span>}
+            {lockError && <span className="text-xs text-[var(--alert)]">{lockError}</span>}
           </div>
         </div>
       )}
 
-      <div className={`${CARD.flush} overflow-x-auto`}>
-        <table className="text-[11px] border-collapse">
+      <div className={`${CARD.flush} max-w-full overflow-x-auto`}>
+        <table className="min-w-max border-collapse text-[11px]">
           <thead>
-            <tr className="bg-gray-800 text-white">
-              <th scope="col" className="py-1.5 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[120px]">Staff</th>
-              <th scope="col" className="py-1.5 px-1 text-left min-w-[35px]">Pref</th>
+            <tr className="sticky top-0 z-20 bg-[var(--paper-2)] text-[var(--ink-2)] shadow-[inset_0_-1px_0_var(--line)]">
+              <th scope="col" className="sticky left-0 z-30 min-w-[150px] bg-[var(--paper-2)] px-3 py-2 text-left font-semibold">Staff</th>
+              <th scope="col" className="min-w-[38px] px-1 py-2 text-left font-semibold">Pref</th>
               {monthDates.map((d, i) => {
                 const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
                 const isMonday = d.getUTCDay() === 1 && i > 0;
                 return (
-                  <th scope="col" key={i} className={`py-1.5 px-0.5 text-center min-w-[32px] ${
-                    isWeekend ? 'bg-gray-700' : ''
-                  } ${isMonday ? 'border-l border-gray-600' : ''}`}>
-                    <div className="text-[9px] text-gray-400">{d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })[0]}</div>
-                    <div>{d.getUTCDate()}</div>
+                  <th scope="col" key={i} className={`min-w-[32px] px-0.5 py-1.5 text-center ${
+                    isWeekend ? 'bg-[var(--paper-3)]' : ''
+                  } ${isMonday ? 'border-l border-[var(--line-2)]' : ''}`}>
+                    <div className="text-[9px] uppercase text-[var(--ink-4)]">{d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })[0]}</div>
+                    <div className="font-semibold">{d.getUTCDate()}</div>
                   </th>
                 );
               })}
-              <th scope="col" className="py-1.5 px-2 text-right min-w-[50px]">Hrs</th>
+              <th scope="col" className="min-w-[50px] px-2 py-2 text-right font-semibold">Hrs</th>
               <th scope="col" className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
-              <th scope="col" className="py-1.5 px-2 text-right min-w-[40px]">OT</th>
-              <th scope="col" className="py-1.5 px-2 text-center min-w-[50px]">WTR</th>
+              <th scope="col" className="min-w-[40px] px-2 py-2 text-right font-semibold">OT</th>
+              <th scope="col" className="min-w-[50px] px-2 py-2 text-center font-semibold">WTR</th>
             </tr>
           </thead>
           <tbody>
@@ -658,12 +661,12 @@ export default function RotationGrid() {
               const stats = staffStats[s.id];
               return [
                 showTeamHeader && (
-                  <tr key={`team-${s.team}`} className="bg-gray-100">
-                    <td colSpan={monthDates.length + 6} className="py-1 px-2 font-bold text-xs text-gray-600 uppercase">{s.team}</td>
+                  <tr key={`team-${s.team}`} className="bg-[var(--paper-3)]">
+                    <td colSpan={monthDates.length + 6} className="px-3 py-1.5 text-xs font-bold uppercase text-[var(--ink-2)]">{s.team}</td>
                   </tr>
                 ),
-                <tr key={s.id} className="border-b hover:bg-gray-50">
-                  <td className="py-1 px-2 font-medium sticky left-0 bg-white z-10 border-r">
+                <tr key={s.id} className="border-b border-[var(--line)] hover:bg-[var(--paper-2)]">
+                  <td className="sticky left-0 z-10 border-r border-[var(--line)] bg-[var(--paper)] px-3 py-1.5 font-medium">
                     {(() => {
                       const blockReasons = [];
                       if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role))
@@ -673,13 +676,13 @@ export default function RotationGrid() {
                       return (
                         <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})${blockReasons.length > 0 ? '\n! ' + blockReasons.join(', ') : ''}`}>
                           {s.name}
-                          {blockReasons.length > 0 && <span className="text-red-500 ml-0.5 text-[9px]" title={blockReasons.join(', ')}>!</span>}
+                          {blockReasons.length > 0 && <span className="text-[var(--alert)] ml-0.5 text-[9px]" title={blockReasons.join(', ')}>!</span>}
                         </div>
                       );
                     })()}
-                    <div className="text-[9px] text-gray-400">{s.role}</div>
+                    <div className="text-[9px] text-[var(--ink-4)]">{s.role}</div>
                   </td>
-                  <td className="py-1 px-1 text-[10px] text-gray-500">{s.pref}</td>
+                  <td className="px-1 py-1 text-[10px] text-[var(--ink-3)]">{s.pref}</td>
                   {monthDates.map((date, i) => {
                     const dateKey = formatDate(date);
                     const actual = getActualShift(s, date, schedData.overrides, schedData.config.cycle_start_date, schedData.config);
@@ -688,13 +691,13 @@ export default function RotationGrid() {
                     const isEditing = editing?.staffId === s.id && editing?.dateStr === dateKey;
                     const isMonday = date.getUTCDay() === 1 && i > 0;
                     return (
-                      <td key={i} className={`py-0.5 px-0.5 text-center ${isMonday ? 'border-l border-gray-200' : ''}`}>
+                      <td key={i} className={`px-0.5 py-0.5 text-center ${isMonday ? 'border-l border-[var(--line-2)]' : ''}`}>
                         <button
                           onClick={() => canEdit && openEditor(s.id, dateKey)}
                           disabled={saving || !canEdit}
-                          className={`inline-block w-full px-0.5 min-h-[24px] py-0.5 rounded text-[10px] font-medium ${canEdit ? 'cursor-pointer hover:scale-105' : 'cursor-default'} transition-all ${
+                          className={`inline-block min-h-[24px] w-full rounded-md px-0.5 py-0.5 text-[10px] font-semibold ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-[var(--accent)]' : 'cursor-default'} transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
-                          } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : ''} disabled:cursor-not-allowed`}
+                          } ${isOverride ? 'ring-1 ring-[var(--info)]' : ''} ${isEditing ? 'ring-2 ring-[var(--accent)]' : ''} disabled:cursor-not-allowed`}
                           title={[
                             `${s.name} — ${shift}${isOverride ? ' (override)' : ''}`,
                             isOverride ? `Scheduled: ${s.scheduledPattern?.[i] || actual.scheduledShift || 'OFF'}` : '',
@@ -727,10 +730,10 @@ export default function RotationGrid() {
                       </td>
                     );
                   })}
-                  <td className="py-1 px-2 text-right font-mono" title={stats?.alHours > 0 ? `${stats.totalHours.toFixed(1)}h worked + ${stats.alHours.toFixed(1)}h AL` : undefined}>{stats?.paidHours.toFixed(1)}</td>
+                  <td className="px-2 py-1 text-right font-mono text-[var(--ink-2)]" title={stats?.alHours > 0 ? `${stats.totalHours.toFixed(1)}h worked + ${stats.alHours.toFixed(1)}h AL` : undefined}>{stats?.paidHours.toFixed(1)}</td>
                   <td className="py-1 px-2 text-right font-mono">£{stats?.totalPay.toFixed(0)}</td>
-                  <td className="py-1 px-2 text-right font-mono text-orange-600">{stats?.otHours > 0 ? stats.otHours.toFixed(1) : '-'}</td>
-                  <td className="py-1 px-2 text-center">
+                  <td className="px-2 py-1 text-right font-mono text-[var(--warn)]">{stats?.otHours > 0 ? stats.otHours.toFixed(1) : '-'}</td>
+                  <td className="px-2 py-1 text-center">
                     <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
                       stats?.wtrStatus === 'BREACH' ? 'bg-red-100 text-red-700' :
                       stats?.wtrStatus === 'HIGH' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
@@ -742,23 +745,23 @@ export default function RotationGrid() {
             {/* Absence & Cover summary rows */}
             <tr
               {...clickableRowProps(() => setSummaryExpanded(e => !e), { label: `${summaryExpanded ? 'Collapse' : 'Expand'} absent summary` })}
-              className="bg-amber-50 border-t-2 border-gray-300 cursor-pointer select-none"
+              className="cursor-pointer select-none border-t-2 border-[var(--line-2)] bg-[var(--caution-soft)]"
             >
-              <td className="py-1 px-2 font-semibold text-[10px] text-amber-800 sticky left-0 bg-amber-50 z-10 border-r whitespace-nowrap">
+              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-[var(--line)] bg-[var(--caution-soft)] px-3 py-1 font-semibold text-[10px] text-[var(--caution)]">
                 {summaryExpanded ? '▾' : '▸'} Absent
               </td>
               <td></td>
               {monthDates.map((date, i) => {
                 const ds = daySummaries[formatDate(date)];
                 const abs = ds?.absences || [];
-                if (abs.length === 0) return <td key={i} className="py-0.5 px-0.5 text-center text-[9px] text-gray-300">-</td>;
+                if (abs.length === 0) return <td key={i} className="px-0.5 py-0.5 text-center text-[9px] text-[var(--ink-4)]">-</td>;
                 const counts = {};
                 abs.forEach(a => { counts[a.shift] = (counts[a.shift] || 0) + 1; });
                 const collapsed = Object.entries(counts).map(([s, n]) => `${n}${s}`).join(' ');
                 const expanded = abs.map(a => `${a.name} (${a.shift})`).join('\n');
                 return (
                   <td key={i} className="py-0.5 px-0.5 text-center text-[9px]" title={expanded}>
-                    <span className="text-amber-700 font-medium">{summaryExpanded ? abs.map((a, j) => <div key={j}>{a.name.split(' ')[0]}</div>) : collapsed}</span>
+                    <span className="font-medium text-[var(--caution)]">{summaryExpanded ? abs.map((a, j) => <div key={j}>{a.name.split(' ')[0]}</div>) : collapsed}</span>
                   </td>
                 );
               })}
@@ -766,23 +769,23 @@ export default function RotationGrid() {
             </tr>
             <tr
               {...clickableRowProps(() => setSummaryExpanded(e => !e), { label: `${summaryExpanded ? 'Collapse' : 'Expand'} cover summary` })}
-              className="bg-blue-50 cursor-pointer select-none"
+              className="cursor-pointer select-none bg-[var(--info-soft)]"
             >
-              <td className="py-1 px-2 font-semibold text-[10px] text-blue-800 sticky left-0 bg-blue-50 z-10 border-r whitespace-nowrap">
+              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-[var(--line)] bg-[var(--info-soft)] px-3 py-1 font-semibold text-[10px] text-[var(--info)]">
                 {summaryExpanded ? '▾' : '▸'} Cover
               </td>
               <td></td>
               {monthDates.map((date, i) => {
                 const ds = daySummaries[formatDate(date)];
                 const cov = ds?.covers || [];
-                if (cov.length === 0) return <td key={i} className="py-0.5 px-0.5 text-center text-[9px] text-gray-300">-</td>;
+                if (cov.length === 0) return <td key={i} className="px-0.5 py-0.5 text-center text-[9px] text-[var(--ink-4)]">-</td>;
                 const counts = {};
                 cov.forEach(c => { counts[c.shift] = (counts[c.shift] || 0) + 1; });
                 const collapsed = Object.entries(counts).map(([s, n]) => `${n}${s}`).join(' ');
                 const expanded = cov.map(c => `${c.name} → ${c.replacesName} (${c.shift})`).join('\n');
                 return (
                   <td key={i} className="py-0.5 px-0.5 text-center text-[9px]" title={expanded}>
-                    <span className="text-blue-700 font-medium">{summaryExpanded ? cov.map((c, j) => <div key={j}>{c.name.split(' ')[0]}</div>) : collapsed}</span>
+                    <span className="font-medium text-[var(--info)]">{summaryExpanded ? cov.map((c, j) => <div key={j}>{c.name.split(' ')[0]}</div>) : collapsed}</span>
                   </td>
                 );
               })}
@@ -793,13 +796,13 @@ export default function RotationGrid() {
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-2 mt-4 text-[10px]">
+      <div className="mt-4 flex flex-wrap gap-2 text-[10px]">
         {[
           ['EL', 'Full Day'], ['E', 'Early'], ['L', 'Late'], ['N', 'Night'],
           ['OFF', 'Off'], ['AVL', 'Available'], ['AL', 'Ann. Leave'], ['SICK', 'Sick'],
           ['OC-*', 'On-Call/OT'], ['AG-*', 'Agency'], ['BH-*', 'Bank Holiday'],
         ].map(([code, label]) => (
-          <span key={code} className={`px-1.5 py-0.5 rounded ${SHIFT_COLORS[code] || 'bg-gray-100'}`}>
+          <span key={code} className={`rounded-md border px-1.5 py-0.5 ${SHIFT_COLORS[code] || 'border-[var(--line)] bg-[var(--paper-2)] text-[var(--ink-3)]'}`}>
             {code} = {label}
           </span>
         ))}

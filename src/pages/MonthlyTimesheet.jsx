@@ -953,7 +953,7 @@ export default function MonthlyTimesheet() {
       <Modal isOpen={!!adjustmentModal} onClose={() => setAdjustmentModal(null)} title="Resolve Shortfall">
           {adjustmentModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
-              {staff?.name} â€” {adjustmentModal.row.dateStr}
+              {staff?.name} - {adjustmentModal.row.dateStr}
             </p>
 
             <div className="rounded-xl bg-gray-50 px-3 py-3 text-sm text-gray-600 space-y-1 mb-4">

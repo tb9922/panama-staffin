@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
-import { perUserKey } from '../../lib/rateLimiter.js';
+import { perUserKey, readRateLimiter } from '../../lib/rateLimiter.js';
 import { PostgresRateLimitStore } from '../../lib/postgresRateLimitStore.js';
 import * as staffRepo from '../../repositories/staffRepo.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
@@ -38,6 +38,15 @@ import gdprRouter from './gdpr.js';
 
 const router = Router();
 
+// Staff picker data is used by many pages during normal SPA navigation. Keep it
+// protected by the shared read limiter without burning the stricter HR case bucket.
+router.get('/staff', readRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+  try {
+    const staffResult = await staffRepo.findByHome(req.home.id);
+    res.json(staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active })));
+  } catch (err) { next(err); }
+});
+
 // ── Rate limiting — all HR endpoints (GDPR special category data) ─────────
 if (process.env.NODE_ENV !== 'test') {
   router.use(rateLimit({
@@ -50,14 +59,6 @@ if (process.env.NODE_ENV !== 'test') {
     message: { error: 'Too many requests, please try again later' },
   }));
 }
-
-// ── Staff List (for picker dropdown) ────────────────────────────────────────
-router.get('/staff', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
-  try {
-    const staffResult = await staffRepo.findByHome(req.home.id);
-    res.json(staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active })));
-  } catch (err) { next(err); }
-});
 
 // ── Case Type Registrations ─────────────────────────────────────────────────
 

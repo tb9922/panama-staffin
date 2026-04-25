@@ -83,6 +83,7 @@ export async function listAll() {
     name: r.config?.home_name || r.name,
     beds: r.config?.registered_beds,
     type: r.config?.care_type,
+    clockInRequired: Boolean(r.config?.clock_in_required),
     scanIntakeEnabled: Boolean(r.config?.scan_intake_enabled),
     scanIntakeTargets: Array.isArray(r.config?.scan_intake_targets) ? r.config.scan_intake_targets : [],
     scanOcrEngine: r.config?.scan_ocr_engine || 'paddleocr',

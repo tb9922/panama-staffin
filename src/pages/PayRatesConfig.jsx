@@ -139,22 +139,37 @@ export default function PayRatesConfig() {
           <p className={PAGE.subtitle}>Enhancement rules applied on top of each staff member's base hourly rate</p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={openAdd}>+ Add Rule</button>
+          <button type="button" className={BTN.primary} onClick={openAdd}>+ Add Rule</button>
         )}
       </div>
 
       {error && <ErrorState title="Pay rate action needs attention" message={error} onRetry={load} className="mb-4" />}
 
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Active rules', value: rules.length, detail: 'Enhancements' },
+          { label: 'NMW bands', value: nmwRates.length, detail: 'Loaded references' },
+          { label: 'Rule types', value: Object.keys(RATE_TYPE_LABELS).length, detail: 'Available methods' },
+          { label: 'Applies to', value: Object.keys(APPLIES_TO_LABELS).length, detail: 'Shift categories' },
+        ].map(({ label, value, detail }) => (
+          <div key={label} className={CARD.padded}>
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">{label}</p>
+            <p className="mt-2 font-mono text-2xl font-semibold text-[var(--ink)]">{value}</p>
+            <p className="mt-1 text-xs text-[var(--ink-3)]">{detail}</p>
+          </div>
+        ))}
+      </div>
+
       {/* Enhancement Rules */}
       <div className={`${CARD.flush} mb-6`}>
-        <div className="border-b border-gray-100 px-5 py-3">
-          <h2 className="text-sm font-semibold text-gray-700">Active Enhancement Rules</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Enhancements stack additively — not multiplicatively. A Sunday night shift gets night% + sunday%, not multiplied.</p>
+        <div className="border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--ink)]">Active Enhancement Rules</h2>
+          <p className="mt-0.5 text-xs text-[var(--ink-3)]">Enhancements stack additively. A Sunday night shift gets night% + Sunday%, not multiplied.</p>
         </div>
         {loading ? (
           <LoadingState message="Loading rules…" compact />
         ) : (
-          <div className={TABLE.wrapper}>
+          <div className={TABLE.wrapper} tabIndex={0} aria-label="Active enhancement rules table">
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
@@ -189,8 +204,8 @@ export default function PayRatesConfig() {
                     {canEdit && (
                       <td className={TABLE.td}>
                         <div className="flex gap-2">
-                          <button className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(rule)}>Edit</button>
-                          <button className={`${BTN.danger} ${BTN.xs}`} onClick={() => setDeleteConfirm(rule)}>Remove</button>
+                          <button type="button" className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(rule)}>Edit</button>
+                          <button type="button" className={`${BTN.danger} ${BTN.xs}`} onClick={() => setDeleteConfirm(rule)}>Remove</button>
                         </div>
                       </td>
                     )}
@@ -204,11 +219,11 @@ export default function PayRatesConfig() {
 
       {/* NMW Reference Table */}
       <div className={CARD.flush}>
-        <div className="border-b border-gray-100 px-5 py-3">
-          <h2 className="text-sm font-semibold text-gray-700">National Minimum Wage Reference</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Payroll engine checks every shift against the applicable rate. Approval is blocked if any shift falls below NMW.</p>
+        <div className="border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--ink)]">National Minimum Wage Reference</h2>
+          <p className="mt-0.5 text-xs text-[var(--ink-3)]">Payroll engine checks every shift against the applicable rate. Approval is blocked if any shift falls below NMW.</p>
         </div>
-        <div className={TABLE.wrapper}>
+        <div className={TABLE.wrapper} tabIndex={0} aria-label="National Minimum Wage reference table">
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
@@ -241,7 +256,7 @@ export default function PayRatesConfig() {
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Night Enhancement" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="pay-rate-rule-applies-to" className={INPUT.label}>Applies To</label>
               <select id="pay-rate-rule-applies-to" className={INPUT.select} value={form.applies_to}
@@ -281,7 +296,7 @@ export default function PayRatesConfig() {
           )}
           <FileAttachments
             caseType="payroll_rate_rule"
-            caseId={modal?.mode === 'edit' ? modal?.id : null}
+            caseId={modal?.mode === 'edit' ? modal?.rule?.id : null}
             readOnly={!canEdit}
             title="Rate Rule Evidence"
             emptyText="No rate rule evidence uploaded yet."
@@ -293,8 +308,8 @@ export default function PayRatesConfig() {
           />
         </div>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>
-          <button className={BTN.primary} onClick={handleSave} disabled={saving}>
+          <button type="button" className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>
+          <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : modal?.mode === 'add' ? 'Add Rule' : 'Save Changes'}
           </button>
         </div>
@@ -306,8 +321,8 @@ export default function PayRatesConfig() {
           Remove <strong>{deleteConfirm?.name}</strong>? This deactivates the rule — it remains visible in historical payroll records but will no longer apply to new calculations.
         </p>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setDeleteConfirm(null)}>Cancel</button>
-          <button className={BTN.danger} onClick={() => deleteConfirm && handleDelete(deleteConfirm.id)} disabled={saving}>
+          <button type="button" className={BTN.secondary} onClick={() => setDeleteConfirm(null)}>Cancel</button>
+          <button type="button" className={BTN.danger} onClick={() => deleteConfirm && handleDelete(deleteConfirm.id)} disabled={saving}>
             {saving ? 'Removing…' : 'Remove Rule'}
           </button>
         </div>

@@ -1,6 +1,12 @@
 import { pool } from '../db.js';
 import { config } from '../config.js';
 
+function normalizeUsername(username) {
+  if (typeof username !== 'string') return null;
+  const normalized = username.trim().toLowerCase();
+  return normalized || null;
+}
+
 function parseJwtExpiresIn(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value * 1000;
   if (typeof value !== 'string') return 4 * 60 * 60 * 1000;
@@ -33,11 +39,12 @@ function getRevocationExpiry() {
  */
 export async function addToDenyList(jti, username, expiresAt, client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   await conn.query(
     `INSERT INTO token_denylist (jti, username, expires_at)
      VALUES ($1, $2, $3)
      ON CONFLICT (jti) DO NOTHING`,
-    [jti, username, expiresAt]
+    [jti, normalizedUsername, expiresAt]
   );
 }
 
@@ -102,11 +109,12 @@ export async function pruneExpired() {
  */
 export async function revokeAllForUser(username, scope = 'user', client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await conn.query(
     `INSERT INTO token_denylist (jti, username, expires_at, scope)
      VALUES (gen_random_uuid(), $1, $2, $3)
      RETURNING jti`,
-    [username, getRevocationExpiry(), scope]
+    [normalizedUsername, getRevocationExpiry(), scope]
   );
   return rows[0]?.jti;
 }
@@ -120,7 +128,10 @@ export async function revokeAllForUser(username, scope = 'user', client) {
  * @param {string} username
  */
 export async function clearForUser(username) {
-  await pool.query("DELETE FROM token_denylist WHERE username = $1 AND scope = 'user'", [username]);
+  await pool.query(
+    "DELETE FROM token_denylist WHERE LOWER(username) = LOWER($1) AND scope = 'user'",
+    [normalizeUsername(username)],
+  );
 }
 
 /**
@@ -130,8 +141,12 @@ export async function clearForUser(username) {
  */
 export async function isUserRevoked(username) {
   const { rows } = await pool.query(
-    `SELECT 1 FROM token_denylist WHERE username = $1 AND scope IN ('user', 'admin') AND expires_at > NOW() LIMIT 1`,
-    [username]
+    `SELECT 1 FROM token_denylist
+      WHERE LOWER(username) = LOWER($1)
+        AND scope IN ('user', 'admin')
+        AND expires_at > NOW()
+      LIMIT 1`,
+    [normalizeUsername(username)]
   );
   return rows.length > 0;
 }
@@ -141,11 +156,11 @@ export async function hasAdminRevocation(username, client) {
   const { rows } = await conn.query(
     `SELECT 1
        FROM token_denylist
-      WHERE username = $1
+      WHERE LOWER(username) = LOWER($1)
         AND scope = 'admin'
         AND expires_at > NOW()
       LIMIT 1`,
-    [username],
+    [normalizeUsername(username)],
   );
   return rows.length > 0;
 }
@@ -162,23 +177,24 @@ export async function hasAdminRevocation(username, client) {
  * @returns {Promise<boolean>}
  */
 export async function isDenied(jti, username) {
+  const normalizedUsername = normalizeUsername(username);
   if (jti) {
     const { rows } = await pool.query(
       `SELECT 1 FROM token_denylist
        WHERE (jti = $1 AND expires_at > NOW())
-          OR (username = $2 AND scope IN ('user', 'admin') AND expires_at > NOW())
+          OR (LOWER(username) = LOWER($2) AND scope IN ('user', 'admin') AND expires_at > NOW())
        LIMIT 1`,
-      [jti, username || '']
+      [jti, normalizedUsername || '']
     );
     return rows.length > 0;
   }
   // No jti — check user-scoped revocation only
-  if (username) {
+  if (normalizedUsername) {
     const { rows } = await pool.query(
       `SELECT 1 FROM token_denylist
-       WHERE username = $1 AND scope IN ('user', 'admin') AND expires_at > NOW()
+       WHERE LOWER(username) = LOWER($1) AND scope IN ('user', 'admin') AND expires_at > NOW()
        LIMIT 1`,
-      [username]
+      [normalizedUsername]
     );
     return rows.length > 0;
   }

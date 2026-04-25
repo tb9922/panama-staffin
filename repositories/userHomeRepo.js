@@ -1,5 +1,9 @@
 import { pool } from '../db.js';
 
+function normalizeUsername(username) {
+  return String(username).trim().toLowerCase();
+}
+
 // ── Role-based access (user_home_roles table) ─────────────────────────
 
 /**
@@ -9,11 +13,12 @@ import { pool } from '../db.js';
  * @returns {Promise<{role_id: string, staff_id: string|null}|null>}
  */
 export async function getHomeRole(username, homeId) {
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await pool.query(
     `SELECT uhr.role_id, uhr.staff_id FROM user_home_roles uhr
      JOIN users u ON u.username = uhr.username AND u.active = true
      WHERE uhr.username = $1 AND uhr.home_id = $2 LIMIT 1`,
-    [username, homeId]
+    [normalizedUsername, homeId]
   );
   return rows[0] || null;
 }
@@ -29,6 +34,7 @@ export async function getHomeRole(username, homeId) {
  */
 export async function assignRole(username, homeId, roleId, staffId, grantedBy, client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   await conn.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, staff_id, granted_by)
      VALUES ($1, $2, $3, $4, $5)
@@ -37,7 +43,7 @@ export async function assignRole(username, homeId, roleId, staffId, grantedBy, c
        staff_id = EXCLUDED.staff_id,
        granted_by = EXCLUDED.granted_by,
        granted_at = NOW()`,
-    [username, homeId, roleId, staffId || null, grantedBy]
+    [normalizedUsername, homeId, roleId, staffId || null, grantedBy]
   );
 }
 
@@ -49,9 +55,10 @@ export async function assignRole(username, homeId, roleId, staffId, grantedBy, c
  */
 export async function removeRole(username, homeId, client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   await conn.query(
     'DELETE FROM user_home_roles WHERE username = $1 AND home_id = $2',
-    [username, homeId]
+    [normalizedUsername, homeId]
   );
 }
 
@@ -63,9 +70,10 @@ export async function removeRole(username, homeId, client) {
  */
 export async function findRolesForUser(username, client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await conn.query(
     `SELECT home_id, role_id, staff_id FROM user_home_roles WHERE username = $1`,
-    [username]
+    [normalizedUsername]
   );
   return rows;
 }
@@ -77,6 +85,7 @@ export async function findRolesForUser(username, client) {
  * @returns {Promise<Array<{slug: string, name: string, config: object, role_id: string, staff_id: string|null}>>}
  */
 export async function findHomesWithRolesForUser(username) {
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await pool.query(
     `SELECT h.slug, h.name, h.config, uhr.role_id, uhr.staff_id
      FROM user_home_roles uhr
@@ -84,7 +93,7 @@ export async function findHomesWithRolesForUser(username) {
      JOIN users u ON u.username = uhr.username AND u.active = true
      WHERE uhr.username = $1
      ORDER BY h.name`,
-    [username]
+    [normalizedUsername]
   );
   return rows;
 }
@@ -116,7 +125,7 @@ export async function revokeAllRolesForHome(homeId, client) {
 
 export async function revokeAllRolesForUser(username, client) {
   const conn = client || pool;
-  await conn.query('DELETE FROM user_home_roles WHERE username = $1', [username]);
+  await conn.query('DELETE FROM user_home_roles WHERE username = $1', [normalizeUsername(username)]);
 }
 
 /**
@@ -126,12 +135,13 @@ export async function revokeAllRolesForUser(username, client) {
  */
 export async function grantAllHomesRole(username, client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   await conn.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
        SELECT $1, id, 'home_manager', 'system'
        FROM homes WHERE deleted_at IS NULL FOR SHARE
        ON CONFLICT (username, home_id) DO NOTHING`,
-    [username]
+    [normalizedUsername]
   );
 }
 
@@ -142,11 +152,12 @@ export async function grantAllHomesRole(username, client) {
  * Returns true if the user has a role assignment for this home.
  */
 export async function hasAccess(username, homeId) {
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await pool.query(
     `SELECT 1 FROM user_home_roles uhr
      JOIN users u ON u.username = uhr.username AND u.active = true
      WHERE uhr.username = $1 AND uhr.home_id = $2 LIMIT 1`,
-    [username, homeId]
+    [normalizedUsername, homeId]
   );
   return rows.length > 0;
 }
@@ -158,12 +169,13 @@ export async function hasAccess(username, homeId) {
  */
 export async function findHomeIdsForUser(username, client) {
   const conn = client || pool;
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await conn.query(
     `SELECT uhr.home_id
        FROM user_home_roles uhr
        JOIN users u ON u.username = uhr.username AND u.active = true
       WHERE uhr.username = $1`,
-    [username]
+    [normalizedUsername]
   );
   return rows.map(r => r.home_id);
 }
@@ -172,12 +184,13 @@ export async function findHomeIdsForUser(username, client) {
  * Get all home slugs a user can access.
  */
 export async function findHomeSlugsForUser(username) {
+  const normalizedUsername = normalizeUsername(username);
   const { rows } = await pool.query(
     `SELECT h.slug FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
      JOIN users u ON u.username = uhr.username AND u.active = true
      WHERE uhr.username = $1`,
-    [username]
+    [normalizedUsername]
   );
   return rows.map(r => r.slug);
 }

@@ -13,7 +13,7 @@ import {
 } from '../lib/rotation.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { scoreCycleStartOffset } from '../lib/rotationAnalysis.js';
-import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -112,14 +112,14 @@ export default function Config() {
             disabled={!canEdit}
             className={INPUT.sm} />
         )}
-        {unit && <span className="text-xs text-gray-400 whitespace-nowrap">{unit}</span>}
+        {unit && <span className="whitespace-nowrap text-xs text-[var(--ink-4)]">{unit}</span>}
       </div>
     </div>
   );
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className={PAGE.container}>
         <LoadingState message="Loading settings..." card />
       </div>
     );
@@ -127,7 +127,7 @@ export default function Config() {
 
   if (loadError) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className={PAGE.container}>
         <ErrorState title="Unable to load settings" message={loadError} onRetry={load} />
       </div>
     );
@@ -136,41 +136,44 @@ export default function Config() {
   if (!config) return null;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={PAGE.container}>
       {notice && (
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
           {notice.content}
         </InlineNotice>
       )}
       {dirty && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
-          <span className="text-amber-700">You have unsaved changes</span>
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-[var(--caution)]">You have unsaved changes</span>
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className={`${BTN.secondary} ${BTN.sm} border-amber-300 text-amber-800 hover:bg-amber-100`}
+            className={`${BTN.secondary} ${BTN.sm} border-[var(--caution)] text-[var(--caution)] hover:bg-[var(--caution-soft)]`}
           >
             {saving ? 'Saving...' : 'Save Now'}
           </button>
         </div>
       )}
       {saveError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-4 text-red-700 text-sm">
+        <div className="mb-4 rounded-xl border border-[var(--alert)] bg-[var(--alert-soft)] px-4 py-3 text-sm text-[var(--alert)]">
           Save failed: {saveError}
         </div>
       )}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+      <div className={PAGE.header}>
+        <div>
+          <h1 className={PAGE.title}>Settings</h1>
+          <p className={PAGE.subtitle}>Home configuration, rota patterns, budgets and compliance defaults</p>
+        </div>
         {canEdit && <button onClick={handleSave} disabled={saving}
-          className={`${BTN.primary} ${saved ? '!bg-green-600' : dirty ? '!bg-amber-600 hover:!bg-amber-700' : ''}`}>
+          className={`${BTN.primary} w-full sm:w-auto ${saved ? '!border-[var(--ok)] !bg-[var(--ok)]' : dirty ? '!border-[var(--caution)] !bg-[var(--caution)] hover:!brightness-95' : ''}`}>
           {saving ? 'Saving...' : saved ? 'Saved!' : dirty ? 'Save Changes *' : 'Save Changes'}
         </button>}
       </div>
 
       {/* Home Details */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Home Details</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Home Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Field label="Home Name" path="home_name" type="text" />
           <Field label="Registered Beds" path="registered_beds" />
@@ -192,7 +195,7 @@ export default function Config() {
               disabled={!canEdit}
               className={INPUT.sm}
             />
-            <p className="mt-1 text-[11px] text-gray-500">
+            <p className="mt-1 text-[11px] text-[var(--ink-3)]">
               Optional. Leave blank to use the day cycle start date.
             </p>
           </div>
@@ -267,9 +270,48 @@ export default function Config() {
       {/* Shift Definitions */}
       <section className={`${CARD.flush} mb-5`}>
         <div className="p-5 pb-0">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Shift Times & Hours</h2>
+          <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Shift Times & Hours</h2>
         </div>
-        <div className={TABLE.wrapper}>
+        <div className="space-y-3 px-5 pb-4 sm:hidden">
+          {Object.entries(config.shifts || {}).map(([code, shift]) => (
+            <div key={code} className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="font-mono text-sm font-bold text-[var(--accent)]">{code}</span>
+                <span className="text-xs font-medium text-[var(--ink-3)]">{shift.start || '--:--'} to {shift.end || '--:--'}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className={INPUT.label}>Name</label>
+                  <input type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
+                    disabled={!canEdit}
+                    className={INPUT.sm} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={INPUT.label}>Start</label>
+                    <input type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
+                      disabled={!canEdit}
+                      className={INPUT.sm} />
+                  </div>
+                  <div>
+                    <label className={INPUT.label}>End</label>
+                    <input type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
+                      disabled={!canEdit}
+                      className={INPUT.sm} />
+                  </div>
+                </div>
+                <div>
+                  <label className={INPUT.label}>Hours</label>
+                  <input type="number" step="0.25" value={shift.hours}
+                    onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
+                    disabled={!canEdit}
+                    className={INPUT.sm} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className={`${TABLE.wrapper} hidden sm:block`}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
@@ -311,11 +353,11 @@ export default function Config() {
 
       {/* Minimum Staffing */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Minimum Staffing Levels</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Minimum Staffing Levels</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {['early', 'late', 'night'].map(period => (
-            <div key={period} className="border border-gray-200 rounded-xl p-4">
-              <h3 className="font-semibold text-gray-700 mb-3 capitalize">{period} Shift</h3>
+            <div key={period} className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-4">
+              <h3 className="mb-3 font-semibold capitalize text-[var(--ink-2)]">{period} Shift</h3>
               <div className="space-y-2">
                 <Field label="Min Heads" path={`minimum_staffing.${period}.heads`} />
                 <Field label="Min Skill Points" path={`minimum_staffing.${period}.skill_points`} step={0.5} />
@@ -327,8 +369,8 @@ export default function Config() {
 
       {/* Overtime & Agency */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Overtime & Agency</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Overtime & Agency</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <Field label="OT Premium" path="ot_premium" step={0.5} unit="/hr" />
           <Field label="Agency Day Rate" path="agency_rate_day" unit="/hr" />
           <Field label="Agency Night Rate" path="agency_rate_night" unit="/hr" />
@@ -338,24 +380,24 @@ export default function Config() {
 
       {/* Safety Limits */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Safety Limits</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Safety Limits</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <Field label="Max Consecutive Days" path="max_consecutive_days" />
           <Field label="Max AL Same Day" path="max_al_same_day" />
         </div>
         <div className="mt-4 space-y-2">
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ink-2)]">
             <input type="checkbox" checked={!!config.enforce_onboarding_blocking}
               onChange={e => handleChange('enforce_onboarding_blocking', e.target.checked)} className="accent-blue-600" />
             Warn when rostering staff with incomplete onboarding (DBS, RTW, references, identity)
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ink-2)]">
             <input type="checkbox" checked={!!config.enforce_training_blocking}
               onChange={e => handleChange('enforce_training_blocking', e.target.checked)} className="accent-blue-600" />
             Warn when rostering staff with expired critical training (fire safety, moving &amp; handling, safeguarding)
           </label>
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-100">
+        <div className="mt-4 border-t border-[var(--line)] pt-4">
           <label className={INPUT.label}>Past-Date Edit PIN (4–6 digits)</label>
           <input
             type="password"
@@ -367,9 +409,9 @@ export default function Config() {
             className={`${INPUT.sm} w-40`}
           />
           {config.edit_lock_pin && String(config.edit_lock_pin).length < 4 && (
-            <p className="text-xs text-red-500 mt-1">PIN must be at least 4 digits</p>
+            <p className="mt-1 text-xs text-[var(--alert)]">PIN must be at least 4 digits</p>
           )}
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="mt-1 text-xs text-[var(--ink-4)]">
             Managers must enter this PIN to edit any date before today. Session-only — refreshing the page re-locks.
           </p>
         </div>
@@ -377,10 +419,10 @@ export default function Config() {
 
       {/* Staff Portal & Clock-In */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Staff Portal & Clock-In</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Staff Portal & Clock-In</h2>
         <div className="grid grid-cols-1 lg:grid-cols-[0.8fr_1.2fr] gap-6">
           <div className="space-y-3">
-            <label className={`flex items-start gap-3 text-sm text-gray-700 ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+            <label className={`flex items-start gap-3 text-sm text-[var(--ink-2)] ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
               <input
                 type="checkbox"
                 checked={!!config.clock_in_required}
@@ -389,8 +431,8 @@ export default function Config() {
                 className="mt-0.5 accent-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <span>
-                <span className="block font-medium text-gray-900">Enable staff clock-in for this home</span>
-                <span className="mt-1 block text-xs text-gray-500">
+                <span className="block font-medium text-[var(--ink)]">Enable staff clock-in for this home</span>
+                <span className="mt-1 block text-xs text-[var(--ink-3)]">
                   Staff can use the staff portal to clock in and out. GPS auto-approval only works when the geofence is set below.
                 </span>
               </span>
@@ -402,7 +444,7 @@ export default function Config() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             <Field label="Geofence Latitude" path="geofence_lat" step={0.000001} />
             <Field label="Geofence Longitude" path="geofence_lng" step={0.000001} />
             <Field label="Geofence Radius" path="geofence_radius_m" unit="m" />
@@ -414,16 +456,16 @@ export default function Config() {
 
       {/* Annual Leave */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Annual Leave</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Annual Leave</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <div>
             <label className={INPUT.label}>AL Entitlement</label>
-            <p className="text-xs text-gray-500 mt-1">Auto: 5.6 x contracted weekly hours.<br/>Override per staff in Staff Database.</p>
+            <p className="mt-1 text-xs text-[var(--ink-3)]">Auto: 5.6 x contracted weekly hours.<br/>Override per staff in Staff Database.</p>
           </div>
           <Field label="Avg AL Per Day" path="avg_al_per_day" unit="people" />
           <div>
             <label className={INPUT.label}>Carryover</label>
-            <p className="text-xs text-gray-500 mt-1">Set per staff in hours (Staff Database).</p>
+            <p className="mt-1 text-xs text-[var(--ink-3)]">Set per staff in hours (Staff Database).</p>
           </div>
           <div>
             <label className={INPUT.label}>Leave Year Start</label>
@@ -442,7 +484,7 @@ export default function Config() {
               const start = now >= thisYr ? thisYr : new Date(Date.UTC(now.getUTCFullYear() - 1, mm - 1, dd));
               const end = new Date(start); end.setUTCFullYear(end.getUTCFullYear() + 1); end.setUTCDate(end.getUTCDate() - 1);
               const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-              return <p className="text-xs text-gray-400 mt-1">Current: {fmt(start)} – {fmt(end)}</p>;
+              return <p className="mt-1 text-xs text-[var(--ink-4)]">Current: {fmt(start)} – {fmt(end)}</p>;
             })()}
           </div>
         </div>
@@ -450,8 +492,8 @@ export default function Config() {
 
       {/* Weekly Hours Targets */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Weekly Hours Targets</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Weekly Hours Targets</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           <Field label="FT Target (EL)" path="ft_target_el" step={0.5} unit="hrs/wk" />
           <Field label="FT Target (E/L only)" path="ft_target_partial" step={0.5} unit="hrs/wk" />
           <Field label="Night FT Target" path="night_ft_target" step={0.5} unit="hrs/wk" />
@@ -460,8 +502,8 @@ export default function Config() {
 
       {/* Bank Holiday & Sickness */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Bank Holiday & Sickness</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Bank Holiday & Sickness</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <Field label="BH Premium Multiplier" path="bh_premium_multiplier" step={0.1} unit="x" />
           <Field label="Sickness Rate" path="sickness_rate" step={0.01} />
           <Field label="Night Gap %" path="night_gap_pct" step={0.05} />
@@ -475,7 +517,7 @@ export default function Config() {
                 return s.hourly_rate < rate;
               })());
               return below.length > 0 ? (
-                <p className="text-xs text-red-600 mt-1">{below.length} staff below minimum wage for their age</p>
+                <p className="mt-1 text-xs text-[var(--alert)]">{below.length} staff below minimum wage for their age</p>
               ) : null;
             })()}
           </div>
@@ -484,8 +526,8 @@ export default function Config() {
 
       {/* Fortification */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Fortification Parameters</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Fortification Parameters</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <Field label="Emergency Call-In Premium" path="emergency_callin_premium" step={0.1} unit="x" />
           <Field label="Manager Floor Rate" path="manager_floor_rate" unit="/hr" />
           <Field label="Winter Sick Uplift" path="winter_sick_uplift" step={0.1} unit="x" />
@@ -496,18 +538,18 @@ export default function Config() {
 
       {/* Budget Targets */}
       <section className={`${CARD.padded} mb-5`}>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Budget Targets</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Budget Targets</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           <Field label="Monthly Staff Budget" path="monthly_staff_budget" unit="/month" />
           <Field label="Monthly Agency Cap" path="monthly_agency_cap" unit="/month" />
         </div>
-        <p className="text-xs text-gray-400 mt-2">Used by Budget vs Actual page. Per-month overrides can be set there.</p>
+        <p className="mt-2 text-xs text-[var(--ink-4)]">Used by Budget vs Actual page. Per-month overrides can be set there.</p>
       </section>
 
       {/* Bank Holidays List */}
       <section className={CARD.padded}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Bank Holidays</h2>
+          <h2 className="text-lg font-semibold text-[var(--ink)]">Bank Holidays</h2>
           <button onClick={async () => {
             setSyncStatus({ loading: true });
             try {
@@ -521,7 +563,7 @@ export default function Config() {
               setTimeout(() => setSyncStatus(null), 5000);
             }
           }} disabled={syncStatus?.loading}
-            className={`${BTN.primary} ${BTN.sm} !bg-purple-600 hover:!bg-purple-700 active:!bg-purple-800`}>
+            className={`${BTN.primary} ${BTN.sm}`}>
             {syncStatus?.loading ? 'Syncing...' : 'Sync UK Bank Holidays'}
           </button>
         </div>
@@ -552,13 +594,13 @@ export default function Config() {
             <div key={i} className={`flex items-center justify-between ${BADGE.pink} !rounded-xl !px-3 !py-2 !text-sm`}>
               <div>
                 <div className="font-medium text-xs">{bh.name}</div>
-                <div className="text-[10px] text-gray-500">{bh.date}</div>
+                <div className="text-[10px] text-[var(--ink-3)]">{bh.date}</div>
               </div>
               <button onClick={() => {
                 const newBH = [...config.bank_holidays];
                 newBH.splice(i, 1);
                 handleChange('bank_holidays', newBH);
-              }} className="text-red-400 hover:text-red-600 text-xs ml-2 transition-colors duration-150">X</button>
+              }} className="ml-2 text-xs text-[var(--alert)] transition-colors duration-150 hover:brightness-90">X</button>
             </div>
           ))}
         </div>
@@ -571,7 +613,7 @@ export default function Config() {
               setNewBhDate('');
               setNewBhName('');
             }
-          }} className={`${BTN.primary} ${BTN.sm} !bg-pink-600 hover:!bg-pink-700 active:!bg-pink-800`}>Add</button>
+          }} className={`${BTN.primary} ${BTN.sm}`}>Add</button>
         </div>
       </section>
     </div>
@@ -658,28 +700,28 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
 
   return (
     <section className={`${CARD.padded} mb-5`}>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold text-[var(--ink)]">{title}</h2>
         {hasCustom && canEdit && (
           <button type="button" onClick={resetToDefault} className={`${BTN.ghost} ${BTN.xs}`}>
             {isNightScope ? 'Inherit day pattern' : 'Reset to Panama default'}
           </button>
         )}
       </div>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="mb-4 text-xs text-[var(--ink-3)]">
         {description}
       </p>
       {isNightScope && !hasCustom && (
         <div className="mb-4">
-          <span className={`${BADGE.warn} text-[11px]`}>
+          <span className={`${BADGE.amber} text-[11px]`}>
             Using the day-team pattern until you customise nights.
           </span>
         </div>
       )}
 
       {/* Preset picker */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <label className="text-xs font-medium text-gray-600">Preset:</label>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label className="text-xs font-medium text-[var(--ink-2)]">Preset:</label>
         <select
           value={displayPresetId}
           onChange={e => applyPreset(e.target.value)}
@@ -693,21 +735,21 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
           ))}
         </select>
         {matchedPreset && (
-          <span className="text-xs text-gray-500">{matchedPreset.description}</span>
+          <span className="text-xs text-[var(--ink-3)]">{matchedPreset.description}</span>
         )}
       </div>
 
       {/* Editor grid */}
-      <div className="space-y-1.5 mb-4">
+      <div className="mb-4 space-y-1.5">
         <div className="flex items-center gap-1 overflow-x-auto">
-          <span className="w-14 text-xs font-mono text-gray-500 shrink-0">Day</span>
+          <span className="w-14 shrink-0 font-mono text-xs text-[var(--ink-3)]">Day</span>
           {Array.from({ length: activeCycleLength }, (_, i) => (
-            <span key={i} className="w-8 text-[10px] font-mono text-gray-400 text-center shrink-0">{i + 1}</span>
+            <span key={i} className="w-8 shrink-0 text-center font-mono text-[10px] text-[var(--ink-4)]">{i + 1}</span>
           ))}
         </div>
         {['A', 'B'].map(team => (
           <div key={team} className="flex items-center gap-1 overflow-x-auto">
-            <span className="w-14 text-xs font-semibold text-gray-700 shrink-0">
+            <span className="w-14 shrink-0 text-xs font-semibold text-[var(--ink-2)]">
               {isNightScope ? `Night ${team}` : `Team ${team}`}
             </span>
             {currentTeams[team].map((val, i) => (
@@ -717,10 +759,10 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
                 disabled={!canEdit}
                 onClick={() => toggleCell(team, i)}
                 aria-label={`Team ${team} day ${i + 1}: ${val === 1 ? 'working' : 'off'} — click to toggle`}
-                className={`w-8 h-8 rounded text-[11px] font-semibold transition-colors shrink-0 ${
+                className={`h-8 w-8 shrink-0 rounded text-[11px] font-semibold transition-colors ${
                   val === 1
-                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
-                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'
+                    ? 'border border-[var(--ok)] bg-[var(--ok-soft)] text-[var(--ok)] hover:brightness-95'
+                    : 'border border-[var(--line)] bg-[var(--paper-2)] text-[var(--ink-4)] hover:bg-[var(--paper-3)]'
                 } disabled:opacity-60 disabled:cursor-not-allowed`}
               >
                 {val === 1 ? 'On' : 'Off'}
@@ -730,7 +772,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
         ))}
       </div>
 
-      <label className="inline-flex items-center gap-2 text-xs text-gray-600 mb-4">
+      <label className="mb-4 inline-flex items-center gap-2 text-xs text-[var(--ink-2)]">
         <input
           type="checkbox"
           checked={linkComplement}
@@ -742,23 +784,23 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
 
       {/* Preview */}
       <div>
-        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Preview — next 28 days</h3>
-        <p className="text-[11px] text-gray-500 mb-2">
-          Anchored to <span className="font-mono text-gray-700">{cycleStart}</span>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)]">Preview — next 28 days</h3>
+        <p className="mb-2 text-[11px] text-[var(--ink-3)]">
+          Anchored to <span className="font-mono text-[var(--ink-2)]">{cycleStart}</span>
           {isNightScope && !config?.cycle_start_date_night ? ' (currently inheriting the day cycle start date).' : '.'}
         </p>
         <div className="grid grid-cols-7 gap-1 text-[11px]">
           {previewDays.map(row => (
-            <div key={row.dateStr} className="rounded border border-gray-200 bg-white px-1.5 py-1 leading-tight">
+            <div key={row.dateStr} className="rounded border border-[var(--line)] bg-[var(--paper)] px-1.5 py-1 leading-tight">
               <div className="flex items-center justify-between">
-                <span className="text-gray-400">{row.weekday}</span>
-                <span className="text-gray-500">{row.dayLabel}</span>
+                <span className="text-[var(--ink-4)]">{row.weekday}</span>
+                <span className="text-[var(--ink-3)]">{row.dayLabel}</span>
               </div>
               <div className="mt-0.5 flex items-center gap-1">
-                <span className={`px-1 rounded text-[10px] font-semibold ${row.aWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                <span className={`rounded px-1 text-[10px] font-semibold ${row.aWorking ? 'bg-[var(--ok-soft)] text-[var(--ok)]' : 'bg-[var(--paper-2)] text-[var(--ink-4)]'}`}>
                   {isNightScope ? 'NA' : 'A'}
                 </span>
-                <span className={`px-1 rounded text-[10px] font-semibold ${row.bWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                <span className={`rounded px-1 text-[10px] font-semibold ${row.bWorking ? 'bg-[var(--ok-soft)] text-[var(--ok)]' : 'bg-[var(--paper-2)] text-[var(--ink-4)]'}`}>
                   {isNightScope ? 'NB' : 'B'}
                 </span>
               </div>
@@ -797,8 +839,8 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
 
   return (
     <section className={`${CARD.padded} mb-5`}>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold text-[var(--ink)]">{title}</h2>
         <button
           type="button"
           onClick={analyse}
@@ -808,32 +850,32 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
           Analyse all {activeCycleLength} offsets
         </button>
       </div>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="mb-4 text-xs text-[var(--ink-3)]">
         {isNightScope ? 'Night' : 'Day'} rotation repeats every {activeCycleLength} days, but which weekday each
-        cycle day lands on depends on <span className="font-mono text-gray-700">{targetKey}</span>.
+        cycle day lands on depends on <span className="font-mono text-[var(--ink-2)]">{targetKey}</span>.
         Shifting the start by 1–{Math.max(activeCycleLength - 1, 1)} days rearranges coverage across the week. Scores below show the fraction
         of period-slots that would be fully covered across the next 28 days for the current {isNightScope ? 'night' : 'day'} rota.
       </p>
-      <p className="text-[11px] text-gray-500 mb-4">
-        Current effective start: <span className="font-mono text-gray-700">{effectiveStart}</span>
+      <p className="mb-4 text-[11px] text-[var(--ink-3)]">
+        Current effective start: <span className="font-mono text-[var(--ink-2)]">{effectiveStart}</span>
         {isNightScope && !config?.cycle_start_date_night ? ' (currently inheriting the day cycle start date).' : '.'}
       </p>
 
       {scores == null ? (
-        <p className="text-xs text-gray-400">Click <em>Analyse all {activeCycleLength} offsets</em> to compute coverage for every possible start offset.</p>
+        <p className="text-xs text-[var(--ink-4)]">Click <em>Analyse all {activeCycleLength} offsets</em> to compute coverage for every possible start offset.</p>
       ) : (
         <div className="space-y-1.5">
           {scores.map(s => (
             <div key={s.offset} className="flex items-center gap-2 text-xs">
-              <span className="w-20 text-gray-500 shrink-0">
+              <span className="w-20 shrink-0 text-[var(--ink-3)]">
                 {s.offset === 0 ? 'current' : `+${s.offset}d`}
               </span>
-              <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden relative">
+              <div className="relative h-5 flex-1 overflow-hidden rounded bg-[var(--paper-3)]">
                 <div
-                  className={`h-full ${s.ratio === maxRatio ? 'bg-emerald-500' : 'bg-blue-300'}`}
+                  className={`h-full ${s.ratio === maxRatio ? 'bg-[var(--ok)]' : 'bg-[var(--info)] opacity-60'}`}
                   style={{ width: `${Math.round(s.ratio * 100)}%` }}
                 />
-                <span className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-gray-800">
+                <span className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-[var(--ink)]">
                   {s.covered}/{s.total} ({Math.round(s.ratio * 100)}%)
                 </span>
               </div>

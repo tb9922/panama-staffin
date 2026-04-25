@@ -8,6 +8,7 @@ import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { homeConfigSchema } from '../lib/zodHelpers.js';
+import { config as appConfig } from '../config.js';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
         beds: home.config?.registered_beds,
         type: home.config?.care_type,
         clockInRequired: Boolean(home.config?.clock_in_required),
+        staffPortalEnabled: appConfig.enableStaffPortal,
         scanIntakeEnabled: Boolean(home.config?.scan_intake_enabled),
         scanIntakeTargets: Array.isArray(home.config?.scan_intake_targets) ? home.config.scan_intake_targets : [],
         scanOcrEngine: home.config?.scan_ocr_engine || 'paddleocr',
@@ -42,7 +44,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
       const dbUser = req.authDbUser;
       if (dbUser?.is_platform_admin && dbUser.active) {
         const homes = await homeService.listHomes();
-        return res.json(homes.map(h => ({ ...h, roleId: 'home_manager', staffId: null })));
+        return res.json(homes.map(h => ({ ...h, staffPortalEnabled: appConfig.enableStaffPortal, roleId: 'home_manager', staffId: null })));
       }
       // Stale claim — clear and fall through to per-home role lookup
       req.user.is_platform_admin = false;
@@ -56,6 +58,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
       beds: r.config?.registered_beds,
       type: r.config?.care_type,
       clockInRequired: Boolean(r.config?.clock_in_required),
+      staffPortalEnabled: appConfig.enableStaffPortal,
       scanIntakeEnabled: Boolean(r.config?.scan_intake_enabled),
       scanIntakeTargets: Array.isArray(r.config?.scan_intake_targets) ? r.config.scan_intake_targets : [],
       scanOcrEngine: r.config?.scan_ocr_engine || 'paddleocr',

@@ -340,12 +340,13 @@ export default function IncidentTracker() {
   return (
     <div className={PAGE.container}>
       {/* Header */}
-      <div className={PAGE.header}>
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Compliance</p>
           <h1 className={PAGE.title}>Incident & Safety Reporting</h1>
           <p className={PAGE.subtitle}>CQC Regulation 16/18, RIDDOR 2013</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
           {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Incident</button>}
         </div>
@@ -354,34 +355,34 @@ export default function IncidentTracker() {
       {error && <ErrorState title="Unable to load incidents" message={error} onRetry={load} className="mb-4" />}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className={CARD.padded}>
-          <div className="text-xs font-medium text-gray-500">Total Incidents</div>
-          <div className="text-2xl font-bold text-gray-900 mt-0.5">{stats.total}</div>
-          <div className="text-[10px] text-gray-600">Last 90 days</div>
+          <div className="text-xs font-medium text-[var(--ink-3)]">Total Incidents</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--ink)]">{stats.total}</div>
+          <div className="text-[10px] text-[var(--ink-3)]">Last 90 days</div>
         </div>
-        <div className={`${CARD.padded} ${stats.openInvestigations > 0 ? 'border-red-200 bg-red-50' : ''}`}>
-          <div className={`text-xs font-medium ${stats.openInvestigations > 0 ? 'text-red-600' : 'text-gray-500'}`}>Open Investigations</div>
-          <div className={`text-2xl font-bold ${stats.openInvestigations > 0 ? 'text-red-700' : 'text-gray-900'} mt-0.5`}>{stats.openInvestigations}</div>
-          <div className="text-[10px] text-gray-600">Require review</div>
+        <div className={`${CARD.padded} ${stats.openInvestigations > 0 ? 'border-[var(--alert)] bg-[var(--alert-soft)]' : ''}`}>
+          <div className={`text-xs font-medium ${stats.openInvestigations > 0 ? 'text-[var(--alert)]' : 'text-[var(--ink-3)]'}`}>Open Investigations</div>
+          <div className={`mt-0.5 text-2xl font-bold ${stats.openInvestigations > 0 ? 'text-[var(--alert)]' : 'text-[var(--ink)]'}`}>{stats.openInvestigations}</div>
+          <div className="text-[10px] text-[var(--ink-3)]">Require review</div>
         </div>
-        <div className={`${CARD.padded} ${stats.overdueNotifications > 0 ? 'border-red-200 bg-red-50' : ''}`}>
-          <div className={`text-xs font-medium ${stats.overdueNotifications > 0 ? 'text-red-600' : 'text-gray-500'}`}>Pending CQC</div>
-          <div className={`text-2xl font-bold ${stats.overdueNotifications > 0 ? 'text-red-700' : 'text-gray-900'} mt-0.5`}>
+        <div className={`${CARD.padded} ${stats.overdueNotifications > 0 ? 'border-[var(--alert)] bg-[var(--alert-soft)]' : ''}`}>
+          <div className={`text-xs font-medium ${stats.overdueNotifications > 0 ? 'text-[var(--alert)]' : 'text-[var(--ink-3)]'}`}>Pending CQC</div>
+          <div className={`mt-0.5 text-2xl font-bold ${stats.overdueNotifications > 0 ? 'text-[var(--alert)]' : 'text-[var(--ink)]'}`}>
             {stats.pendingCqcNotifications}
           </div>
-          <div className="text-[10px] text-gray-600">{stats.overdueNotifications > 0 ? `${stats.overdueNotifications} overdue` : 'Notifications'}</div>
+          <div className="text-[10px] text-[var(--ink-3)]">{stats.overdueNotifications > 0 ? `${stats.overdueNotifications} overdue` : 'Notifications'}</div>
         </div>
         <div className={CARD.padded}>
-          <div className="text-xs font-medium text-gray-500">Avg Response</div>
-          <div className="text-2xl font-bold text-gray-900 mt-0.5">{stats.avgResponseTimeHours != null ? `${stats.avgResponseTimeHours}h` : '-'}</div>
-          <div className="text-[10px] text-gray-600">CQC notification time</div>
+          <div className="text-xs font-medium text-[var(--ink-3)]">Avg Response</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--ink)]">{stats.avgResponseTimeHours != null ? `${stats.avgResponseTimeHours}h` : '-'}</div>
+          <div className="text-[10px] text-[var(--ink-3)]">CQC notification time</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <select className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)} aria-label="Filter incidents by type">
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3 shadow-sm shadow-slate-900/5 print:hidden">
+        <select style={{ width: 'min(100%, 15rem)' }} className={INPUT.select} value={filterType} onChange={e => setFilterType(e.target.value)} aria-label="Filter incidents by type">
           <option value="">All Types</option>
           {INCIDENT_CATEGORIES.map(cat => (
             <optgroup key={cat.id} label={cat.name}>
@@ -391,22 +392,22 @@ export default function IncidentTracker() {
             </optgroup>
           ))}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} aria-label="Filter incidents by severity">
+        <select style={{ width: 'min(100%, 13rem)' }} className={INPUT.select} value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} aria-label="Filter incidents by severity">
           <option value="">All Severities</option>
           {SEVERITY_LEVELS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)} aria-label="Filter incidents by investigation status">
+        <select style={{ width: 'min(100%, 13rem)' }} className={INPUT.select} value={filterStatus} onChange={e => setFilterStatus(e.target.value)} aria-label="Filter incidents by investigation status">
           <option value="">All Statuses</option>
           {INVESTIGATION_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <input type="text" className={`${INPUT.sm} w-48`} placeholder="Search..." aria-label="Search incidents" value={search} onChange={e => setSearch(e.target.value)} />
-        <span className="text-xs text-gray-600 self-center">{filtered.length} incidents</span>
+        <input type="text" style={{ width: 'min(100%, 18rem)' }} className={INPUT.sm} placeholder="Search..." aria-label="Search incidents" value={search} onChange={e => setSearch(e.target.value)} />
+        <span className="ml-auto text-xs text-[var(--ink-3)]">{filtered.length} incidents</span>
       </div>
 
       {/* Incident Table */}
       <div className={CARD.flush}>
         <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
+          <table className={`${TABLE.table} min-w-[900px]`}>
             <thead className={TABLE.thead}>
               <tr>
                 <th scope="col" className={TABLE.th}>Date</th>
@@ -441,8 +442,8 @@ export default function IncidentTracker() {
                 const riddorOverdue = isRiddorOverdue(inc);
                 return (
                   <tr key={inc.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(inc), { disabled: !canEdit, label: `Open incident ${inc.type}` })}>
-                    <td className={TABLE.td}>{inc.date}</td>
-                    <td className={TABLE.td}>{inc.time || '-'}</td>
+                    <td className={`${TABLE.tdMono} text-xs`}>{inc.date}</td>
+                    <td className={`${TABLE.tdMono} text-xs`}>{inc.time || '-'}</td>
                     <td className={TABLE.td}>{typeDef?.name || inc.type}</td>
                     <td className={TABLE.td}><span className={sevBadge(inc.severity)}>{SEVERITY_LEVELS.find(s => s.id === inc.severity)?.name || inc.severity}</span></td>
                     <td className={TABLE.td}>{personDef?.name || inc.person_affected}</td>
@@ -452,14 +453,14 @@ export default function IncidentTracker() {
                         inc.cqc_notified ? <span className={BADGE.green}>Sent</span>
                           : cqcOverdue ? <span className={BADGE.red}>OVERDUE</span>
                           : <span className={BADGE.amber}>Pending</span>
-                      ) : <span className="text-gray-300">-</span>}
+                      ) : <span className="text-[var(--ink-4)]">-</span>}
                     </td>
                     <td className={TABLE.td}>
                       {inc.riddor_reportable ? (
                         inc.riddor_reported ? <span className={BADGE.green}>Sent</span>
                           : riddorOverdue ? <span className={BADGE.red}>OVERDUE</span>
                           : <span className={BADGE.amber}>Pending</span>
-                      ) : <span className="text-gray-300">-</span>}
+                      ) : <span className="text-[var(--ink-4)]">-</span>}
                     </td>
                     <td className={TABLE.td}>
                       {inc.frozen_at && <span className={BADGE.purple} title={`Frozen ${inc.frozen_at.slice(0, 10)}`}>Frozen</span>}

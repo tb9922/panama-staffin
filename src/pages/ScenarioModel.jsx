@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { getCycleDates, getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost, calculateScenario } from '../lib/escalation.js';
-import { CARD, TABLE, INPUT, BTN } from '../lib/design.js';
+import { CARD, TABLE, INPUT, BTN, PAGE } from '../lib/design.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import ErrorState from '../components/ErrorState.jsx';
@@ -63,8 +63,8 @@ export default function ScenarioModel() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Staffing Cost Scenarios</h1>
-          <p className="text-sm text-gray-500">Staffing cost scenarios are not available for staff self-service accounts.</p>
+          <h1 className="mb-2 text-lg font-semibold text-[var(--ink)]">Staffing Cost Scenarios</h1>
+          <p className="text-sm text-[var(--ink-3)]">Staffing cost scenarios are not available for staff self-service accounts.</p>
         </div>
       </div>
     );
@@ -73,8 +73,8 @@ export default function ScenarioModel() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Staffing Cost Scenarios</h1>
-          <p className="text-sm text-gray-500">Select a home to view staffing cost scenarios.</p>
+          <h1 className="mb-2 text-lg font-semibold text-[var(--ink)]">Staffing Cost Scenarios</h1>
+          <p className="text-sm text-[var(--ink-3)]">Select a home to view staffing cost scenarios.</p>
         </div>
       </div>
     );
@@ -152,52 +152,54 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
   }, [schedData.staff, config, elHrs, nHrs]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={PAGE.container}>
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{config.home_name} — Staffing Cost Scenarios</h1>
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-2 print:hidden">
-        <h1 className="text-2xl font-bold text-gray-900">Staffing Cost Scenarios</h1>
+      <div className={`${PAGE.header} print:hidden`}>
+        <div>
+          <h1 className={PAGE.title}>Staffing Cost Scenarios</h1>
+          <p className={PAGE.subtitle}>Adaptive model linked to roster, config, and daily costs</p>
+        </div>
         <button onClick={() => window.print()}
-          className={BTN.secondary}>Print</button>
+          className={`${BTN.secondary} w-full sm:w-auto`}>Print</button>
       </div>
-      <p className="text-sm text-gray-500 mb-6">Adaptive model linked to roster, config, and daily costs</p>
 
       {/* Custom Scenario Builder */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 print:hidden">
-        <h2 className="text-sm font-semibold text-blue-800 mb-3">Custom What-If Scenario</h2>
-        <div className="flex flex-wrap gap-4 items-end">
+      <div className={`${CARD.padded} mb-6 print:hidden`}>
+        <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Custom What-If Scenario</h2>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,12rem)_repeat(2,6rem)_minmax(0,1fr)] sm:items-end">
           <div>
-            <label className={INPUT.label + ' !text-blue-600'}>Name</label>
+            <label className={INPUT.label}>Name</label>
             <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
-              className={INPUT.sm + ' !w-40'} />
+              className={INPUT.sm} />
           </div>
           <div>
-            <label className={INPUT.label + ' !text-blue-600'}>Sick per day</label>
+            <label className={INPUT.label}>Sick per day</label>
             <input type="number" min="0" max="15" step="1" value={customSick}
               onChange={e => setCustomSick(parseInt(e.target.value) || 0)}
-              className={INPUT.sm + ' !w-20'} />
+              className={INPUT.sm} />
           </div>
           <div>
-            <label className={INPUT.label + ' !text-blue-600'}>AL per day</label>
+            <label className={INPUT.label}>AL per day</label>
             <input type="number" min="0" max="10" step="1" value={customAL}
               onChange={e => setCustomAL(parseInt(e.target.value) || 0)}
-              className={INPUT.sm + ' !w-20'} />
+              className={INPUT.sm} />
           </div>
-          <div className="text-xs text-blue-600">
+          <div className="text-xs text-[var(--ink-3)]">
             Results appear in the last row of the table below
           </div>
         </div>
       </div>
 
       {/* Main Scenario Table */}
-      <div className={CARD.flush + ' mb-6'}>
+      <div className={`${CARD.flush} mb-6 max-w-full`}>
         <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className="bg-gray-800 text-white text-xs">
+          <table className={`${TABLE.table} min-w-[980px]`}>
+            <thead className={TABLE.thead}>
               <tr>
                 <th scope="col" className={TABLE.th}>Scenario</th>
                 <th scope="col" className={TABLE.th + ' text-center'}>Sick/d</th>
@@ -217,24 +219,24 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
             <tbody>
               {scenarioResults.map((s, i) => (
                 <tr key={i} className={`${TABLE.tr} ${
-                  s.isCustom ? 'bg-blue-50 border-blue-200' :
-                  i === 0 ? 'bg-green-50' : i >= 4 ? 'bg-red-50' : ''
+                  s.isCustom ? 'bg-[var(--accent-soft)]' :
+                  i === 0 ? 'bg-[var(--ok-soft)]' : i >= 4 ? 'bg-[var(--alert-soft)]' : ''
                 }`}>
                   <td className={TABLE.td + ' font-medium text-xs'}>
-                    {s.isCustom ? <span className="text-blue-700">{s.name}</span> : s.name}
+                    {s.isCustom ? <span className="text-[var(--accent)]">{s.name}</span> : s.name}
                   </td>
                   <td className={TABLE.td + ' text-center'}>{s.sick}</td>
                   <td className={TABLE.td + ' text-center'}>{s.al}</td>
                   <td className={TABLE.td + ' text-center font-medium'}>{s.totalGaps}</td>
-                  <td className={TABLE.td + ' text-center text-green-600'}>{s.floatFills}</td>
-                  <td className={TABLE.td + ' text-center text-orange-600'}>{s.otFills}</td>
-                  <td className={TABLE.td + ' text-center text-red-600'}>{s.agDayFills}</td>
-                  <td className={TABLE.td + ' text-center text-red-600'}>{s.agNightFills}</td>
-                  <td className={TABLE.td + ' text-right text-gray-500'}>£{Math.round(s.baseCost).toLocaleString()}</td>
-                  <td className={TABLE.td + ' text-right text-amber-600'}>£{Math.round(s.totalExtraCost).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-center text-[var(--ok)]'}>{s.floatFills}</td>
+                  <td className={TABLE.td + ' text-center text-[var(--warn)]'}>{s.otFills}</td>
+                  <td className={TABLE.td + ' text-center text-[var(--alert)]'}>{s.agDayFills}</td>
+                  <td className={TABLE.td + ' text-center text-[var(--alert)]'}>{s.agNightFills}</td>
+                  <td className={TABLE.td + ' text-right text-[var(--ink-3)]'}>£{Math.round(s.baseCost).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right text-[var(--caution)]'}>£{Math.round(s.totalExtraCost).toLocaleString()}</td>
                   <td className={TABLE.td + ' text-right font-bold'}>£{Math.round(s.total28).toLocaleString()}</td>
-                  <td className={TABLE.td + ' text-right text-gray-600'}>£{Math.round(s.monthly).toLocaleString()}</td>
-                  <td className={TABLE.td + ' text-right text-gray-600'}>£{Math.round(s.annual).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right text-[var(--ink-2)]'}>£{Math.round(s.monthly).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right text-[var(--ink-2)]'}>£{Math.round(s.annual).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -245,25 +247,25 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
       {/* Agency Kill Impact */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className={CARD.padded}>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Agency Kill Impact</h2>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--ink-3)]">Agency Kill Impact</h2>
           <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{'WITHOUT Agency Kill (all gaps → agency):'}</span>
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-[var(--ink-2)]">{'WITHOUT Agency Kill (all gaps → agency):'}</span>
               <span className="font-medium">£{Math.round(withoutKill28).toLocaleString()} / 28d</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{'WITH Agency Kill (float → OT → agency last):'}</span>
-              <span className="font-medium text-green-600">£{Math.round(withKill28).toLocaleString()} / 28d</span>
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-[var(--ink-2)]">{'WITH Agency Kill (float → OT → agency last):'}</span>
+              <span className="font-medium text-[var(--ok)]">£{Math.round(withKill28).toLocaleString()} / 28d</span>
             </div>
-            <div className="border-t pt-3 flex justify-between text-sm font-bold">
+            <div className="flex justify-between gap-4 border-t border-[var(--line)] pt-3 text-sm font-bold">
               <span>Annual Saving per Home:</span>
-              <span className="text-green-600 text-lg">£{Math.round(annualSaving).toLocaleString()}</span>
+              <span className="text-lg text-[var(--ok)]">£{Math.round(annualSaving).toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-sm text-gray-500">
+            <div className="flex justify-between gap-4 text-sm text-[var(--ink-3)]">
               <span>Across 10 homes:</span>
               <span>£{Math.round(annualSaving * 10).toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-sm text-gray-500">
+            <div className="flex justify-between gap-4 text-sm text-[var(--ink-3)]">
               <span>Across 30 homes:</span>
               <span>£{Math.round(annualSaving * 30).toLocaleString()}</span>
             </div>
@@ -272,36 +274,38 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
 
         {/* Winter Scenarios */}
         <div className={CARD.padded}>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Winter Scenarios (Weekly OT Cap)</h2>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Scenario</th>
-                <th scope="col" className={TABLE.th + ' text-center'}>Gaps/d</th>
-                <th scope="col" className={TABLE.th + ' text-center'}>Float</th>
-                <th scope="col" className={TABLE.th + ' text-center'}>OT</th>
-                <th scope="col" className={TABLE.th + ' text-center'}>Agency</th>
-                <th scope="col" className={TABLE.th + ' text-right'}>AG £/wk</th>
-              </tr>
-            </thead>
-            <tbody>
-              {winterResults.map((w, i) => (
-                <tr key={i} className={TABLE.tr}>
-                  <td className={TABLE.td + ' text-xs font-medium'}>{w.name}</td>
-                  <td className={TABLE.td + ' text-center'}>{w.gaps}</td>
-                  <td className={TABLE.td + ' text-center text-green-600'}>{w.floatWk}</td>
-                  <td className={TABLE.td + ' text-center text-orange-600'}>{w.otWk}</td>
-                  <td className={TABLE.td + ' text-center text-red-600'}>{w.agWk}</td>
-                  <td className={TABLE.tdMono + ' text-right'}>{w.agCostWk > 0 ? `£${w.agCostWk.toFixed(0)}` : '-'}</td>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--ink-3)]">Winter Scenarios (Weekly OT Cap)</h2>
+          <div className={TABLE.wrapper}>
+            <table className={`${TABLE.table} min-w-[620px]`}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Scenario</th>
+                  <th scope="col" className={TABLE.th + ' text-center'}>Gaps/d</th>
+                  <th scope="col" className={TABLE.th + ' text-center'}>Float</th>
+                  <th scope="col" className={TABLE.th + ' text-center'}>OT</th>
+                  <th scope="col" className={TABLE.th + ' text-center'}>Agency</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>AG £/wk</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {winterResults.map((w, i) => (
+                  <tr key={i} className={TABLE.tr}>
+                    <td className={TABLE.td + ' text-xs font-medium'}>{w.name}</td>
+                    <td className={TABLE.td + ' text-center'}>{w.gaps}</td>
+                    <td className={TABLE.td + ' text-center text-[var(--ok)]'}>{w.floatWk}</td>
+                    <td className={TABLE.td + ' text-center text-[var(--warn)]'}>{w.otWk}</td>
+                    <td className={TABLE.td + ' text-center text-[var(--alert)]'}>{w.agWk}</td>
+                    <td className={TABLE.tdMono + ' text-right'}>{w.agCostWk > 0 ? `£${w.agCostWk.toFixed(0)}` : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       {/* Assumptions */}
-      <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-4 text-xs text-[var(--ink-3)]">
         <strong>Assumptions:</strong> Float pool = {schedData.staff.filter(s => s.team === 'Float' && s.active !== false).length} |
         OT pool = {config.bank_staff_pool_size} |
         Night gap % = {((config.night_gap_pct || 0.3) * 100).toFixed(0)}% |

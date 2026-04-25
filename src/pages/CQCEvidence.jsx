@@ -32,11 +32,11 @@ import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const CATEGORY_LABELS = { safe: 'Safe', effective: 'Effective', caring: 'Caring', responsive: 'Responsive', 'well-led': 'Well-Led' };
 const CATEGORY_COLORS = {
-  safe: 'text-blue-700 bg-blue-50 border-blue-200',
-  effective: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-  caring: 'text-pink-700 bg-pink-50 border-pink-200',
-  responsive: 'text-amber-700 bg-amber-50 border-amber-200',
-  'well-led': 'text-purple-700 bg-purple-50 border-purple-200',
+  safe: 'border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]',
+  effective: 'border-[var(--ok)] bg-[var(--ok-soft)] text-[var(--ok)]',
+  caring: 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]',
+  responsive: 'border-[var(--caution)] bg-[var(--caution-soft)] text-[var(--caution)]',
+  'well-led': 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]',
 };
 
 const EVIDENCE_CATEGORY_OPTIONS = getAllEvidenceCategories();
@@ -48,9 +48,9 @@ const RANGE_OPTIONS = [
 ];
 
 const SCORE_STYLES = {
-  emerald: { card: 'rounded-xl p-3 bg-emerald-50 border border-emerald-200', label: 'text-xs font-medium text-emerald-600', value: 'text-3xl font-bold text-emerald-700 mt-0.5' },
-  amber:   { card: 'rounded-xl p-3 bg-amber-50 border border-amber-200',     label: 'text-xs font-medium text-amber-600',   value: 'text-3xl font-bold text-amber-700 mt-0.5' },
-  red:     { card: 'rounded-xl p-3 bg-red-50 border border-red-200',         label: 'text-xs font-medium text-red-600',     value: 'text-3xl font-bold text-red-700 mt-0.5' },
+  emerald: { card: 'rounded-xl border border-[var(--ok)] bg-[var(--ok-soft)] p-3', label: 'text-xs font-medium text-[var(--ok)]', value: 'mt-0.5 text-3xl font-bold text-[var(--ok)]' },
+  amber:   { card: 'rounded-xl border border-[var(--caution)] bg-[var(--caution-soft)] p-3', label: 'text-xs font-medium text-[var(--caution)]', value: 'mt-0.5 text-3xl font-bold text-[var(--caution)]' },
+  red:     { card: 'rounded-xl border border-[var(--alert)] bg-[var(--alert-soft)] p-3', label: 'text-xs font-medium text-[var(--alert)]', value: 'mt-0.5 text-3xl font-bold text-[var(--alert)]' },
 };
 
 function blankEvidenceForm(statementId = '') {
@@ -124,8 +124,8 @@ function blankNarrativeForm(statementId = '', existing = null) {
 }
 
 function metricColor(value, lowerIsBetter) {
-  if (lowerIsBetter) return value <= 5 ? 'text-emerald-600' : value <= 15 ? 'text-amber-600' : 'text-red-600';
-  return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
+  if (lowerIsBetter) return value <= 5 ? 'text-[var(--ok)]' : value <= 15 ? 'text-[var(--caution)]' : 'text-[var(--alert)]';
+  return value >= 90 ? 'text-[var(--ok)]' : value >= 70 ? 'text-[var(--caution)]' : 'text-[var(--alert)]';
 }
 
 function readinessBadgeClass(status) {
@@ -620,12 +620,12 @@ function CQCEvidenceInner({ data }) {
           <h1 className={PAGE.title}>CQC Compliance Evidence</h1>
           <p className={PAGE.subtitle}>Single Assessment Framework — staffing compliance scorecard and evidence pack</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={handleCreateSnapshot} disabled={generating} className={`${BTN.secondary} ${BTN.sm}`}>
+        <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
+          <button onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          {canEdit && <button onClick={handleCreateSnapshot} disabled={generating} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>
             Save Snapshot
           </button>}
-          <button onClick={handleGeneratePDF} disabled={generating} className={BTN.primary}>
+          <button onClick={handleGeneratePDF} disabled={generating} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`}>
             {generating ? 'Generating...' : 'Generate Evidence Pack'}
           </button>
         </div>
@@ -643,55 +643,55 @@ function CQCEvidenceInner({ data }) {
       ) : null}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         {/* Overall Score */}
         <div className={scoreStyle.card}>
           <div className={scoreStyle.label}>Overall Score</div>
           <div className={scoreStyle.value}>{score.overallScore}%</div>
           <div className="flex items-center gap-1.5 mt-1">
             <span className={BADGE[score.band.badgeKey]}>{score.band.label}</span>
-            <span className="text-[10px] text-gray-400">{score.availableMetrics.length} of {METRIC_DEFINITIONS.length} metrics</span>
+            <span className="text-[10px] text-[var(--ink-4)]">{score.availableMetrics.length} of {METRIC_DEFINITIONS.length} metrics</span>
           </div>
         </div>
 
         {/* Training */}
-        <div className="rounded-xl p-3 bg-blue-50 border border-blue-200">
-          <div className="text-xs font-medium text-blue-600">Training Compliance</div>
-          <div className="text-2xl font-bold text-blue-700 mt-0.5">{score.metrics.trainingCompliance?.raw ?? '-'}%</div>
-          <div className="text-[10px] text-blue-500">Regulation 18 — 20% weight</div>
+        <div className="rounded-xl border border-[var(--info)] bg-[var(--info-soft)] p-3">
+          <div className="text-xs font-medium text-[var(--info)]">Training Compliance</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--info)]">{score.metrics.trainingCompliance?.raw ?? '-'}%</div>
+          <div className="text-[10px] text-[var(--info)]">Regulation 18 — 20% weight</div>
         </div>
 
         {/* Fill Rate */}
-        <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-200">
-          <div className="text-xs font-medium text-emerald-600">Staffing Fill Rate</div>
-          <div className="text-2xl font-bold text-emerald-700 mt-0.5">{score.metrics.staffingFillRate?.raw ?? '-'}%</div>
-          <div className="text-[10px] text-emerald-500">{score.metrics.staffingFillRate?.detail?.shortfallDays || 0} shortfall days — 20% weight</div>
+        <div className="rounded-xl border border-[var(--ok)] bg-[var(--ok-soft)] p-3">
+          <div className="text-xs font-medium text-[var(--ok)]">Staffing Fill Rate</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--ok)]">{score.metrics.staffingFillRate?.raw ?? '-'}%</div>
+          <div className="text-[10px] text-[var(--ok)]">{score.metrics.staffingFillRate?.detail?.shortfallDays || 0} shortfall days — 20% weight</div>
         </div>
 
         {/* Agency */}
-        <div className={`rounded-xl p-3 ${(score.metrics.agencyDependency?.raw || 0) > 10 ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
-          <div className={`text-xs font-medium ${(score.metrics.agencyDependency?.raw || 0) > 10 ? 'text-red-600' : 'text-gray-600'}`}>Agency Dependency</div>
-          <div className={`text-2xl font-bold ${(score.metrics.agencyDependency?.raw || 0) > 10 ? 'text-red-700' : 'text-gray-700'} mt-0.5`}>{score.metrics.agencyDependency?.raw ?? 0}%</div>
-          <div className="text-[10px] text-gray-500">Target &lt;10% — 15% weight</div>
+        <div className={`rounded-xl border p-3 ${(score.metrics.agencyDependency?.raw || 0) > 10 ? 'border-[var(--alert)] bg-[var(--alert-soft)]' : 'border-[var(--line)] bg-[var(--paper-2)]'}`}>
+          <div className={`text-xs font-medium ${(score.metrics.agencyDependency?.raw || 0) > 10 ? 'text-[var(--alert)]' : 'text-[var(--ink-2)]'}`}>Agency Dependency</div>
+          <div className={`mt-0.5 text-2xl font-bold ${(score.metrics.agencyDependency?.raw || 0) > 10 ? 'text-[var(--alert)]' : 'text-[var(--ink)]'}`}>{score.metrics.agencyDependency?.raw ?? 0}%</div>
+          <div className="text-[10px] text-[var(--ink-3)]">Target &lt;10% — 15% weight</div>
         </div>
       </div>
 
       <div className="mb-5">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Readiness</div>
-            <p className="mt-1 text-xs text-gray-500">
+            <div className="text-xs font-semibold uppercase tracking-wider text-[var(--ink-3)]">Readiness</div>
+            <p className="mt-1 text-xs text-[var(--ink-3)]">
               Server-authored gap analysis with per-category freshness thresholds. Raw counts stay visible so the team can judge the shape, not just the badge.
             </p>
           </div>
           {readinessLoading ? <span className={BADGE.gray}>Refreshing…</span> : null}
         </div>
         {readinessError ? (
-          <p className="mb-3 text-xs text-amber-700">
+          <p className="mb-3 text-xs text-[var(--caution)]">
             Live readiness could not be refreshed from the server, so this view is temporarily using the local fallback calculation.
           </p>
         ) : null}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
           {categories.map((question) => {
             const summary = questionReadiness.find((entry) => entry.question === question) || {
               total: QUALITY_STATEMENTS.filter((entry) => entry.category === question).length,
@@ -703,8 +703,8 @@ function CQCEvidenceInner({ data }) {
             };
             return (
               <div key={question} className={CARD.padded}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{CATEGORY_LABELS[question]}</p>
-                <p className="text-lg font-bold text-gray-900 mt-1">{summary.strong}/{summary.total} strong</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ink-3)]">{CATEGORY_LABELS[question]}</p>
+                <p className="mt-1 text-lg font-bold text-[var(--ink)]">{summary.strong}/{summary.total} strong</p>
                 <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                   {summary.missing > 0 ? <span className={BADGE.red}>{summary.missing} missing</span> : null}
                   {summary.weak > 0 ? <span className={BADGE.red}>{summary.weak} weak</span> : null}
@@ -721,14 +721,14 @@ function CQCEvidenceInner({ data }) {
       </div>
 
       {/* Date Range Toggle */}
-      <div className="flex gap-1 mb-5 print:hidden">
+      <div className="mb-5 flex flex-wrap gap-1 print:hidden">
         {RANGE_OPTIONS.map(opt => (
           <button key={opt.days} onClick={() => setDateRangeDays(opt.days)}
             className={`${dateRangeDays === opt.days ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
             {opt.label}
           </button>
         ))}
-        <span className="text-xs text-gray-400 self-center ml-2">
+        <span className="ml-2 self-center text-xs text-[var(--ink-4)]">
           {formatDate(dateRange.from)} to {formatDate(dateRange.to)}
         </span>
       </div>
@@ -737,19 +737,19 @@ function CQCEvidenceInner({ data }) {
         <div className={`${CARD.padded} mb-5`}>
           <div className="flex items-center justify-between gap-3 mb-2">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Readiness Gaps</h2>
-              <p className="text-xs text-gray-500">Statements that still need fresher, broader, or better-owned evidence.</p>
+              <h2 className="text-sm font-semibold text-[var(--ink)]">Readiness Gaps</h2>
+              <p className="text-xs text-[var(--ink-3)]">Statements that still need fresher, broader, or better-owned evidence.</p>
             </div>
             <span className={BADGE.amber}>{readinessGaps.length} open</span>
           </div>
           <div className="space-y-2">
             {readinessGaps.slice(0, 10).map((gap) => (
-              <div key={gap.statementId} className="flex flex-col gap-1 rounded-lg border border-gray-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
+              <div key={gap.statementId} className="flex flex-col gap-1 rounded-lg border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-2">
                   <span className={readinessBadgeClass(gap.status)}>{readinessStatusLabel(gap.status)}</span>
-                  <span className="text-sm font-medium text-gray-900">{gap.statementId} - {gap.statementName}</span>
+                  <span className="text-sm font-medium text-[var(--ink)]">{gap.statementId} - {gap.statementName}</span>
                 </div>
-                <p className="text-xs text-gray-500 md:text-right">{gap.summary}</p>
+                <p className="text-xs text-[var(--ink-3)] md:text-right">{gap.summary}</p>
               </div>
             ))}
           </div>
@@ -777,21 +777,21 @@ function CQCEvidenceInner({ data }) {
 
               return (
                 <div key={qs.id} className={CARD.padded}>
-                  <div className="flex items-center justify-between cursor-pointer"
+                  <div className="flex cursor-pointer flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                     onClick={() => setExpandedStatement(isExpanded ? null : qs.id)}>
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
                       <svg className="h-5 w-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                         <path strokeLinecap="round" strokeLinejoin="round" d={qs.icon} />
                       </svg>
-                      <div>
-                        <span className="font-medium text-gray-900">{qs.name}</span>
+                      <div className="min-w-0">
+                        <span className="block font-medium text-gray-900">{qs.name}</span>
                         {autoCount + manualCount === 0 && (
                           <span className="ml-2 inline-flex h-2.5 w-2.5 rounded-full bg-red-500 align-middle" aria-label="No evidence attached" />
                         )}
-                        <span className="text-xs text-gray-400 ml-2">{qs.cqcRef}</span>
+                        <span className="mt-1 block text-xs text-gray-400">{qs.cqcRef}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       {readiness && <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>}
                       <span className="text-xs text-gray-500">{autoCount + manualCount} evidence items</span>
                       {ev?.autoEvidence?.map((ae, i) => (
@@ -827,9 +827,9 @@ function CQCEvidenceInner({ data }) {
                           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">System Metrics</div>
                           <div className="space-y-1">
                             {ev.autoEvidence.map((ae, i) => (
-                              <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded bg-gray-50">
+                              <div key={i} className="flex flex-col gap-1 py-1.5 px-2 rounded bg-gray-50 sm:flex-row sm:items-center sm:justify-between">
                                 <span className="text-sm text-gray-700">{ae.label}</span>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span className={`text-sm font-bold ${ae.value >= 90 ? 'text-emerald-600' : ae.value >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
                                     {ae.value}{ae.unit}
                                   </span>
@@ -848,8 +848,8 @@ function CQCEvidenceInner({ data }) {
                           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Manual Evidence</div>
                           <div className="space-y-1.5">
                             {ev.manualEvidence.map(me => (
-                              <div key={me.id} className="flex items-start justify-between py-1.5 px-2 rounded bg-gray-50">
-                                <div>
+                              <div key={me.id} className="flex flex-col gap-2 py-1.5 px-2 rounded bg-gray-50 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
                                   <div className="text-sm font-medium text-gray-800">
                                     {me.title}
                                     {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{getEvidenceCategoryLabel(me.evidence_category)}</span>}
@@ -866,7 +866,7 @@ function CQCEvidenceInner({ data }) {
                                   </div>
                                 </div>
                                 {canEdit && (
-                                  <div className="ml-2 flex shrink-0 gap-2">
+                                  <div className="flex shrink-0 gap-2 sm:ml-2">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); openEditEvidence(me); }}
                                       disabled={savingEvidence}

@@ -192,9 +192,10 @@ export default function HMRCDashboard() {
             Estimated liability — confirm with your accountant after FPS submission.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-gray-600">Tax year:</label>
+        <div className="flex w-full flex-col gap-1 sm:w-auto">
+          <label htmlFor="hmrc-tax-year" className="text-sm font-medium text-[var(--ink-2)]">Tax year</label>
           <select
+            id="hmrc-tax-year"
             className={INPUT.select + ' w-36'}
             value={taxYear}
             onChange={e => setTaxYear(Number(e.target.value))}
@@ -213,10 +214,10 @@ export default function HMRCDashboard() {
 
       {/* Overdue alert */}
       {overdue.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <InlineNotice variant="error" className="mb-4">
           <strong>{overdue.length} overdue payment{overdue.length !== 1 ? 's' : ''}.</strong>{' '}
           HMRC penalties may apply. Total overdue: {fmt(overdue.reduce((s, l) => s + parseFloat(l.total_due || 0), 0))}.
-        </div>
+        </InlineNotice>
       )}
 
       {rtiAlerts.map((alert) => (
@@ -231,16 +232,16 @@ export default function HMRCDashboard() {
       )}
 
       {/* Summary cards */}
-      <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           { label: 'Total Due Year', value: fmt(totalDue), badge: null },
           { label: 'Outstanding', value: fmt(totalOwed), badge: totalOwed > 0 ? 'amber' : 'green' },
           { label: 'Paid', value: fmt(totalPaid), badge: 'green' },
           { label: 'Overdue', value: fmt(overdue.reduce((s, l) => s + parseFloat(l.total_due || 0), 0)), badge: overdue.length > 0 ? 'red' : null },
         ].map(({ label, value }) => (
-          <div key={label} className={`${CARD.padded} text-center`}>
-            <div className="text-xs text-gray-500 mb-1">{label}</div>
-            <div className="text-lg font-semibold text-gray-900">{value}</div>
+          <div key={label} className={CARD.padded}>
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">{label}</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-[var(--ink)]">{value}</div>
           </div>
         ))}
       </div>
@@ -256,7 +257,14 @@ export default function HMRCDashboard() {
 
       {/* Liabilities table */}
       <div className={CARD.flush}>
-        <table className={TABLE.table}>
+        <div className="flex flex-col gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--ink)]">Liability ledger</h2>
+            <p className="text-xs text-[var(--ink-3)]">PAYE, employee NI, employer NI, payment status, and reference tracking by tax month.</p>
+          </div>
+        </div>
+        <div className={TABLE.wrapper} tabIndex={0} aria-label="HMRC liability ledger table">
+          <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>Tax Month</th>
@@ -323,8 +331,10 @@ export default function HMRCDashboard() {
                   <td className={TABLE.td}>
                     {l.status !== 'paid' ? (
                       <button
+                        type="button"
                         className={BTN.success + ' ' + BTN.xs}
                         onClick={() => openPaid(l)}
+                        title={`Mark ${taxMonthLabel(l.tax_month)} as paid`}
                       >
                         Mark Paid
                       </button>
@@ -345,7 +355,8 @@ export default function HMRCDashboard() {
               </tr>
             </tfoot>
           )}
-        </table>
+          </table>
+        </div>
       </div>
 
       {/* Notes */}
@@ -355,7 +366,7 @@ export default function HMRCDashboard() {
           following the end of the tax month (22nd for electronic payment). Late payment incurs penalties.
         </p>
         <p>
-          <strong>Employment Allowance:</strong> If your home claims Employment Allowance (up to £10,500/year
+          <strong>Employment Allowance:</strong> If your home claims Employment Allowance (up to £10.5k/year
           from April 2025), this reduces Employer NI due. Contact your accountant to apply this via HMRC Basic
           PAYE Tools or your payroll software.
         </p>
@@ -373,8 +384,9 @@ export default function HMRCDashboard() {
 
         <div className="space-y-4">
           <div>
-            <label className={INPUT.label}>Payment Date</label>
+            <label htmlFor="hmrc-paid-date" className={INPUT.label}>Payment Date</label>
             <input
+              id="hmrc-paid-date"
               type="date"
               className={INPUT.base}
               value={paidForm.paid_date}
@@ -382,8 +394,9 @@ export default function HMRCDashboard() {
             />
           </div>
           <div>
-            <label className={INPUT.label}>Payment Reference (optional)</label>
+            <label htmlFor="hmrc-paid-reference" className={INPUT.label}>Payment Reference (optional)</label>
             <input
+              id="hmrc-paid-reference"
               className={INPUT.base}
               value={paidForm.paid_reference}
               onChange={e => setPaidForm(f => ({ ...f, paid_reference: e.target.value }))}

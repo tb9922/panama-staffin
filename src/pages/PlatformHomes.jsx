@@ -49,13 +49,20 @@ export default function PlatformHomes() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const totalBeds = homes.reduce((sum, home) => sum + Number(home.beds || 0), 0);
+  const totalStaff = homes.reduce((sum, home) => sum + Number(home.staffCount || 0), 0);
+  const totalUsers = homes.reduce((sum, home) => sum + Number(home.userCount || 0), 0);
+
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading homes..." card /></div>;
 
   return (
     <div className={PAGE.container}>
       <div className={PAGE.header}>
-        <h1 className={PAGE.title}>Manage Homes</h1>
-        <button className={BTN.primary} onClick={() => setAddOpen(true)}>Add Home</button>
+        <div>
+          <h1 className={PAGE.title}>Manage Homes</h1>
+          <p className={PAGE.subtitle}>Platform-level home setup, access counts, and operational footprint.</p>
+        </div>
+        <button type="button" className={BTN.primary} onClick={() => setAddOpen(true)}>Add Home</button>
       </div>
 
       {notice && (
@@ -65,8 +72,30 @@ export default function PlatformHomes() {
       )}
       {error && <ErrorState title="Unable to load homes" message={error} onRetry={refresh} className="mb-4" />}
 
-      <div className={CARD.base}>
-        <table className={TABLE.table}>
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Homes', value: homes.length, detail: 'Configured' },
+          { label: 'Registered beds', value: totalBeds, detail: 'Portfolio capacity' },
+          { label: 'Staff records', value: totalStaff, detail: 'Across homes' },
+          { label: 'User accounts', value: totalUsers, detail: 'Assigned access' },
+        ].map(({ label, value, detail }) => (
+          <div key={label} className={CARD.padded}>
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">{label}</p>
+            <p className="mt-2 font-mono text-2xl font-semibold text-[var(--ink)]">{value}</p>
+            <p className="mt-1 text-xs text-[var(--ink-3)]">{detail}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className={CARD.flush}>
+        <div className="flex flex-col gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--ink)]">Home directory</h2>
+            <p className="text-xs text-[var(--ink-3)]">Switch into a home, adjust profile details, or retire a home from the platform.</p>
+          </div>
+        </div>
+        <div className={TABLE.wrapper} tabIndex={0} aria-label="Home directory table">
+          <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>Name</th>
@@ -103,16 +132,17 @@ export default function PlatformHomes() {
                 <td className={TABLE.td}>{home.userCount}</td>
                 <td className={TABLE.td}>{formatDate(home.updatedAt)}</td>
                 <td className={TABLE.td}>
-                  <div className="flex gap-1.5">
-                    <button className={`${BTN.primary} ${BTN.xs}`} onClick={() => { switchHome(home.slug); navigate('/'); }}>View</button>
-                    <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditHome(home)}>Edit</button>
-                    <button className={`${BTN.danger} ${BTN.xs}`} onClick={() => setDeleteHome(home)}>Delete</button>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" className={`${BTN.primary} ${BTN.xs}`} onClick={() => { switchHome(home.slug); navigate('/'); }}>View</button>
+                    <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditHome(home)}>Edit</button>
+                    <button type="button" className={`${BTN.danger} ${BTN.xs}`} onClick={() => setDeleteHome(home)}>Delete</button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {addOpen && <CreateHomeModal onClose={() => setAddOpen(false)} onSuccess={(msg) => { showNotice(msg); refresh(); refreshHomes(); }} />}
@@ -154,23 +184,23 @@ function CreateHomeModal({ onClose, onSuccess }) {
         {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
         <div>
-          <label className={INPUT.label}>Home Name *</label>
-          <input className={INPUT.base} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Oakwood Care Home" required />
+          <label htmlFor="home-create-name" className={INPUT.label}>Home Name *</label>
+          <input id="home-create-name" className={INPUT.base} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Oakwood Care Home" required />
         </div>
 
         <div>
-          <label className={INPUT.label}>Slug (auto-generated)</label>
-          <input className={`${INPUT.base} bg-gray-50`} value={slug} readOnly tabIndex={-1} />
+          <label htmlFor="home-create-slug" className={INPUT.label}>Slug (auto-generated)</label>
+          <input id="home-create-slug" className={`${INPUT.base} bg-gray-50`} value={slug} readOnly tabIndex={-1} />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={INPUT.label}>Registered Beds</label>
-            <input className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(parseInt(e.target.value) || 30)} />
+            <label htmlFor="home-create-beds" className={INPUT.label}>Registered Beds</label>
+            <input id="home-create-beds" className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(parseInt(e.target.value) || 30)} />
           </div>
           <div>
-            <label className={INPUT.label}>Care Type</label>
-            <select className={INPUT.select} value={careType} onChange={e => setCareType(e.target.value)}>
+            <label htmlFor="home-create-care-type" className={INPUT.label}>Care Type</label>
+            <select id="home-create-care-type" className={INPUT.select} value={careType} onChange={e => setCareType(e.target.value)}>
               <option value="residential">Residential</option>
               <option value="nursing">Nursing</option>
               <option value="dementia">Dementia</option>
@@ -181,8 +211,8 @@ function CreateHomeModal({ onClose, onSuccess }) {
         </div>
 
         <div>
-          <label className={INPUT.label}>Cycle Start Date *</label>
-          <input className={INPUT.base} type="date" value={cycleStartDate} onChange={e => setCycleStartDate(e.target.value)} required />
+          <label htmlFor="home-create-cycle-start" className={INPUT.label}>Cycle Start Date *</label>
+          <input id="home-create-cycle-start" className={INPUT.base} type="date" value={cycleStartDate} onChange={e => setCycleStartDate(e.target.value)} required />
           <p className="text-xs text-gray-400 mt-1">The anchor date for the Panama 2-2-3 rotation pattern</p>
         </div>
 
@@ -226,23 +256,23 @@ function EditHomeModal({ home, onClose, onSuccess }) {
         {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
         <div>
-          <label className={INPUT.label}>Slug</label>
-          <input className={`${INPUT.base} bg-gray-50`} value={home.slug} readOnly tabIndex={-1} />
+          <label htmlFor="home-edit-slug" className={INPUT.label}>Slug</label>
+          <input id="home-edit-slug" className={`${INPUT.base} bg-gray-50`} value={home.slug} readOnly tabIndex={-1} />
         </div>
 
         <div>
-          <label className={INPUT.label}>Home Name *</label>
-          <input className={INPUT.base} value={name} onChange={e => setName(e.target.value)} required />
+          <label htmlFor="home-edit-name" className={INPUT.label}>Home Name *</label>
+          <input id="home-edit-name" className={INPUT.base} value={name} onChange={e => setName(e.target.value)} required />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={INPUT.label}>Registered Beds</label>
-            <input className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(parseInt(e.target.value) || 30)} />
+            <label htmlFor="home-edit-beds" className={INPUT.label}>Registered Beds</label>
+            <input id="home-edit-beds" className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(parseInt(e.target.value) || 30)} />
           </div>
           <div>
-            <label className={INPUT.label}>Care Type</label>
-            <select className={INPUT.select} value={careType} onChange={e => setCareType(e.target.value)}>
+            <label htmlFor="home-edit-care-type" className={INPUT.label}>Care Type</label>
+            <select id="home-edit-care-type" className={INPUT.select} value={careType} onChange={e => setCareType(e.target.value)}>
               <option value="residential">Residential</option>
               <option value="nursing">Nursing</option>
               <option value="dementia">Dementia</option>
@@ -290,19 +320,19 @@ function DeleteHomeModal({ home, onClose, onSuccess }) {
       <div className="space-y-4">
         {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="rounded-lg border border-[var(--alert)] bg-[var(--alert-soft)] p-4">
           <p className="text-red-800 text-sm font-medium">This will soft-delete the home and revoke access for all users.</p>
           <p className="text-red-700 text-xs mt-1">Staff, scheduling, and financial data will be preserved for audit purposes but the home will no longer be accessible.</p>
         </div>
 
         <div>
-          <p className="text-sm text-gray-600 mb-2">Type <strong>{home.name}</strong> to confirm:</p>
-          <input className={INPUT.base} value={confirmName} onChange={e => setConfirmName(e.target.value)} placeholder={home.name} />
+          <label htmlFor="home-delete-confirm" className="mb-2 block text-sm text-gray-600">Type <strong>{home.name}</strong> to confirm:</label>
+          <input id="home-delete-confirm" className={INPUT.base} value={confirmName} onChange={e => setConfirmName(e.target.value)} placeholder={home.name} />
         </div>
 
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button className={BTN.danger} onClick={handleDelete} disabled={deleting || !nameMatches}>
+          <button type="button" className={BTN.danger} onClick={handleDelete} disabled={deleting || !nameMatches}>
             {deleting ? 'Deleting...' : 'Delete Home'}
           </button>
         </div>

@@ -112,7 +112,7 @@ export async function login(username, password) {
     // sentinels so the fresh JWT isn't blocked. Durable "log everyone out"
     // invalidation is enforced separately via users.session_version.
     await userRepo.resetFailedLogin(username);
-    await authRepo.clearForUser(username);
+    await authRepo.clearForUser(dbUser.username);
     userRepo.updateLastLogin(username).catch(() => {});
     const { token } = issueUserToken(dbUser);
     return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin: !!dbUser.is_platform_admin };

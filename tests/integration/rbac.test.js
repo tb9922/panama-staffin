@@ -98,6 +98,8 @@ describe('GET /api/homes — roleId per home', () => {
     expect(home).toBeDefined();
     expect(home.roleId).toBe('home_manager');
     expect(home.staffId).toBeNull();
+    expect(home.clockInRequired).toBe(false);
+    expect(typeof home.staffPortalEnabled).toBe('boolean');
   });
 
   it('viewer sees home with roleId: viewer', async () => {

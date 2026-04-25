@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
-import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
@@ -329,7 +329,7 @@ export default function StaffRegister() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className={PAGE.container}>
         <LoadingState message="Loading staff..." card />
       </div>
     );
@@ -337,22 +337,22 @@ export default function StaffRegister() {
 
   if (error) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className={PAGE.container}>
         <ErrorState title="Unable to load staff" message={error} onRetry={() => setRefreshKey(k => k + 1)} />
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-5">
+    <div className={PAGE.container}>
+      <div className={PAGE.header}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Staff Database</h1>
-          <p className="text-xs text-gray-500 mt-1">
+          <h1 className={PAGE.title}>Staff Database</h1>
+          <p className="mt-1 text-xs text-[var(--ink-3)]">
             {TEAMS.map(t => `${t}: ${teamCounts[t]}`).join(' | ')} | Total: {teamCounts.total}
           </p>
         </div>
-        <div className="flex gap-2 print:hidden">
+        <div className="flex w-full flex-wrap gap-2 print:hidden lg:w-auto lg:justify-end">
           <button onClick={() => {
             const headers = canEdit
               ? ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay']
@@ -368,7 +368,7 @@ export default function StaffRegister() {
                   s.notes || '', stats ? stats.paidHours.toFixed(1) : ''];
             });
             downloadCSV('staff_register.csv', headers, rows);
-          }} className={BTN.secondary}>Export CSV</button>
+          }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export CSV</button>
           <button onClick={() => {
             const headers = canEdit
               ? ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay']
@@ -388,9 +388,9 @@ export default function StaffRegister() {
                   stats ? parseFloat(stats.paidHours.toFixed(1)) : ''];
             });
             downloadXLSX('staff_register', [{ name: 'Staff Register', headers, rows }]);
-          }} className={BTN.secondary}>Export Excel</button>
-          <button onClick={handlePrint} className={BTN.secondary}>Print</button>
-          {canEdit && <button onClick={() => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); }} className={BTN.primary}>+ Add Staff</button>}
+          }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          <button onClick={handlePrint} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
+          {canEdit && <button onClick={() => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); }} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`}>+ Add Staff</button>}
         </div>
       </div>
 
@@ -401,19 +401,19 @@ export default function StaffRegister() {
       )}
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap print:hidden">
+      <div className="mb-4 flex flex-wrap gap-3 print:hidden">
         <input type="text" placeholder="Search name or ID..." value={search} onChange={e => setSearch(e.target.value)}
-          className={`${INPUT.sm} w-48`} aria-label="Search staff by name or ID" />
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`} aria-label="Filter staff by team">
+          className={`${INPUT.sm} min-w-[12rem] flex-1 sm:flex-none`} aria-label="Search staff by name or ID" />
+        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`} aria-label="Filter staff by team">
           <option value="All">All Teams</option>
           {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterActive} onChange={e => setFilterActive(e.target.value)} className={`${INPUT.select} w-auto`} aria-label="Filter staff by active status">
+        <select value={filterActive} onChange={e => setFilterActive(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`} aria-label="Filter staff by active status">
           <option value="active">Active Only</option>
           <option value="inactive">Inactive Only</option>
           <option value="all">All</option>
         </select>
-        <span className="text-sm text-gray-500 self-center">{staff.length} shown</span>
+        <span className="self-center text-sm text-[var(--ink-3)]">{staff.length} shown</span>
       </div>
 
       {/* Add Staff Modal */}

@@ -59,8 +59,8 @@ export default function CostTracker() {
   if (!canEdit) {
     return (
       <div className={PAGE.container}>
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Cost Tracker</h1>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-sm">
+        <h1 className={`${PAGE.title} mb-4`}>Cost Tracker</h1>
+        <div className="rounded-xl border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3 text-sm text-[var(--caution)]">
           Admin access required to view cost data.
         </div>
       </div>
@@ -120,7 +120,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
 
   if (dayData.length === 0) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className={PAGE.container}>
         <EmptyState
           title="No cost data available"
           description="Publish staffing data or load a month with rota information to see daily costs and agency impact."
@@ -130,30 +130,30 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={PAGE.container}>
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{config.home_name} — Cost Tracker: {monthLabel}</h1>
         <p className="text-xs text-gray-500">{days} days | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-6 print:hidden">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">Cost Tracker</h1>
-          <div className="flex items-center gap-1.5">
+      <div className={`${PAGE.header} print:hidden`}>
+        <div>
+          <h1 className={PAGE.title}>Cost Tracker</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <button onClick={() => setMonthOffset(monthOffset - 1)}
               className={`${BTN.ghost} ${BTN.xs}`}>&larr;</button>
             {monthOffset !== 0 && (
               <button onClick={() => setMonthOffset(0)}
-                className="px-2 py-1 text-blue-600 text-xs hover:underline font-medium">Current</button>
+                className="px-2 py-1 text-xs font-medium text-[var(--accent)] hover:underline">Current</button>
             )}
             <button onClick={() => setMonthOffset(monthOffset + 1)}
               className={`${BTN.ghost} ${BTN.xs}`}>&rarr;</button>
+            <span className="text-sm font-medium text-[var(--ink-2)]">{monthLabel}</span>
+            <span className="text-xs text-[var(--ink-4)]">({days} days)</span>
           </div>
-          <span className="text-sm font-medium text-gray-600">{monthLabel}</span>
-          <span className="text-xs text-gray-400">({days} days)</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
           <button onClick={() => {
             const headers = ['Day#', 'Day', 'Date', 'Base £', 'OT Prem £', 'AG Day £', 'AG Night £', 'BH Prem £', 'Total £', 'Cumulative £'];
             const rows = dayData.map(d => [
@@ -169,7 +169,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
               d.cumulative.toFixed(2),
             ]);
             downloadCSV(`costs_${monthLabel.replace(' ', '_')}.csv`, headers, rows);
-          }} className={BTN.secondary}>Export CSV</button>
+          }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export CSV</button>
           <button onClick={() => {
             const headers = ['Day#', 'Day', 'Date', 'Base £', 'OT Prem £', 'AG Day £', 'AG Night £', 'BH Prem £', 'Total £', 'Cumulative £'];
             const rows = dayData.map(d => [
@@ -185,8 +185,8 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
               parseFloat(d.cumulative.toFixed(2)),
             ]);
             downloadXLSX(`costs_${monthLabel.replace(' ', '_')}`, [{ name: 'Daily Costs', headers, rows }]);
-          }} className={BTN.secondary}>Export Excel</button>
-          <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
+          }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          <button onClick={() => window.print()} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
         </div>
       </div>
 
@@ -207,8 +207,9 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
       </div>
 
       {/* Daily Cost Table */}
-      <div className={`${CARD.flush} mb-6`}>
-        <table className={TABLE.table}>
+      <div className={`${CARD.flush} mb-6 max-w-full`}>
+        <div className={TABLE.wrapper}>
+        <table className={`${TABLE.table} min-w-[980px]`}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>Day#</th>
@@ -266,6 +267,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
 
       {/* Breakdown */}

@@ -42,10 +42,10 @@ export default function CoverageAlertBanner() {
 
   const isCritical = todayCoverage.overallLevel >= 4;
   return (
-    <div className={`px-4 py-2.5 text-sm flex items-center justify-between print:hidden ${
+    <div className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm print:hidden ${
       isCritical ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
     }`}>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isCritical
             ? 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z'
@@ -76,7 +76,7 @@ export default function CoverageAlertBanner() {
       </div>
       <button
         onClick={() => navigate(`/day/${today}`)}
-        className="rounded-md px-2 py-1 text-xs font-medium underline hover:bg-white/10 hover:no-underline"
+        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium underline hover:bg-white/10 hover:no-underline"
         aria-label="View today's coverage details"
       >
         View Details

@@ -1,4 +1,4 @@
-﻿// CQC Compliance Evidence â€” Scoring Engine & Evidence Aggregation
+// CQC Compliance Evidence - Scoring Engine & Evidence Aggregation
 
 import { formatDate, parseDate, addDays, getStaffForDay, isCareRole, isWorkingShift } from './rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from './escalation.js';
@@ -18,151 +18,151 @@ import { calculateDolsCompliancePct } from './dols.js';
 import { calculateCareCertCompletionPct } from './careCertificate.js';
 import { normalizeEvidenceCategory } from './cqcEvidenceCategories.js';
 
-// â”€â”€ Engine Version â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Engine Version ----------------------------------------------------------
 // Bump when the scoring model changes materially (metric weights, banding thresholds,
 // aggregation method). Embedded in calculateComplianceScore return value so snapshots
 // record which engine produced them.
 export const ENGINE_VERSION = 'v2';
 
-// â”€â”€ Quality Statements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Quality Statements ------------------------------------------------------
 
 // Aligned to CQC Single Assessment Framework (November 2023, operational April 2024).
 // IDs use CQC's per-category numbering: S1-S8, E1-E6, C1-C5, R1-R7, WL1-WL8.
 // QS references in cqcRef are the sequential CQC quality statement numbers (QS1-QS34).
 // autoMetrics reference IDs handled by getEvidenceForStatement().
 export const QUALITY_STATEMENTS = [
-  // â”€â”€ Safe (S1-S8) â€” Regulation 12, 13, 15, 18, 19 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Safe (S1-S8) - Regulation 12, 13, 15, 18, 19 --------------------------
   {
     id: 'S1', category: 'safe', name: 'Learning Culture',
-    cqcRef: 'Regulation 12 â€” Safe Care & Treatment (QS1)',
+    cqcRef: 'Regulation 12 - Safe Care & Treatment (QS1)',
     description: 'Learning from incidents, near misses, and safety events to improve safety',
     autoMetrics: ['incidentTrends', 'actionCompletionRate', 'incidentResponseTime', 'cqcNotifications'],
     icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
   },
   {
     id: 'S2', category: 'safe', name: 'Safe Systems, Pathways & Transitions',
-    cqcRef: 'Regulation 12 â€” Safe Care & Treatment (QS2)',
+    cqcRef: 'Regulation 12 - Safe Care & Treatment (QS2)',
     description: 'Safe admission, transfer, discharge, and referral processes',
     autoMetrics: [],
     icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
   },
   {
     id: 'S3', category: 'safe', name: 'Safeguarding',
-    cqcRef: 'Regulation 13 â€” Safeguarding (QS3)',
+    cqcRef: 'Regulation 13 - Safeguarding (QS3)',
     description: 'Safeguarding training, DBS checks, pre-employment vetting, referrals',
     autoMetrics: ['safeguardingTraining', 'dbsCompliance', 'incidentSafeguarding'],
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
   },
   {
     id: 'S4', category: 'safe', name: 'Involving People to Manage Risks',
-    cqcRef: 'Regulation 12 â€” Safe Care & Treatment (QS4)',
+    cqcRef: 'Regulation 12 - Safe Care & Treatment (QS4)',
     description: 'Co-produced risk assessments, person-centred risk management',
     autoMetrics: ['riskManagementScore'],
     icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
   },
   {
     id: 'S5', category: 'safe', name: 'Safe Environments',
-    cqcRef: 'Regulation 15 â€” Premises & Equipment (QS5)',
+    cqcRef: 'Regulation 15 - Premises & Equipment (QS5)',
     description: 'Premises safety, fire drills, maintenance, equipment checks',
     autoMetrics: ['fireDrillCompliance', 'maintenanceCompliancePct'],
     icon: 'M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z',
   },
   {
     id: 'S6', category: 'safe', name: 'Safe & Effective Staffing',
-    cqcRef: 'Regulation 18 â€” Staffing / Regulation 19 â€” Fit & Proper Persons (QS6)',
+    cqcRef: 'Regulation 18 - Staffing / Regulation 19 - Fit & Proper Persons (QS6)',
     description: 'Staffing levels, training compliance, supervision, agency dependency, DBS, onboarding',
     autoMetrics: ['staffingFillRate', 'agencyDependency', 'trainingCompliance', 'supervisionCompletion', 'onboardingCompletion', 'careCertCompletion'],
     icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0',
   },
   {
     id: 'S7', category: 'safe', name: 'Infection Prevention & Control',
-    cqcRef: 'Regulation 12 â€” Safe Care & Treatment (QS7)',
+    cqcRef: 'Regulation 12 - Safe Care & Treatment (QS7)',
     description: 'IPC audit scores, corrective actions, outbreak management',
     autoMetrics: ['ipcAuditCompliance'],
     icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
   },
   {
     id: 'S8', category: 'safe', name: 'Medicines Optimisation',
-    cqcRef: 'Regulation 12 â€” Safe Care & Treatment (QS8)',
-    description: 'Medicines management processes â€” requires eMAR clinical system',
+    cqcRef: 'Regulation 12 - Safe Care & Treatment (QS8)',
+    description: 'Medicines management processes - requires eMAR clinical system',
     autoMetrics: [],
     icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
   },
-  // â”€â”€ Effective (E1-E6) â€” Regulation 9, 11, 12, 18 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Effective (E1-E6) - Regulation 9, 11, 12, 18 --------------------------
   {
     id: 'E1', category: 'effective', name: 'Assessing Needs',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS9)',
-    description: 'Comprehensive needs assessment and care planning â€” requires DSCR',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS9)',
+    description: 'Comprehensive needs assessment and care planning - requires DSCR',
     autoMetrics: [],
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
   },
   {
     id: 'E2', category: 'effective', name: 'Delivering Evidence-Based Care',
-    cqcRef: 'Regulation 12 â€” Safe Care & Treatment (QS10)',
+    cqcRef: 'Regulation 12 - Safe Care & Treatment (QS10)',
     description: 'Evidence-based clinical practices and NICE guideline adherence',
     autoMetrics: [],
     icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
   },
   {
     id: 'E3', category: 'effective', name: 'Staff Teams Working Together',
-    cqcRef: 'Regulation 18 â€” Staffing (QS11)',
+    cqcRef: 'Regulation 18 - Staffing (QS11)',
     description: 'Multi-disciplinary teamwork, supervision, appraisals, training development',
     autoMetrics: ['supervisionCompletion', 'appraisalCompletion', 'trainingCompliance'],
     icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   },
   {
     id: 'E4', category: 'effective', name: 'Supporting Healthier Lives',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS12)',
-    description: 'Health promotion and wellbeing support â€” requires clinical integration',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS12)',
+    description: 'Health promotion and wellbeing support - requires clinical integration',
     autoMetrics: [],
     icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
   },
   {
     id: 'E5', category: 'effective', name: 'Monitoring & Improving Outcomes',
-    cqcRef: 'Regulation 17 â€” Good Governance (QS13)',
+    cqcRef: 'Regulation 17 - Good Governance (QS13)',
     description: 'Quality monitoring, KPI tracking, outcome measurement',
     autoMetrics: ['sickRate', 'staffTurnover', 'trainingTrend'],
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
   },
   {
     id: 'E6', category: 'effective', name: 'Consent to Care & Treatment',
-    cqcRef: 'Regulation 11 â€” Need for Consent / MCA 2005 â€” DoLS (QS14)',
+    cqcRef: 'Regulation 11 - Need for Consent / MCA 2005 - DoLS (QS14)',
     description: 'DoLS/LPS authorisations, MCA assessments, consent processes',
     autoMetrics: ['dolsCompliancePct', 'mcaTrainingCompliance'],
     icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
   },
-  // â”€â”€ Caring (C1-C5) â€” Regulation 9, 10 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Caring (C1-C5) - Regulation 9, 10 -------------------------------------
   {
     id: 'C1', category: 'caring', name: 'Kindness, Compassion & Dignity',
-    cqcRef: 'Regulation 10 â€” Dignity & Respect (QS15)',
+    cqcRef: 'Regulation 10 - Dignity & Respect (QS15)',
     description: 'Compassionate care, equality training, privacy, data protection',
     autoMetrics: ['equalityTrainingCompliance', 'dataProtectionTrainingCompliance'],
     icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
   },
   {
     id: 'C2', category: 'caring', name: 'Treating People as Individuals',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS16)',
-    description: 'Personalised care approaches â€” requires DSCR care plans',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS16)',
+    description: 'Personalised care approaches - requires DSCR care plans',
     autoMetrics: [],
     icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
   },
   {
     id: 'C3', category: 'caring', name: 'Independence, Choice & Control',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS17)',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS17)',
     description: 'Supporting people to make choices and maintain independence',
     autoMetrics: [],
     icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
   },
   {
     id: 'C4', category: 'caring', name: 'Responding to People\'s Immediate Needs',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS18)',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS18)',
     description: 'Prompt response to changes in condition, pain, discomfort, and unmet needs',
     autoMetrics: [],
     icon: 'M13 10V3L4 14h7v7l9-11h-7z',
   },
   {
     id: 'C5', category: 'caring', name: 'Workforce Wellbeing & Enablement',
-    cqcRef: 'Regulation 18 â€” Staffing (QS19)',
+    cqcRef: 'Regulation 18 - Staffing (QS19)',
     description: 'Staff health and wellbeing support, supervision, appraisals, fatigue management',
     autoMetrics: ['supervisionCompletion', 'appraisalCompletion', 'sickRate', 'fatigueBreaches', 'staffTurnover'],
     icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
@@ -170,35 +170,35 @@ export const QUALITY_STATEMENTS = [
   // Responsive (R1-R7) - Regulation 9, 10, 16
   {
     id: 'R1', category: 'responsive', name: 'Person-Centred Care',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS20)',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS20)',
     description: 'Evidence of individualised care planning and personal preference accommodation',
     autoMetrics: [],
     icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
   },
   {
     id: 'R2', category: 'responsive', name: 'Care Provision, Integration & Continuity',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS21)',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS21)',
     description: 'Continuity of care, staff consistency, handover processes',
     autoMetrics: ['staffingFillRate'],
     icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
   },
   {
     id: 'R3', category: 'responsive', name: 'Providing Information',
-    cqcRef: 'Regulation 10 â€” Dignity & Respect (QS22)',
+    cqcRef: 'Regulation 10 - Dignity & Respect (QS22)',
     description: 'Accessible information standard compliance',
     autoMetrics: [],
     icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   },
   {
     id: 'R4', category: 'responsive', name: 'Listening to & Involving People',
-    cqcRef: 'Regulation 16 â€” Complaints (QS23)',
+    cqcRef: 'Regulation 16 - Complaints (QS23)',
     description: 'Complaints handling, feedback mechanisms, response times, satisfaction',
     autoMetrics: ['complaintResolutionRate', 'satisfactionScore'],
     icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
   },
   {
     id: 'R5', category: 'responsive', name: 'Equity in Access',
-    cqcRef: 'Regulation 9 â€” Person-Centred Care (QS24)',
+    cqcRef: 'Regulation 9 - Person-Centred Care (QS24)',
     description: 'Fair access to care regardless of protected characteristics',
     autoMetrics: ['equalityTrainingCompliance'],
     icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
@@ -276,13 +276,13 @@ export const QUALITY_STATEMENTS = [
   },
 ];
 
-// â”€â”€ Metric Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Metric Definitions ------------------------------------------------------
 
 // Each metric is assigned to a CQC key question. Per-question scores are computed
 // as weighted averages within the question, then the overall band uses CQC's
 // limiting-judgement aggregation rules (see applyLimitingJudgement below).
 export const METRIC_DEFINITIONS = [
-  // â”€â”€ Safe (Reg 12, 13, 15, 18, 19) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Safe (Reg 12, 13, 15, 18, 19) ------------------------------------------
   { id: 'staffingFillRate',        label: 'Staffing Fill Rate %',         weight: 0.12, question: 'safe',       available: true },
   { id: 'agencyDependency',        label: 'Agency Dependency %',          weight: 0.08, question: 'safe',       available: true },
   { id: 'incidentResponseTime',    label: 'Incident Response Time',       weight: 0.07, question: 'safe',       available: true },
@@ -290,17 +290,17 @@ export const METRIC_DEFINITIONS = [
   { id: 'fireDrillCompliance',     label: 'Fire Drill Compliance',        weight: 0.04, question: 'safe',       available: true },
   { id: 'maintenanceCompliancePct',label: 'Maintenance Compliance %',     weight: 0.05, question: 'safe',       available: true },
   { id: 'ipcAuditCompliance',      label: 'IPC Audit Compliance %',       weight: 0.05, question: 'safe',       available: true },
-  // â”€â”€ Effective (Reg 9, 17, 18) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Effective (Reg 9, 17, 18) -----------------------------------------------
   { id: 'trainingCompliance',      label: 'Training Compliance %',        weight: 0.12, question: 'effective',  available: true },
   { id: 'supervisionCompletion',   label: 'Supervision Completion %',     weight: 0.07, question: 'effective',  available: true },
   { id: 'careCertCompletion',      label: 'Care Certificate Completion',  weight: 0.05, question: 'effective',  available: true },
   { id: 'appraisalCompletion',     label: 'Appraisal Completion %',       weight: 0.04, question: 'effective',  available: true },
-  // â”€â”€ Caring (Reg 9, 10, 11, 13) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Caring (Reg 9, 10, 11, 13) ---------------------------------------------
   { id: 'dolsCompliancePct',       label: 'DoLS Compliance %',            weight: 0.03, question: 'caring',     available: true },
   { id: 'satisfactionScore',       label: 'Satisfaction Score',           weight: 0.03, question: 'caring',     available: true },
-  // â”€â”€ Responsive (Reg 9, 16) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Responsive (Reg 9, 16) -------------------------------------------------
   { id: 'complaintResolutionRate', label: 'Complaint Resolution Rate',    weight: 0.05, question: 'responsive', available: true },
-  // â”€â”€ Well-Led (Reg 17) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Well-Led (Reg 17) ------------------------------------------------------
   { id: 'staffTurnover',           label: 'Staff Turnover Rate %',        weight: 0.05, question: 'well-led',   available: true },
   { id: 'riskManagementScore',     label: 'Risk Management Score',        weight: 0.03, question: 'well-led',   available: true },
   { id: 'policyCompliancePct',     label: 'Policy Compliance %',          weight: 0.03, question: 'well-led',   available: true },
@@ -310,7 +310,7 @@ export const METRIC_DEFINITIONS = [
 // CQC key questions for grouping
 export const KEY_QUESTIONS = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
 
-// â”€â”€ Score Banding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Score Banding -----------------------------------------------------------
 
 // CQC 4-point rating scale. Used for both per-question and overall scores.
 export const SCORE_BANDS = [
@@ -320,7 +320,7 @@ export const SCORE_BANDS = [
   { min: 0,  label: 'Inadequate',             color: 'red',    badgeKey: 'red'    },
 ];
 
-// â”€â”€ Limiting Judgement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Limiting Judgement ------------------------------------------------------
 // CQC overall rating aggregation rules (confirmed from CQC guidance):
 // - Outstanding:          2+ Outstanding + remaining all Good
 // - Good:                 No Inadequate AND max 1 Requires Improvement
@@ -350,7 +350,7 @@ export function getScoreBand(score) {
   return SCORE_BANDS.find(b => score >= b.min) || SCORE_BANDS[SCORE_BANDS.length - 1];
 }
 
-// â”€â”€ Date Range Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Date Range Helper -------------------------------------------------------
 
 export function getDateRange(days = 28) {
   const now = new Date();
@@ -369,14 +369,14 @@ function dateRangeToDates(dateRange) {
   return dates;
 }
 
-// â”€â”€ Data Defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Data Defaults -----------------------------------------------------------
 
 export function ensureCqcDefaults(data) {
   if (data.cqc_evidence) return null;
   return { ...data, cqc_evidence: [] };
 }
 
-// â”€â”€ Metric Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Metric Calculations -----------------------------------------------------
 
 export function calculateTrainingCompliancePct(data, asOfDate) {
   const activeStaff = (data.staff || []).filter(s => s.active !== false);
@@ -519,7 +519,7 @@ export function calculateSickRate(data, dateRange) {
   return { pct, sickDays, totalWorkingDays };
 }
 
-// â”€â”€ New Metric Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- New Metric Calculations -------------------------------------------------
 
 export function calculateFireDrillCompliancePct(data, asOfDate) {
   const status = getFireDrillStatus(data.fire_drills || [], asOfDate);
@@ -610,7 +610,7 @@ export function calculateTrainingTrend(data, asOfDate) {
   return { currentPct, pastPct, trend };
 }
 
-// â”€â”€ Per-metric Provenance, Confidence, and Evidence Summaries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Per-metric Provenance, Confidence, and Evidence Summaries ----------------
 
 const METRIC_PROVENANCE = {
   trainingCompliance:      { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Training types from config trusted'], exclusions: [] },
@@ -682,7 +682,7 @@ function buildEvidenceSummary(metricId, raw, detail, dateRange) {
   }
 }
 
-// â”€â”€ Composite Compliance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Composite Compliance Score ----------------------------------------------
 
 export function calculateComplianceScore(data, dateRange, asOfDate) {
   const metrics = {};
@@ -753,7 +753,7 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const pol = calculatePolicyCompliancePct(data, asOfDate);
   metrics.policyCompliancePct = { raw: pol.score, score: pol.score, detail: pol };
 
-  // Satisfaction score: direct %. null when no surveys â€” do not default to 100
+  // Satisfaction score: direct %. null when no surveys - do not default to 100
   // (a false "perfect score" would inflate CQC caring scores when no data exists)
   const sat = calculateSatisfactionScore(data.complaint_surveys || [], fromStr, toStr);
   metrics.satisfactionScore = { raw: sat.score ?? null, score: sat.score ?? null, detail: sat };
@@ -775,7 +775,7 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
     metric.confidence = deriveConfidence(id, metric.raw, metric.detail, data);
   }
 
-  // â”€â”€ Per-question scoring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Per-question scoring -------------------------------------------------
   const availableMetrics = METRIC_DEFINITIONS.filter(m => m.available);
   const unavailableMetrics = METRIC_DEFINITIONS.filter(m => !m.available);
   const totalWeight = availableMetrics.reduce((s, m) => s + m.weight, 0);
@@ -815,7 +815,7 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   for (const q of KEY_QUESTIONS) questionBands[q] = questionScores[q].band;
   const band = applyLimitingJudgement(questionBands);
 
-  // Identify the limiting question(s) â€” which question(s) pulled the overall band down
+  // Identify the limiting question(s) - which question(s) pulled the overall band down
   const limitingQuestions = KEY_QUESTIONS.filter(q => {
     const qBand = SCORE_BANDS.indexOf(questionScores[q].band);
     const overallBand = SCORE_BANDS.indexOf(band);
@@ -837,7 +837,7 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   };
 }
 
-// â”€â”€ Evidence Aggregation Per Statement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Evidence Aggregation Per Statement --------------------------------------
 
 export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) {
   const statement = QUALITY_STATEMENTS.find(q => q.id === statementId);
@@ -863,7 +863,7 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
     const ag = calculateAgencyDependencyPct(data, dateRange);
     autoEvidence.push({
       label: 'Agency Cost Ratio', value: ag.pct, unit: '%',
-      detail: `Â£${ag.agencyCost.toLocaleString()} of Â£${ag.totalCost.toLocaleString()} total`,
+      detail: `£${ag.agencyCost.toLocaleString()} of £${ag.totalCost.toLocaleString()} total`,
       source: 'Cost Tracker', lowerIsBetter: true,
     });
   }
@@ -983,7 +983,7 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
     const tt = calculateTrainingTrend(data, asOfDate);
     autoEvidence.push({
       label: 'Training Trend (90-day)', value: tt.trend >= 0 ? `+${tt.trend}` : `${tt.trend}`, unit: 'pp',
-      detail: `${tt.pastPct}% â†’ ${tt.currentPct}%`,
+      detail: `${tt.pastPct}% -> ${tt.currentPct}%`,
       source: 'Training Matrix',
     });
   }
@@ -1093,7 +1093,7 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
   return { statement, autoEvidence, manualEvidence };
 }
 
-// â”€â”€ Coverage Detail for PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Coverage Detail for PDF -------------------------------------------------
 
 export function getCoverageSummary(data, dateRange) {
   const dates = dateRangeToDates(dateRange);
@@ -1112,7 +1112,7 @@ export function getCoverageSummary(data, dateRange) {
   return rows;
 }
 
-// â”€â”€ DBS Status for PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- DBS Status for PDF ------------------------------------------------------
 
 export function getDbsStatusList(data) {
   const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
@@ -1130,7 +1130,7 @@ export function getDbsStatusList(data) {
   });
 }
 
-// â”€â”€ Fatigue Summary for PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Fatigue Summary for PDF -------------------------------------------------
 
 export function getFatigueSummary(data) {
   const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));

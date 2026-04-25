@@ -86,6 +86,8 @@ export default function TaxCodeManager() {
   // Staff with no tax code record on file (will default to 1257L)
   const staffWithCode = new Set(codes.map(c => c.staff_id));
   const missingCodes  = activeStaff.filter(s => !staffWithCode.has(s.id));
+  const emergencyCodes = codes.filter(c => c.basis === 'w1m1');
+  const studentLoanCodes = codes.filter(c => c.student_loan_plan);
 
   function openNew() {
     setEditStaffId(null);
@@ -158,7 +160,7 @@ export default function TaxCodeManager() {
           </p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={openNew}>Add / Update Tax Code</button>
+          <button type="button" className={BTN.primary} onClick={openNew}>Add / Update Tax Code</button>
         )}
       </div>
 
@@ -169,16 +171,38 @@ export default function TaxCodeManager() {
 
       {/* Missing code alert */}
       {missingCodes.length > 0 && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>No tax code on file for {missingCodes.length} staff member{missingCodes.length !== 1 ? 's' : ''}:</strong>{' '}
           {missingCodes.map(s => s.name).join(', ')}.{' '}
           Payroll will use 1257L cumulative (Category A) for these staff. Add their tax codes to ensure accurate deductions.
-        </div>
+        </InlineNotice>
       )}
+
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Codes on file', value: codes.length, detail: `${activeStaff.length} active staff` },
+          { label: 'Emergency basis', value: emergencyCodes.length, detail: 'W1/M1 records' },
+          { label: 'Student loans', value: studentLoanCodes.length, detail: 'Active deductions' },
+          { label: 'Using defaults', value: missingCodes.length, detail: 'Needs review' },
+        ].map(({ label, value, detail }) => (
+          <div key={label} className={CARD.padded}>
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">{label}</p>
+            <p className="mt-2 font-mono text-2xl font-semibold text-[var(--ink)]">{value}</p>
+            <p className="mt-1 text-xs text-[var(--ink-3)]">{detail}</p>
+          </div>
+        ))}
+      </div>
 
       {/* Tax codes table */}
       <div className={CARD.flush}>
-        <table className={TABLE.table}>
+        <div className="flex flex-col gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--ink)]">Current PAYE setup</h2>
+            <p className="text-xs text-[var(--ink-3)]">Tax code, NI category, source, and previous employment values per staff member.</p>
+          </div>
+        </div>
+        <div className={TABLE.wrapper} tabIndex={0} aria-label="Current PAYE setup table">
+          <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>Staff Member</th>
@@ -239,7 +263,7 @@ export default function TaxCodeManager() {
                   <td className={TABLE.td}>{SOURCE_LABEL[code.source] || code.source}</td>
                   {canEdit && (
                     <td className={TABLE.td}>
-                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(code)}>
+                      <button type="button" className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(code)} title={`Edit tax code for ${staff?.name || code.staff_id}`}>
                         Edit
                       </button>
                     </td>
@@ -248,13 +272,15 @@ export default function TaxCodeManager() {
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {/* Missing staff rows (shown below table) */}
       {missingCodes.length > 0 && (
         <div className={`${CARD.flush} mt-4`}>
-          <table className={TABLE.table}>
+          <div className={TABLE.wrapper} tabIndex={0} aria-label="Staff using default tax code table">
+            <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
                 <th scope="col" className={TABLE.th} colSpan={canEdit ? 10 : 9}>
@@ -277,6 +303,7 @@ export default function TaxCodeManager() {
                   {canEdit && (
                     <td className={TABLE.td}>
                       <button
+                        type="button"
                         className={BTN.primary + ' ' + BTN.xs}
                         onClick={() => {
                           setEditStaffId(null);
@@ -291,7 +318,8 @@ export default function TaxCodeManager() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
 
@@ -316,13 +344,15 @@ export default function TaxCodeManager() {
         <div className="space-y-4">
           {/* Staff */}
           <div>
-            <label className={INPUT.label}>Staff Member</label>
+            {editStaffId && <label className={INPUT.label}>Staff Member</label>}
             {editStaffId ? (
               <div className="text-sm font-medium text-gray-900 py-2">
                 {staffMap[editStaffId]?.name || editStaffId}
               </div>
             ) : (
               <StaffPicker
+                id="tax-code-staff"
+                label="Staff Member"
                 value={form.staff_id}
                 onChange={v => field('staff_id', v)}
                 required
@@ -330,11 +360,12 @@ export default function TaxCodeManager() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Tax code */}
             <div>
-              <label className={INPUT.label}>Tax Code</label>
+              <label htmlFor="tax-code-value" className={INPUT.label}>Tax Code</label>
               <input
+                id="tax-code-value"
                 className={INPUT.base}
                 value={form.tax_code}
                 onChange={e => field('tax_code', e.target.value.toUpperCase())}
@@ -347,19 +378,19 @@ export default function TaxCodeManager() {
 
             {/* Basis */}
             <div>
-              <label className={INPUT.label}>Basis</label>
-              <select className={INPUT.select} value={form.basis} onChange={e => field('basis', e.target.value)}>
+              <label htmlFor="tax-code-basis" className={INPUT.label}>Basis</label>
+              <select id="tax-code-basis" className={INPUT.select} value={form.basis} onChange={e => field('basis', e.target.value)}>
                 <option value="cumulative">Cumulative</option>
                 <option value="w1m1">W1/M1 (Emergency)</option>
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* NI Category */}
             <div>
-              <label className={INPUT.label}>NI Category</label>
-              <select className={INPUT.select} value={form.ni_category} onChange={e => field('ni_category', e.target.value)}>
+              <label htmlFor="tax-code-ni-category" className={INPUT.label}>NI Category</label>
+              <select id="tax-code-ni-category" className={INPUT.select} value={form.ni_category} onChange={e => field('ni_category', e.target.value)}>
                 {NI_CATEGORIES.map(c => (
                   <option key={c} value={c}>Category {c}</option>
                 ))}
@@ -369,8 +400,9 @@ export default function TaxCodeManager() {
 
             {/* Student Loan */}
             <div>
-              <label className={INPUT.label}>Student Loan Plan</label>
+              <label htmlFor="tax-code-student-loan" className={INPUT.label}>Student Loan Plan</label>
               <input
+                id="tax-code-student-loan"
                 className={INPUT.base}
                 value={form.student_loan_plan}
                 onChange={e => field('student_loan_plan', e.target.value)}
@@ -382,8 +414,9 @@ export default function TaxCodeManager() {
 
           {/* Effective from */}
           <div>
-            <label className={INPUT.label}>Effective From</label>
+            <label htmlFor="tax-code-effective-from" className={INPUT.label}>Effective From</label>
             <input
+              id="tax-code-effective-from"
               type="date"
               className={INPUT.base}
               value={form.effective_from}
@@ -394,11 +427,12 @@ export default function TaxCodeManager() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Previous pay */}
             <div>
-              <label className={INPUT.label}>Previous Pay (P45 Box 4) £</label>
+              <label htmlFor="tax-code-previous-pay" className={INPUT.label}>Previous Pay (P45 Box 4) £</label>
               <input
+                id="tax-code-previous-pay"
                 type="number"
                 step="0.01"
                 min="0"
@@ -411,8 +445,9 @@ export default function TaxCodeManager() {
 
             {/* Previous tax */}
             <div>
-              <label className={INPUT.label}>Previous Tax (P45 Box 5) £</label>
+              <label htmlFor="tax-code-previous-tax" className={INPUT.label}>Previous Tax (P45 Box 5) £</label>
               <input
+                id="tax-code-previous-tax"
                 type="number"
                 step="0.01"
                 min="0"
@@ -442,8 +477,9 @@ export default function TaxCodeManager() {
 
           {/* Notes */}
           <div>
-            <label className={INPUT.label}>Notes (optional)</label>
+            <label htmlFor="tax-code-notes" className={INPUT.label}>Notes (optional)</label>
             <textarea
+              id="tax-code-notes"
               className={INPUT.base}
               rows={2}
               value={form.notes}

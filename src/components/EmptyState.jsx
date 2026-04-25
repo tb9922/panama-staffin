@@ -12,8 +12,8 @@ export default function EmptyState({
 }) {
   return (
     <div className={`${compact ? 'py-6' : 'py-10'} text-center ${className}`.trim()}>
-      <p className="text-sm font-semibold text-gray-700">{title}</p>
-      {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+      <p className="text-sm font-semibold text-[var(--ink-2)]">{title}</p>
+      {description && <p className="mt-1 text-sm text-[var(--ink-3)]">{description}</p>}
       {actionLabel && onAction && (
         <div className="mt-4">
           <button type="button" onClick={onAction} className={`${BTN.primary} ${BTN.sm}`}>

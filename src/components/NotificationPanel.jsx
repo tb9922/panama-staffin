@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotifications } from '../contexts/useNotifications.js';
 import LoadingState from './LoadingState.jsx';
@@ -5,28 +6,37 @@ import ErrorState from './ErrorState.jsx';
 import EmptyState from './EmptyState.jsx';
 
 const SEVERITY_STYLES = {
-  error: 'border-red-200 bg-red-50 text-red-800',
-  warning: 'border-amber-200 bg-amber-50 text-amber-800',
-  info: 'border-blue-200 bg-blue-50 text-blue-800',
+  error: 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]',
+  warning: 'border-[var(--warn)] bg-[var(--warn-soft)] text-[var(--ink)]',
+  info: 'border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]',
 };
 
 export default function NotificationPanel({ open, onClose }) {
   const { items, unreadCount, loading, error, refresh, markRead, markAllRead } = useNotifications();
 
+  useEffect(() => {
+    if (!open) return undefined;
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
   if (!open) return null;
 
   return (
-    <div className="absolute right-4 top-16 z-[60] w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl print:hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+    <div className="absolute right-4 top-16 z-[60] w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper)] shadow-2xl print:hidden">
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Notifications</h2>
-          <p className="text-xs text-slate-500">{unreadCount} unread</p>
+          <h2 className="text-sm font-semibold text-[var(--ink)]">Notifications</h2>
+          <p className="text-xs text-[var(--ink-3)]">{unreadCount} unread</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => void markAllRead()}>
+          <button type="button" className="text-xs font-medium text-[var(--ink-3)] hover:text-[var(--ink)]" onClick={() => void markAllRead()}>
             Mark all read
           </button>
-          <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={onClose}>
+          <button type="button" className="text-xs font-medium text-[var(--ink-3)] hover:text-[var(--ink)]" onClick={onClose}>
             Close
           </button>
         </div>
@@ -77,7 +87,7 @@ export default function NotificationPanel({ open, onClose }) {
                       )}
                     </div>
                   </div>
-                  {!item.isRead && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-blue-500" aria-hidden="true" />}
+                  {!item.isRead && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />}
                 </div>
               </div>
             ))}

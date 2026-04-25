@@ -408,6 +408,32 @@ describe('User management (CRUD)', () => {
     createdUserId = res.body.id;
   });
 
+  it('creates a mixed-case username and still assigns the requested home role', async () => {
+    const res = await request(app)
+      .post('/api/users')
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        username: 'Auth-Test-MixedCase',
+        password: 'NewUser!2025xx',
+        role: 'viewer',
+        displayName: 'Mixed Case User',
+        homeRoleId: 'viewer',
+      })
+      .expect(201);
+
+    expect(res.body.username).toBe('auth-test-mixedcase');
+
+    const { rows } = await pool.query(
+      `SELECT u.username, uhr.role_id
+         FROM users u
+         JOIN user_home_roles uhr ON uhr.username = u.username
+        WHERE u.username = 'auth-test-mixedcase' AND uhr.home_id = $1`,
+      [homeAId],
+    );
+    expect(rows).toEqual([{ username: 'auth-test-mixedcase', role_id: 'viewer' }]);
+  });
+
   it('rejects creating a user when the username is already used by staff auth', async () => {
     const staffId = 'AUTH-STAFF-COLLISION';
     const collidingUsername = 'auth-test-staff-collision';
@@ -744,6 +770,85 @@ describe('Token revocation', () => {
     await pool.query(`DELETE FROM token_denylist WHERE username = 'auth-test-revokee'`);
     await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-revokee'`);
     await pool.query(`DELETE FROM users WHERE id = $1`, [u.id]);
+  });
+
+  it('admin revoke matches usernames case-insensitively', async () => {
+    await pool.query(`DELETE FROM token_denylist WHERE LOWER(username) = 'auth-test-revoke-case'`);
+    await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-revoke-case'`);
+    await pool.query(`DELETE FROM users WHERE username = 'auth-test-revoke-case'`);
+
+    const hash = await bcrypt.hash('RevokeCase!2025', 4);
+    await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, created_by)
+       VALUES ('auth-test-revoke-case', $1, 'viewer', true, 'test')`,
+      [hash],
+    );
+    await pool.query(
+      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+       VALUES ('auth-test-revoke-case', $1, 'viewer', 'test-setup')`,
+      [homeAId],
+    );
+
+    const loginRes = await request(app)
+      .post('/api/login')
+      .send({ username: 'Auth-Test-Revoke-Case', password: 'RevokeCase!2025' })
+      .expect(200);
+
+    await request(app)
+      .post('/api/login/revoke')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ username: 'Auth-Test-Revoke-Case' })
+      .expect(200);
+
+    await request(app)
+      .get('/api/scheduling')
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .expect(401);
+
+    const relogin = await request(app)
+      .post('/api/login')
+      .send({ username: 'auth-test-revoke-case', password: 'RevokeCase!2025' })
+      .expect(423);
+
+    expect(relogin.body.error).toMatch(/revoked/i);
+  });
+
+  it('mixed-case relogin works after password reset revokes old sessions', async () => {
+    await pool.query(`DELETE FROM token_denylist WHERE LOWER(username) = 'auth-test-reset-case'`);
+    await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-reset-case'`);
+    await pool.query(`DELETE FROM users WHERE username = 'auth-test-reset-case'`);
+
+    const hash = await bcrypt.hash('ResetCase!2025', 4);
+    const { rows: [user] } = await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, created_by)
+       VALUES ('auth-test-reset-case', $1, 'viewer', true, 'test')
+       RETURNING id`,
+      [hash],
+    );
+    await pool.query(
+      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+       VALUES ('auth-test-reset-case', $1, 'viewer', 'test-setup')`,
+      [homeAId],
+    );
+
+    await request(app)
+      .post(`/api/users/${user.id}/reset-password`)
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ newPassword: 'ResetCase!2026' })
+      .expect(200);
+
+    const loginRes = await request(app)
+      .post('/api/login')
+      .send({ username: 'Auth-Test-Reset-Case', password: 'ResetCase!2026' })
+      .expect(200);
+
+    await request(app)
+      .get('/api/scheduling')
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .expect(200);
   });
 
   it('viewer cannot revoke tokens', async () => {

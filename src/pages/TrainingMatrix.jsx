@@ -47,17 +47,17 @@ export default function TrainingMatrix() {
   if (!state) return null;
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className="mx-auto max-w-[1400px] overflow-x-hidden p-6">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">Training Matrix</h1>
-        <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
+        <p className="text-xs text-[var(--ink-3)]">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-5 print:hidden">
+      <div className={`${PAGE.header} print:hidden`}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Training Matrix</h1>
-          <p className="text-xs text-gray-500 mt-1">CQC Regulation 18 — Training, supervision & development</p>
+          <h1 className={PAGE.title}>Training Matrix</h1>
+          <p className={PAGE.subtitle}>CQC Regulation 18 — training, supervision and development</p>
         </div>
       </div>
 

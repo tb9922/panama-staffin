@@ -14,13 +14,13 @@ import { todayLocalISO } from '../../lib/localDates.js';
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
 const CELL_COLORS = {
-  compliant:     'bg-emerald-200 text-emerald-800 hover:bg-emerald-300 cursor-pointer hover:shadow-sm',
-  expiring_soon: 'bg-amber-200 text-amber-800 hover:bg-amber-300 cursor-pointer hover:shadow-sm',
-  urgent:        'bg-red-200 text-red-800 hover:bg-red-300 cursor-pointer hover:shadow-sm',
-  expired:       'bg-red-300 text-red-900 hover:bg-red-400 cursor-pointer hover:shadow-sm',
-  not_started:   'bg-gray-100 text-gray-400 border border-dashed border-gray-300 hover:bg-gray-200 cursor-pointer hover:shadow-sm',
-  not_required:  'bg-white text-gray-300 cursor-default opacity-30',
-  wrong_level:   'bg-orange-200 text-orange-800 hover:bg-orange-300 cursor-pointer hover:shadow-sm',
+  compliant:     'border border-[var(--ok)] bg-[var(--ok-soft)] text-[var(--ok)] cursor-pointer hover:brightness-95 hover:shadow-sm',
+  expiring_soon: 'border border-[var(--caution)] bg-[var(--caution-soft)] text-[var(--caution)] cursor-pointer hover:brightness-95 hover:shadow-sm',
+  urgent:        'border border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)] cursor-pointer hover:brightness-95 hover:shadow-sm',
+  expired:       'border border-[var(--alert)] bg-[var(--alert)] text-white cursor-pointer hover:brightness-95 hover:shadow-sm',
+  not_started:   'border border-dashed border-[var(--line-2)] bg-[var(--paper-2)] text-[var(--ink-4)] cursor-pointer hover:bg-[var(--paper-3)] hover:shadow-sm',
+  not_required:  'bg-[var(--paper)] text-[var(--ink-4)] cursor-default opacity-30',
+  wrong_level:   'border border-[var(--warn)] bg-[var(--warn-soft)] text-[var(--warn)] cursor-pointer hover:brightness-95 hover:shadow-sm',
 };
 
 export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, configUpdatedAt, onReload, readOnly = false }) {
@@ -272,79 +272,79 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   return (
     <>
       {/* Header bar */}
-      <div className="flex items-center justify-between mb-4 print:hidden">
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
-          {!readOnly && <button onClick={() => setShowImportModal(true)} className={BTN.secondary}>Import CSV</button>}
-          <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
-          <button onClick={() => setView(view === 'matrix' ? 'list' : 'matrix')} className={BTN.secondary}>
+      <div className="mb-4 flex justify-end print:hidden">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+          <button onClick={handleExport} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          {!readOnly && <button onClick={() => setShowImportModal(true)} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Import CSV</button>}
+          <button onClick={() => window.print()} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
+          <button onClick={() => setView(view === 'matrix' ? 'list' : 'matrix')} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>
             {view === 'matrix' ? 'List View' : 'Grid View'}
           </button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-        <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-200">
-          <div className="text-xs font-medium text-emerald-600">Compliance</div>
-          <div className={`text-2xl font-bold mt-0.5 ${stats.compliancePct >= 90 ? 'text-emerald-700' : stats.compliancePct >= 70 ? 'text-amber-700' : 'text-red-700'}`}>{stats.compliancePct}%</div>
-          <div className="text-[10px] text-emerald-500">{stats.compliant}/{stats.totalRequired} items</div>
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="rounded-xl border border-[var(--ok)] bg-[var(--ok-soft)] p-3">
+          <div className="text-xs font-medium text-[var(--ok)]">Compliance</div>
+          <div className={`mt-0.5 text-2xl font-bold ${stats.compliancePct >= 90 ? 'text-[var(--ok)]' : stats.compliancePct >= 70 ? 'text-[var(--caution)]' : 'text-[var(--alert)]'}`}>{stats.compliancePct}%</div>
+          <div className="text-[10px] text-[var(--ok)]">{stats.compliant}/{stats.totalRequired} items</div>
         </div>
-        <div className="rounded-xl p-3 bg-red-50 border border-red-200">
-          <div className="text-xs font-medium text-red-600">Expired</div>
-          <div className="text-2xl font-bold text-red-700 mt-0.5">{stats.expired}</div>
-          <div className="text-[10px] text-red-400">require immediate action</div>
+        <div className="rounded-xl border border-[var(--alert)] bg-[var(--alert-soft)] p-3">
+          <div className="text-xs font-medium text-[var(--alert)]">Expired</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--alert)]">{stats.expired}</div>
+          <div className="text-[10px] text-[var(--alert)]">require immediate action</div>
         </div>
-        <div className="rounded-xl p-3 bg-amber-50 border border-amber-200">
-          <div className="text-xs font-medium text-amber-600">Expiring Soon</div>
-          <div className="text-2xl font-bold text-amber-700 mt-0.5">{stats.expiringSoon + stats.urgent}</div>
-          <div className="text-[10px] text-amber-400">within 60 days</div>
+        <div className="rounded-xl border border-[var(--caution)] bg-[var(--caution-soft)] p-3">
+          <div className="text-xs font-medium text-[var(--caution)]">Expiring Soon</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--caution)]">{stats.expiringSoon + stats.urgent}</div>
+          <div className="text-[10px] text-[var(--caution)]">within 60 days</div>
         </div>
-        <div className="rounded-xl p-3 bg-orange-50 border border-orange-200">
-          <div className="text-xs font-medium text-orange-600">Wrong Level</div>
-          <div className="text-2xl font-bold text-orange-700 mt-0.5">{stats.wrongLevel}</div>
-          <div className="text-[10px] text-orange-400">level mismatch</div>
+        <div className="rounded-xl border border-[var(--warn)] bg-[var(--warn-soft)] p-3">
+          <div className="text-xs font-medium text-[var(--warn)]">Wrong Level</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--warn)]">{stats.wrongLevel}</div>
+          <div className="text-[10px] text-[var(--warn)]">level mismatch</div>
         </div>
-        <div className="rounded-xl p-3 bg-gray-50 border border-gray-200">
-          <div className="text-xs font-medium text-gray-500">Not Started</div>
-          <div className="text-2xl font-bold text-gray-700 mt-0.5">{stats.notStarted}</div>
-          <div className="text-[10px] text-gray-400">no record yet</div>
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-3">
+          <div className="text-xs font-medium text-[var(--ink-3)]">Not Started</div>
+          <div className="mt-0.5 text-2xl font-bold text-[var(--ink)]">{stats.notStarted}</div>
+          <div className="text-[10px] text-[var(--ink-4)]">no record yet</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap print:hidden">
-        <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
+      <div className="mb-4 flex flex-wrap gap-3 print:hidden">
+        <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} min-w-[12rem] flex-1 sm:flex-none`} />
+        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
           <option value="All">All Teams</option>
           {TEAMS.map(t => <option key={t}>{t}</option>)}
         </select>
-        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
           <option value="all">All Categories</option>
           <option value="statutory">Statutory</option>
           <option value="mandatory">Mandatory</option>
         </select>
-        <select value={filterCompliance} onChange={e => setFilterCompliance(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <select value={filterCompliance} onChange={e => setFilterCompliance(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
           <option value="all">All Staff</option>
           <option value="non-compliant">Non-Compliant Only</option>
         </select>
-        <span className="text-xs text-gray-400 self-center">{filteredStaff.length} staff | {filteredTypes.length} training types</span>
+        <span className="self-center text-xs text-[var(--ink-4)]">{filteredStaff.length} staff | {filteredTypes.length} training types</span>
       </div>
 
       {/* Matrix View */}
       {view === 'matrix' && (
         <div className={CARD.flush}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
+          <div className={TABLE.wrapper}>
+            <table className="w-full min-w-[900px] text-[11px] text-[var(--ink)]">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th scope="col" className="py-2 px-2 text-left font-semibold text-gray-600 sticky left-0 bg-white z-10 min-w-[140px]">Staff</th>
+                <tr className="border-b border-[var(--line)]">
+                  <th scope="col" className="sticky left-0 z-10 min-w-[140px] bg-[var(--paper)] px-2 py-2 text-left font-semibold text-[var(--ink-3)]">Staff</th>
                   {filteredTypes.map(t => (
-                    <th scope="col" key={t.id} className="py-2 px-0.5 text-center font-medium text-gray-600" style={{ minWidth: '80px', maxWidth: '120px', fontSize: '10px', lineHeight: '1.2' }}>
+                    <th scope="col" key={t.id} className="px-0.5 py-2 text-center font-medium text-[var(--ink-3)]" style={{ minWidth: '80px', maxWidth: '120px', fontSize: '10px', lineHeight: '1.2' }}>
                       {t.name}
                     </th>
                   ))}
-                  <th scope="col" className="py-2 px-2 text-center font-semibold text-gray-600 min-w-[50px]">%</th>
+                  <th scope="col" className="min-w-[50px] px-2 py-2 text-center font-semibold text-[var(--ink-3)]">%</th>
                 </tr>
               </thead>
               <tbody>
@@ -352,21 +352,21 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                   const staffMap = matrix.get(s.id);
                   const pct = staffCompliancePct(s.id);
                   return (
-                    <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50/30">
-                      <td className="py-1 px-2 font-medium text-gray-800 sticky left-0 bg-white z-10">
+                    <tr key={s.id} className="border-b border-[var(--line)] hover:bg-[var(--paper-2)]">
+                      <td className="sticky left-0 z-10 bg-[var(--paper)] px-2 py-1 font-medium text-[var(--ink)]">
                         <div>{s.name}</div>
                         <div className="text-[9px] text-gray-400">{s.team} · {s.role}</div>
                       </td>
                       {filteredTypes.map(t => {
                         const r = staffMap?.get(t.id);
-                        if (!r) return <td key={t.id} className="py-1 px-0.5 text-center"><div className="w-full h-9" /></td>;
+                        if (!r) return <td key={t.id} className="px-0.5 py-1 text-center"><div className="h-9 w-full" /></td>;
                         const display = STATUS_DISPLAY[r.status];
                         return (
-                          <td key={t.id} className="py-1 px-0.5 text-center">
+                          <td key={t.id} className="px-0.5 py-1 text-center">
                             <button
                               onClick={() => r.status !== TRAINING_STATUS.NOT_REQUIRED && openRecordModal(s.id, t.id)}
                               disabled={r.status === TRAINING_STATUS.NOT_REQUIRED || (readOnly && !r.record)}
-                              className={`w-full h-9 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${CELL_COLORS[r.status]} ${(readOnly && !r.record) ? 'cursor-default hover:shadow-none' : ''}`}
+                              className={`flex h-9 w-full items-center justify-center rounded-lg text-[10px] font-bold transition-all ${CELL_COLORS[r.status]} ${(readOnly && !r.record) ? 'cursor-default hover:shadow-none' : ''}`}
                               title={`${s.name} — ${t.name}: ${display.label}${r.daysUntilExpiry != null ? ` (${r.daysUntilExpiry}d)` : ''}${r.requiredLevel ? ` [needs ${r.requiredLevel.name}]` : ''}`}
                             >
                               {display.symbol}
@@ -374,8 +374,8 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                           </td>
                         );
                       })}
-                      <td className="py-1 px-2 text-center">
-                        <span className={`text-xs font-bold ${pct >= 90 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span>
+                      <td className="px-2 py-1 text-center">
+                        <span className={`text-xs font-bold ${pct >= 90 ? 'text-[var(--ok)]' : pct >= 70 ? 'text-[var(--caution)]' : 'text-[var(--alert)]'}`}>{pct}%</span>
                       </td>
                     </tr>
                   );
@@ -383,7 +383,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               </tbody>
             </table>
           </div>
-          {filteredStaff.length === 0 && <div className="p-8 text-center text-sm text-gray-400">No staff match the current filters</div>}
+          {filteredStaff.length === 0 && <div className="p-8 text-center text-sm text-[var(--ink-4)]">No staff match the current filters</div>}
         </div>
       )}
 

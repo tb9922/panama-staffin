@@ -38,7 +38,7 @@ function findActiveNavContext(pathname, topItems, sections) {
 
 export default function AppLayout() {
   const { user, isPlatformAdmin, logout } = useAuth();
-  const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
+  const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole, staffPortalEnabled } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const canUseEvidenceHub = isPlatformAdmin || canAccessEvidenceHub(homeRole);
   const location = useLocation();
@@ -60,11 +60,12 @@ export default function AppLayout() {
     if (item.platformAdminOnly && !isPlatformAdmin) return false;
     if (item.requiresUserManagement && !canManageUsers) return false;
     if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
+    if (item.requiresStaffPortal && !staffPortalEnabled) return false;
     const effectiveModule = item.module || sectionModule;
     if (effectiveModule && !canRead(effectiveModule)) return false;
     if (effectiveModule && isOwnDataOnly(homeRole, effectiveModule)) return item.ownDataSafe === true;
     return true;
-  }, [canManageUsers, canRead, canUseEvidenceHub, homeRole, isPlatformAdmin]);
+  }, [canManageUsers, canRead, canUseEvidenceHub, homeRole, isPlatformAdmin, staffPortalEnabled]);
 
   const visibleTopItems = useMemo(
     () => NAV_TOP.filter(item => isNavItemVisible(item)),
@@ -138,13 +139,13 @@ export default function AppLayout() {
 
   const activeHomeName = homes.find(h => h.id === activeHome)?.name || 'No home selected';
 
-  if (loading) return <LoadingState message="Loading staffing data..." className="h-screen bg-gradient-to-br from-slate-100 to-blue-50" />;
+  if (loading) return <LoadingState message="Loading staffing data..." className="h-screen bg-[var(--paper-2)]" />;
 
   if (error && homes.length === 0) return (
-    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
-      <div className="bg-white border border-red-200 rounded-2xl shadow-lg p-6 max-w-md mx-4">
+    <div className="flex h-screen items-center justify-center bg-[var(--paper-2)]">
+      <div className="mx-4 max-w-md rounded-2xl border border-[var(--alert)] bg-[var(--paper)] p-6 shadow-lg">
         <ErrorState title="Error loading data" message={error} compact />
-        <p className="text-gray-500 text-xs mt-3">Make sure the API server is running (`npm run dev`)</p>
+        <p className="mt-3 text-xs text-[var(--ink-3)]">Make sure the API server is running (`npm run dev`)</p>
       </div>
     </div>
   );
@@ -155,19 +156,19 @@ export default function AppLayout() {
     }
 
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-[var(--paper-2)]">
         <main id="main-content" className="max-w-6xl mx-auto px-4 py-8">
-          <div className="bg-white border border-blue-200 rounded-2xl shadow-sm p-6 mb-6">
+          <div className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
+                <svg className="h-4 w-4 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h6m-6 4h6m-6 4h3" />
                 </svg>
               </div>
-              <h2 className="text-blue-900 font-semibold text-lg">Platform Setup</h2>
+              <h2 className="text-lg font-semibold text-[var(--ink)]">Platform Setup</h2>
             </div>
-            <p className="text-blue-800 text-sm">Your platform admin account is active, but there are no homes configured yet.</p>
-            <p className="text-gray-500 text-xs mt-3">Create the first home below, then you can switch into it and use the rest of the app normally.</p>
+            <p className="text-sm text-[var(--ink-2)]">Your platform admin account is active, but there are no homes configured yet.</p>
+            <p className="mt-3 text-xs text-[var(--ink-3)]">Create the first home below, then you can switch into it and use the rest of the app normally.</p>
             <div className="mt-5">
               <button onClick={() => { void logout({ forceLocal: true }); }} className={BTN.secondary}>Logout</button>
             </div>
@@ -181,18 +182,18 @@ export default function AppLayout() {
   }
 
   if (!activeHome) return (
-    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
-      <div className="bg-white border border-amber-200 rounded-2xl shadow-lg p-6 max-w-md mx-4">
+    <div className="flex h-screen items-center justify-center bg-[var(--paper-2)]">
+      <div className="mx-4 max-w-md rounded-2xl border border-[var(--caution)] bg-[var(--paper)] p-6 shadow-lg">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
-            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--caution-soft)]">
+            <svg className="h-4 w-4 text-[var(--caution)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-amber-900 font-semibold text-lg">You don't have access to any homes yet</h2>
+          <h2 className="text-lg font-semibold text-[var(--ink)]">You don't have access to any homes yet</h2>
         </div>
-        <p className="text-amber-800 text-sm">Your account is signed in, but it is not assigned to any home yet.</p>
-        <p className="text-gray-500 text-xs mt-3">Ask a platform admin to grant home access, or log out and switch accounts.</p>
+        <p className="text-sm text-[var(--ink-2)]">Your account is signed in, but it is not assigned to any home yet.</p>
+        <p className="mt-3 text-xs text-[var(--ink-3)]">Ask a platform admin to grant home access, or log out and switch accounts.</p>
         <div className="mt-5">
           <button onClick={() => { void logout({ forceLocal: true }); }} className={BTN.primary}>Logout</button>
         </div>
@@ -201,11 +202,11 @@ export default function AppLayout() {
   );
 
   return (
-    <div className="flex h-screen bg-[radial-gradient(circle_at_top,_#eff6ff,_#f8fafc_45%,_#f1f5f9_100%)]">
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:shadow-lg">Skip to content</a>
+    <div className="app saas theme-a flex h-screen bg-[var(--paper-2)] text-[var(--ink)]">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-[var(--accent)] focus:px-4 focus:py-2 focus:text-[var(--accent-ink)] focus:shadow-lg">Skip to content</a>
       {/* Mobile top bar */}
-      <div className="mobile-topbar hidden bg-gray-900 text-white items-center justify-between px-3 py-2.5 print:hidden">
-        <button onClick={() => setSidebarOpen(true)} className="text-gray-300 hover:text-white p-2.5" aria-label="Open navigation menu">
+      <div className="mobile-topbar hidden items-center justify-between border-b border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-[var(--ink)] print:hidden">
+        <button onClick={() => setSidebarOpen(true)} className="p-2.5 text-[var(--ink-2)] hover:text-[var(--ink)]" aria-label="Open navigation menu">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -213,16 +214,16 @@ export default function AppLayout() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="relative rounded-md p-2.5 text-gray-300 transition hover:bg-gray-800 hover:text-white"
+            className="relative rounded-md p-2.5 text-[var(--ink-2)] transition hover:bg-[var(--paper-2)] hover:text-[var(--ink)]"
             onClick={toggleNotificationPanel}
             aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            {unreadCount > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">{unreadCount}</span>}
+            {unreadCount > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-[var(--alert)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">{unreadCount}</span>}
           </button>
-          <span className="text-xs text-gray-300">{user.username}</span>
+          <span className="text-xs text-[var(--ink-3)]">{user.username}</span>
         </div>
       </div>
 
@@ -232,33 +233,33 @@ export default function AppLayout() {
       )}
 
       {/* Sidebar */}
-      <aside aria-label="Main navigation" className={`${sidebarOpen ? 'w-64' : 'w-16'} flex flex-col border-r border-slate-800/80 bg-slate-950/95 text-white shadow-2xl shadow-slate-900/20 backdrop-blur transition-all duration-200 flex-shrink-0 print:hidden sidebar-mobile ${!sidebarOpen ? 'sidebar-closed' : ''} md:!relative md:!transform-none`}>
-        <div className="border-b border-slate-800/80 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/80 p-3">
+      <aside aria-label="Main navigation" className={`${sidebarOpen ? 'w-64' : 'w-16'} sidebar-mobile flex flex-shrink-0 flex-col border-r border-[var(--line)] bg-[var(--paper)] text-[var(--ink)] shadow-[0_16px_48px_-34px_rgba(20,20,40,0.45)] backdrop-blur transition-all duration-200 print:hidden ${!sidebarOpen ? 'sidebar-closed' : ''} md:!relative md:!transform-none`}>
+        <div className="border-b border-[var(--line)] bg-[var(--paper)] p-3">
           <div className="flex items-center gap-2.5">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="rounded-lg p-2.5 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="rounded-lg p-2.5 text-[var(--ink-3)] transition-colors hover:bg-[var(--paper-2)] hover:text-[var(--ink)]" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
             </button>
             {sidebarOpen && (
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600/90 shadow-lg shadow-blue-950/40">
-                  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] shadow-sm">
+                  <svg className="h-4 w-4 text-[var(--accent-ink)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold tracking-tight text-white">Panama Staffing</p>
-                  <p className="truncate text-xs text-slate-300">{activeHomeName}</p>
+                  <p className="truncate text-sm font-semibold tracking-tight text-[var(--ink)]">Panama Staffing</p>
+                  <p className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">{activeHomeName}</p>
                 </div>
               </div>
             )}
           </div>
           {sidebarOpen && (
-            <div className="mt-3 rounded-2xl border border-slate-800/80 bg-slate-900/70 px-3 py-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Workspace</p>
-              <p className="mt-1 truncate text-sm font-semibold text-slate-100">{activeNavContext.item?.label || activeHomeName}</p>
-              <p className="mt-1 truncate text-xs text-slate-400">
+            <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">Workspace</p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--ink)]">{activeNavContext.item?.label || activeHomeName}</p>
+              <p className="mt-1 truncate text-xs text-[var(--ink-3)]">
                 {(activeNavContext.section?.label || 'General')} • {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}
               </p>
             </div>
@@ -267,16 +268,16 @@ export default function AppLayout() {
 
         {/* Home Selector */}
         {sidebarOpen && homes.length > 1 && (
-          <div className="px-3 py-2.5 border-b border-slate-800/80">
+          <div className="border-b border-[var(--line)] px-3 py-2.5">
             <select value={activeHome || ''} onChange={e => { void handleHomeChange(e.target.value); }}
               aria-label="Select active home"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 text-xs text-white px-2.5 py-2 focus:border-blue-500 focus:outline-none">
+              className="w-full rounded-lg border border-[var(--line-2)] bg-[var(--paper)] px-2.5 py-2 text-xs text-[var(--ink)] shadow-sm focus:border-[var(--accent)] focus:outline-none">
               {homes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
             </select>
           </div>
         )}
 
-        <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
           {/* Top-level items */}
           {visibleTopItems.map(item => (
             <NavLink
@@ -286,10 +287,10 @@ export default function AppLayout() {
               onClick={() => { if (window.innerWidth < 768) setSidebarOpen(false); }}
               aria-label={!sidebarOpen ? item.label : undefined}
               className={({ isActive }) =>
-                `flex items-center rounded-xl px-3 py-2.5 text-xs transition-colors duration-150 ${
+                `flex items-center rounded-lg px-3 py-2.5 text-xs transition-colors duration-150 ${
                   isActive
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/30'
-                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
+                    : 'text-[var(--ink-2)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]'
                 }`
               }
             >
@@ -312,12 +313,12 @@ export default function AppLayout() {
                   onClick={() => toggleSection(section.id)}
                   aria-expanded={isOpen}
                   aria-label={!sidebarOpen ? section.label : undefined}
-                  className={`w-full flex items-center rounded-xl px-3 py-2.5 text-xs transition-colors duration-150 ${
+                  className={`flex w-full items-center rounded-lg px-3 py-2.5 text-xs transition-colors duration-150 ${
                     sectionHasActiveItem
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
                       : isOpen
-                        ? 'bg-slate-900/70 text-slate-100'
-                        : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+                        ? 'bg-[var(--paper-2)] text-[var(--ink)]'
+                        : 'text-[var(--ink-3)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]'
                   }`}
                 >
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -325,8 +326,8 @@ export default function AppLayout() {
                   </svg>
                   {sidebarOpen && (
                     <>
-                      <span className="ml-2.5 font-semibold flex-1 text-left">{section.label}</span>
-                      <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
+                      <span className="ml-2.5 flex-1 text-left font-semibold">{section.label}</span>
+                      <span className="rounded-full border border-[var(--line)] bg-[var(--paper)] px-2 py-0.5 text-xs font-semibold text-[var(--ink-3)]">
                         {section.visibleItems.length}
                       </span>
                       <svg className={`w-3 h-3 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -336,7 +337,7 @@ export default function AppLayout() {
                   )}
                 </button>
                 {isOpen && sidebarOpen && (
-                  <div className="ml-3 mt-1 mb-2 space-y-1 border-l border-slate-800 pl-2">
+                  <div className="mb-2 ml-3 mt-1 space-y-1 border-l border-[var(--line)] pl-2">
                     {section.visibleItems.map(item => (
                       <NavLink
                         key={item.path}
@@ -345,8 +346,8 @@ export default function AppLayout() {
                         className={({ isActive }) =>
                           `flex items-center rounded-lg px-2.5 py-2 text-xs transition-colors duration-150 ${
                             isActive
-                              ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/30'
-                              : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                              ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
+                              : 'text-[var(--ink-2)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]'
                           }`
                         }
                       >
@@ -365,17 +366,17 @@ export default function AppLayout() {
           })}
         </nav>
         {sidebarOpen && (
-          <div className="p-3 border-t border-slate-800/80">
+          <div className="shrink-0 border-t border-[var(--line)] p-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs text-slate-500 leading-relaxed">
-                <span className="text-slate-200 font-medium">{user.displayName || user.username}</span> ({isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role})<br />
+              <div className="text-xs leading-relaxed text-[var(--ink-3)]">
+                <span className="font-medium text-[var(--ink)]">{user.displayName || user.username}</span> ({isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role})<br />
                 {homes.find(h => h.id === activeHome)?.name}
               </div>
               <div className="flex flex-col items-end gap-0.5">
                 <button onClick={() => setChangePwOpen(true)}
-                  className="text-xs text-slate-300 hover:text-blue-300 transition-colors font-medium">Change password</button>
+                  className="text-xs font-medium text-[var(--ink-3)] transition-colors hover:text-[var(--accent)]">Change password</button>
                 <button onClick={() => { void logout(); }}
-                  className="text-xs text-slate-300 hover:text-red-300 transition-colors font-medium">Logout</button>
+                  className="text-xs font-medium text-[var(--ink-3)] transition-colors hover:text-[var(--alert)]">Logout</button>
               </div>
             </div>
           </div>
@@ -383,51 +384,53 @@ export default function AppLayout() {
       </aside>
 
       {/* Main Content */}
-      <main id="main-content" className="relative flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.98))]">
-        <div className="sticky top-0 z-20 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 bg-white/92 px-4 py-3 shadow-sm shadow-slate-100/60 backdrop-blur print:hidden">
+      <main id="main-content" className="relative flex-1 overflow-auto bg-[var(--paper-2)]">
+        <div className="desktop-app-header sticky top-0 z-20 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3 shadow-sm backdrop-blur print:hidden">
           <div className="min-w-0">
             {activeNavContext.section?.label && (
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
                 {activeNavContext.section.label}
               </p>
             )}
-            <p className="truncate text-base font-semibold text-slate-900">{activeNavContext.item?.label || activeHomeName}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+            <p className="truncate text-base font-semibold text-[var(--ink)]">{activeNavContext.item?.label || activeHomeName}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-3)]">
+              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 font-medium text-[var(--ink-2)]">
                 {user.displayName || user.username}
               </span>
-              <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+              <span className="rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-2.5 py-1 font-medium text-[var(--accent)]">
                 {homes.find(h => h.id === activeHome)?.name}
               </span>
-              <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+              <span className="rounded-full border border-[var(--ok)] bg-[var(--ok-soft)] px-2.5 py-1 font-medium text-[var(--ok)]">
                 {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}
               </span>
             </div>
-            <p className="truncate text-xs text-slate-500">{user.displayName || user.username} • {homes.find(h => h.id === activeHome)?.name} • {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}</p>
+            <p className="sr-only">{user.displayName || user.username} - {homes.find(h => h.id === activeHome)?.name} - {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}</p>
           </div>
-          <button
-            type="button"
-            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
-            onClick={() => setChangePwOpen(true)}
-          >
-            Change password
-          </button>
-          <button
-            type="button"
-            className="relative ml-2 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
-            onClick={toggleNotificationPanel}
-            aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span>Notifications</span>
-            {unreadCount > 0 && <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">{unreadCount}</span>}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              className={BTN.secondary}
+              onClick={() => setChangePwOpen(true)}
+            >
+              Change password
+            </button>
+            <button
+              type="button"
+              className={`${BTN.secondary} relative`}
+              onClick={toggleNotificationPanel}
+              aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span>Notifications</span>
+              {unreadCount > 0 && <span className="rounded-full bg-[var(--alert)] px-2 py-0.5 text-xs font-semibold text-white">{unreadCount}</span>}
+            </button>
+          </div>
         </div>
         <NotificationPanel open={notificationOpen} onClose={() => setNotificationPath(null)} />
         {homeRole && homeRole !== 'home_manager' && !isPlatformAdmin && (
-          <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 text-xs text-blue-700 flex items-center gap-2 print:hidden">
+          <div className="flex items-center gap-2 border-b border-[var(--info)] bg-[var(--info-soft)] px-4 py-2 text-xs text-[var(--info)] print:hidden">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>

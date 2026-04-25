@@ -203,7 +203,7 @@ export default function PensionManager() {
           </p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={() => openNew()}>
+          <button type="button" className={BTN.primary} onClick={() => openNew()}>
             Add / Update Enrolment
           </button>
         )}
@@ -214,24 +214,24 @@ export default function PensionManager() {
       )}
 
       {unrecorded.length > 0 && (
-        <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>{unrecorded.length} staff member{unrecorded.length !== 1 ? 's' : ''} have no pension enrolment record:</strong>{' '}
           {unrecorded.map((s) => s.name).join(', ')}. Payroll may auto-assess these staff when a run is calculated,
           but you should still record their enrolment status explicitly.
-        </div>
+        </InlineNotice>
       )}
 
       {config && (
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[
             { label: 'Employee contribution', value: fmtPct(config.employee_rate) },
             { label: 'Employer contribution', value: fmtPct(config.employer_rate) },
             { label: 'Lower earnings', value: `${fmt(config.lower_qualifying_weekly)} /wk` },
             { label: 'Upper earnings', value: `${fmt(config.upper_qualifying_weekly)} /wk` },
           ].map(({ label, value }) => (
-            <div key={label} className={`${CARD.padded} text-center`}>
-              <div className="mb-1 text-xs text-gray-500">{label}</div>
-              <div className="text-lg font-semibold text-gray-900">{value}</div>
+            <div key={label} className={CARD.padded}>
+              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">{label}</div>
+              <div className="mt-2 font-mono text-xl font-semibold text-[var(--ink)]">{value}</div>
             </div>
           ))}
         </div>
@@ -244,7 +244,14 @@ export default function PensionManager() {
       </div>
 
       <div className={CARD.flush}>
-        <table className={TABLE.table}>
+        <div className="flex flex-col gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--ink)]">Enrolment records</h2>
+            <p className="text-xs text-[var(--ink-3)]">Auto-enrolment status, opt-outs, review dates, and contribution overrides.</p>
+          </div>
+        </div>
+        <div className={TABLE.wrapper} tabIndex={0} aria-label="Pension enrolment records table">
+          <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>Staff Member</th>
@@ -312,7 +319,7 @@ export default function PensionManager() {
                   </td>
                   {canEdit && (
                     <td className={TABLE.td}>
-                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(enrolment)}>
+                      <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(enrolment)} title={`Edit pension record for ${staff?.name || enrolment.staff_id}`}>
                         Edit
                       </button>
                     </td>
@@ -321,12 +328,14 @@ export default function PensionManager() {
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {unrecorded.length > 0 && (
         <div className={`${CARD.flush} mt-4`}>
-          <table className={TABLE.table}>
+          <div className={TABLE.wrapper} tabIndex={0} aria-label="Staff awaiting pension assessment table">
+            <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
                 <th scope="col" className={TABLE.th} colSpan={canEdit ? 9 : 8}>
@@ -354,7 +363,8 @@ export default function PensionManager() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
 
@@ -381,13 +391,13 @@ export default function PensionManager() {
       >
         <div className="space-y-4">
           <div>
-            <label className={INPUT.label}>Staff Member</label>
+            {editStaffId && <label className={INPUT.label}>Staff Member</label>}
             {editStaffId ? (
               <div className="py-2 text-sm font-medium text-gray-900">
                 {staffMap[editStaffId]?.name || editStaffId}
               </div>
             ) : (
-              <StaffPicker value={form.staff_id} onChange={(v) => field('staff_id', v)} required />
+              <StaffPicker id="pension-staff" label="Staff Member" value={form.staff_id} onChange={(v) => field('staff_id', v)} required />
             )}
           </div>
 
@@ -400,10 +410,11 @@ export default function PensionManager() {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Enrolment Date</label>
+              <label htmlFor="pension-enrolled-date" className={INPUT.label}>Enrolment Date</label>
               <input
+                id="pension-enrolled-date"
                 type="date"
                 className={INPUT.base}
                 value={form.enrolled_date}
@@ -411,8 +422,9 @@ export default function PensionManager() {
               />
             </div>
             <div>
-              <label className={INPUT.label}>Opt-Out Date</label>
+              <label htmlFor="pension-opted-out-date" className={INPUT.label}>Opt-Out Date</label>
               <input
+                id="pension-opted-out-date"
                 type="date"
                 className={INPUT.base}
                 value={form.opted_out_date}
@@ -437,8 +449,9 @@ export default function PensionManager() {
 
           {form.status === 'opted_out' && (
             <div>
-              <label className={INPUT.label}>Re-enrolment Date</label>
+              <label htmlFor="pension-reassessment-date" className={INPUT.label}>Re-enrolment Date</label>
               <input
+                id="pension-reassessment-date"
                 type="date"
                 className={INPUT.base}
                 value={form.reassessment_date}
@@ -448,10 +461,11 @@ export default function PensionManager() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>EE Contribution Override (%)</label>
+              <label htmlFor="pension-ee-override" className={INPUT.label}>EE Contribution Override (%)</label>
               <input
+                id="pension-ee-override"
                 type="number"
                 step="0.1"
                 min="0"
@@ -463,8 +477,9 @@ export default function PensionManager() {
               />
             </div>
             <div>
-              <label className={INPUT.label}>ER Contribution Override (%)</label>
+              <label htmlFor="pension-er-override" className={INPUT.label}>ER Contribution Override (%)</label>
               <input
+                id="pension-er-override"
                 type="number"
                 step="0.1"
                 min="0"
@@ -478,8 +493,9 @@ export default function PensionManager() {
           </div>
 
           <div>
-            <label className={INPUT.label}>Notes</label>
+            <label htmlFor="pension-notes" className={INPUT.label}>Notes</label>
             <textarea
+              id="pension-notes"
               className={INPUT.base}
               rows={2}
               value={form.notes}

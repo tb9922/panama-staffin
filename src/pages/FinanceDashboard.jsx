@@ -8,9 +8,9 @@ import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 
 const ALERT_STYLES = {
-  error: 'bg-red-50 border-red-200 text-red-700',
-  warning: 'bg-amber-50 border-amber-200 text-amber-700',
-  info: 'bg-blue-50 border-blue-200 text-blue-700',
+  error: 'bg-[var(--alert-soft)] border-[var(--alert)] text-[var(--alert)]',
+  warning: 'bg-[var(--caution-soft)] border-[var(--caution)] text-[var(--caution)]',
+  info: 'bg-[var(--info-soft)] border-[var(--info)] text-[var(--info)]',
 };
 
 const DEGRADED_METRIC_LABELS = {
@@ -127,27 +127,27 @@ export default function FinanceDashboard() {
           <h1 className={PAGE.title}>Finance Dashboard</h1>
           <p className={PAGE.subtitle}>Income, expenses and financial position</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
           <input
             type="date"
             value={period.from}
             onChange={event => setPeriod(current => ({ ...current, from: event.target.value }))}
-            className={`${INPUT.sm} w-auto`}
+            className={`${INPUT.sm} min-w-0 flex-[1_1_8.5rem] sm:w-auto sm:flex-none`}
           />
-          <span className="text-gray-400">to</span>
+          <span className="shrink-0 text-sm text-[var(--ink-4)]">to</span>
           <input
             type="date"
             value={period.to}
             onChange={event => setPeriod(current => ({ ...current, to: event.target.value }))}
-            className={`${INPUT.sm} w-auto`}
+            className={`${INPUT.sm} min-w-0 flex-[1_1_8.5rem] sm:w-auto sm:flex-none`}
           />
-          <button onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm}`}>Refresh</button>
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          <button onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Refresh</button>
+          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
         </div>
       </div>
 
       {datesReversed && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <div className="mb-4 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3 text-sm text-[var(--caution)]">
           "From" date is after "To" date. Adjust the range to load data.
         </div>
       )}
@@ -155,7 +155,7 @@ export default function FinanceDashboard() {
         <ErrorState title="Some finance data could not be refreshed" message={error} onRetry={() => void load()} className="mb-4" />
       )}
       {dashboard?.degraded && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3 text-sm text-[var(--caution)]">
           Some finance inputs are unavailable right now:
           {' '}
           {(dashboard.degraded_metrics || [])
@@ -206,7 +206,7 @@ export default function FinanceDashboard() {
 
           {alerts.length > 0 && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Alerts</h2>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Alerts</h2>
               <div className="space-y-2">
                 {alerts.map((alert, index) => (
                   <div key={index} className={`rounded-lg border px-3 py-2 text-sm ${ALERT_STYLES[alert.type] || ALERT_STYLES.info}`}>
@@ -219,7 +219,7 @@ export default function FinanceDashboard() {
 
           {dashboard.ageing && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Receivables Ageing</h2>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Receivables Ageing</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <AgeingCard label="Current" value={dashboard.ageing.buckets?.current} color="emerald" />
                 <AgeingCard label="1-30 days" value={dashboard.ageing.buckets?.days_1_30} color="amber" />
@@ -227,13 +227,13 @@ export default function FinanceDashboard() {
                 <AgeingCard label="61-90 days" value={dashboard.ageing.buckets?.days_61_90} color="red" />
                 <AgeingCard label="90+ days" value={dashboard.ageing.buckets?.days_90_plus} color="red" />
               </div>
-              <p className="mt-2 text-xs text-gray-500">Total outstanding: {formatCurrency(dashboard.ageing.total_outstanding)}</p>
+              <p className="mt-2 text-xs text-[var(--ink-3)]">Total outstanding: {formatCurrency(dashboard.ageing.total_outstanding)}</p>
             </div>
           )}
 
           {dashboard.expenses_by_category?.length > 0 && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Expenses by Category</h2>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Expenses by Category</h2>
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
                   <thead className={TABLE.thead}>
@@ -259,7 +259,7 @@ export default function FinanceDashboard() {
 
           {(dashboard.income_trend?.length > 0 || dashboard.expense_trend?.length > 0) && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Monthly Summary (Last 6 Months)</h2>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Monthly Summary (Last 6 Months)</h2>
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
                   <thead className={TABLE.thead}>
@@ -276,7 +276,7 @@ export default function FinanceDashboard() {
                         <td className={TABLE.td}>{row.month}</td>
                         <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(row.income)}</td>
                         <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(row.expenses)}</td>
-                        <td className={`${TABLE.td} text-right font-mono ${row.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        <td className={`${TABLE.td} text-right font-mono ${row.net >= 0 ? 'text-[var(--ok)]' : 'text-[var(--alert)]'}`}>
                           {formatCurrency(row.net)}
                         </td>
                       </tr>
@@ -293,19 +293,19 @@ export default function FinanceDashboard() {
 }
 
 const KPI_COLORS = {
-  emerald: 'text-emerald-600',
-  red: 'text-red-600',
-  blue: 'text-blue-600',
-  amber: 'text-amber-600',
-  orange: 'text-orange-600',
+  emerald: 'text-[var(--ok)]',
+  red: 'text-[var(--alert)]',
+  blue: 'text-[var(--info)]',
+  amber: 'text-[var(--caution)]',
+  orange: 'text-[var(--warn)]',
 };
 
 function KPICard({ label, value, sub, color }) {
   return (
     <div className={CARD.padded}>
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${KPI_COLORS[color] || 'text-gray-900'}`}>{value}</p>
-      <p className="mt-1 text-xs text-gray-500">{sub}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-3)]">{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${KPI_COLORS[color] || 'text-[var(--ink)]'}`}>{value}</p>
+      <p className="mt-1 text-xs text-[var(--ink-3)]">{sub}</p>
     </div>
   );
 }
@@ -313,8 +313,8 @@ function KPICard({ label, value, sub, color }) {
 function AgeingCard({ label, value, color }) {
   return (
     <div className="text-center">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-lg font-bold ${KPI_COLORS[color] || 'text-gray-900'}`}>{formatCurrency(value ?? 0)}</p>
+      <p className="text-xs text-[var(--ink-3)]">{label}</p>
+      <p className={`text-lg font-bold ${KPI_COLORS[color] || 'text-[var(--ink)]'}`}>{formatCurrency(value ?? 0)}</p>
     </div>
   );
 }

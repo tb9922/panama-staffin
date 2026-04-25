@@ -7,8 +7,8 @@ export default function LoadingState({
   compact = false,
 }) {
   const content = (
-    <div className={`flex items-center justify-center gap-3 ${compact ? 'py-6' : 'py-10'} text-sm text-gray-500`} role="status" aria-live="polite">
-      <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+    <div className={`flex items-center justify-center gap-3 ${compact ? 'py-6' : 'py-10'} text-sm text-[var(--ink-3)]`} role="status" aria-live="polite">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden="true" />
       <span>{message}</span>
     </div>
   );

@@ -11,8 +11,9 @@ import { todayLocalISO } from '../lib/localDates.js';
 const TODAY = todayLocalISO();
 
 export default function ClockInAudit() {
-  const { canWrite } = useData();
+  const { activeHomeObj, canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const staffPortalAvailable = activeHomeObj?.staffPortalEnabled !== false;
   const homeSlug = getCurrentHome();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -28,7 +29,10 @@ export default function ClockInAudit() {
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug || !staffPortalAvailable) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError('');
@@ -43,7 +47,7 @@ export default function ClockInAudit() {
     } finally {
       setLoading(false);
     }
-  }, [homeSlug, date]);
+  }, [homeSlug, date, staffPortalAvailable]);
 
   useEffect(() => {
     void load();
@@ -94,6 +98,11 @@ export default function ClockInAudit() {
       </div>
 
       {error && <ErrorState title="Clock-in audit error" message={error} className="mb-4" />}
+      {!staffPortalAvailable && (
+        <InlineNotice variant="info" className="mb-4">
+          Staff portal is disabled on this server, so clock-in audit data is not available.
+        </InlineNotice>
+      )}
       {!canEdit && (
         <InlineNotice variant="info" className="mb-4">
           Read-only — you do not have payroll write access. Approve and manual clock-in actions are disabled.

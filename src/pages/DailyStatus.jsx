@@ -527,6 +527,16 @@ export default function DailyStatus() {
 
   const alCount = schedData ? countALOnDate(currentDate, schedData.overrides) : 0;
   const dayName = currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const quickActions = [
+    ['+Sick', 'sick', 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]'],
+    ['+No Show', 'noshow', 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]'],
+    ['+AL', 'al', 'border-[var(--caution)] bg-[var(--caution-soft)] text-[var(--caution)]'],
+    ['+OT', 'ot', 'border-[var(--warn)] bg-[var(--warn-soft)] text-[var(--warn)]'],
+    ['+Agency', 'agency', 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]'],
+    ['+Training', 'training', 'border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]'],
+    ['+Sleep In', 'sleepIn', 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'],
+    ['+Swap', 'swap', 'border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]'],
+  ];
 
   const getBlockingReasons = (s) => {
     if (!schedData) return [];
@@ -546,17 +556,17 @@ export default function DailyStatus() {
     const blockReasons = isWorkingShift(s.shift) ? getBlockingReasons(s) : [];
     return (
     <tr className={TABLE.tr}>
-      <td className={`${TABLE.tdMono} text-xs text-gray-400`}>{s.id}</td>
+      <td className={`${TABLE.tdMono} text-xs text-[var(--ink-4)]`}>{s.id}</td>
       <td className={`${TABLE.td} font-medium`}>
         {s.name}
         {blockReasons.length > 0 && (
-          <span title={blockReasons.join(', ')} className="ml-1 inline-flex items-center text-red-500 cursor-help">
+          <span title={blockReasons.join(', ')} className="ml-1 inline-flex items-center text-[var(--alert)] cursor-help">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
           </span>
         )}
       </td>
-      <td className={`${TABLE.td} text-xs`}>{s.role}</td>
-      <td className={`${TABLE.td} text-xs`}>{s.team}</td>
+      <td className={`${TABLE.td} text-xs text-[var(--ink-2)]`}>{s.role}</td>
+      <td className={`${TABLE.td} text-xs text-[var(--ink-3)]`}>{s.team}</td>
       <td className={TABLE.td}>
         {canEdit ? (
           <button
@@ -568,12 +578,12 @@ export default function DailyStatus() {
             })}
             disabled={saving}
             aria-label={`Change shift for ${s.name}`}
-            className={`px-1.5 py-0.5 rounded text-xs font-medium transition-colors duration-150 hover:opacity-80 disabled:opacity-50 ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}
+            className={`min-w-10 rounded-md px-1.5 py-0.5 text-xs font-semibold transition-colors duration-150 hover:opacity-80 disabled:opacity-50 ${SHIFT_COLORS[s.shift] || 'bg-[var(--paper-2)] text-[var(--ink-3)]'}`}
           >
             {s.shift}
           </button>
         ) : (
-          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+          <span className={`inline-flex min-w-10 justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold ${SHIFT_COLORS[s.shift] || 'bg-[var(--paper-2)] text-[var(--ink-3)]'}`}>{s.shift}</span>
         )}
         {s.sleep_in && <span className={`${BADGE.purple} ml-1`}>SI</span>}
         {s.replaces_staff_id && (() => {
@@ -581,11 +591,11 @@ export default function DailyStatus() {
           return <span className={`${BADGE.amber} ml-1`} title={`Covers for ${replaced?.name || s.replaces_staff_id}`}>covers {replaced?.name?.split(' ')[0] || s.replaces_staff_id}</span>;
         })()}
       </td>
-      <td className={`${TABLE.td} text-xs text-gray-500`}>{s.skill}</td>
-      <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
+      <td className={`${TABLE.td} text-xs text-[var(--ink-3)]`}>{s.skill}</td>
+      <td className={`${TABLE.td} text-xs text-[var(--ink-3)]`}>{s.reason || ''}</td>
       <td className={TABLE.td}>
         {canEdit && s.isOverride && (
-          <button onClick={() => withLockCheck(() => removeOverride(s.id))} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50`}>Revert</button>
+          <button onClick={() => withLockCheck(() => removeOverride(s.id))} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-[var(--alert)] hover:bg-[var(--alert-soft)] disabled:opacity-50`}>Revert</button>
         )}
       </td>
     </tr>
@@ -593,16 +603,32 @@ export default function DailyStatus() {
   };
 
   const StaffTable = ({ title, staff, bgColor }) => (
-    <div className="mb-3">
-      <h3 className={`text-xs font-semibold uppercase px-2 py-1 rounded-t ${bgColor}`}>{title} ({staff.length})</h3>
+    <div className="mb-3 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--paper)] last:mb-0">
+      <h3 className={`px-3 py-2 text-xs font-semibold uppercase ${bgColor}`}>
+        <span>{title} ({staff.length})</span>
+      </h3>
       {staff.length === 0 ? (
-        <div className={TABLE.empty}>None</div>
+        <div className="px-3 py-6 text-center text-sm text-[var(--ink-3)]">None</div>
       ) : (
-        <table className={TABLE.table}>
-          <tbody>
-            {staff.map(s => <StaffRow key={s.id} s={s} />)}
-          </tbody>
-        </table>
+        <div className={TABLE.wrapper}>
+          <table className={`${TABLE.table} min-w-[680px]`}>
+            <thead className={TABLE.thead}>
+              <tr>
+                <th scope="col" className={TABLE.th}>ID</th>
+                <th scope="col" className={TABLE.th}>Name</th>
+                <th scope="col" className={TABLE.th}>Role</th>
+                <th scope="col" className={TABLE.th}>Team</th>
+                <th scope="col" className={TABLE.th}>Shift</th>
+                <th scope="col" className={TABLE.th}>Skill</th>
+                <th scope="col" className={TABLE.th}>Note</th>
+                <th scope="col" className={TABLE.th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {staff.map(s => <StaffRow key={s.id} s={s} />)}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -652,10 +678,12 @@ export default function DailyStatus() {
       </div>
 
       {/* Date Navigation */}
-      <div className="flex items-center justify-between mb-4 print:hidden">
-        <div className="flex items-center gap-3">
+      <div className="mb-5 flex flex-col gap-3 print:hidden lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <button onClick={() => goDay(-1)} className={`${BTN.secondary} ${BTN.sm}`}>&larr;</button>
-          <h1 className={PAGE.title}>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Daily Status</p>
+          <h1 className={`${PAGE.title} leading-tight`}>
             {dayName}
             {isLocked && (
               <span className="ml-2 text-amber-500 align-middle" title="Past date — locked for editing">
@@ -665,26 +693,27 @@ export default function DailyStatus() {
               </span>
             )}
           </h1>
+          </div>
           <button onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
-          {saving && <span className="text-xs text-blue-500">Saving...</span>}
+          {saving && <span className="text-xs font-medium text-[var(--info)]">Saving...</span>}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
-          <button onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
+          <button onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-[var(--info)]`}>Today</button>
         </div>
       </div>
 
       {/* Training-blocking warnings from last override save */}
       {overrideWarnings.length > 0 && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm text-amber-800 print:hidden" role="status">
+        <div className="mb-4 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-2 text-sm text-[var(--caution)] print:hidden" role="status">
           {overrideWarnings.map((w, i) => <div key={i}>{w}</div>)}
         </div>
       )}
 
       {/* Past-date lock prompt */}
       {showLockPrompt && (
-        <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 print:hidden flex-wrap">
-          <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-2 print:hidden">
+          <svg className="h-4 w-4 shrink-0 text-[var(--caution)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
           <span className="text-sm text-amber-800">Past date — enter admin PIN to edit</span>
@@ -701,14 +730,14 @@ export default function DailyStatus() {
           />
           <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
           <button onClick={dismissLockPrompt} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
-          {lockError && <span className="text-xs text-red-600">{lockError}</span>}
+          {lockError && <span className="text-xs text-[var(--alert)]">{lockError}</span>}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[330px_minmax(0,1fr)] lg:items-start">
         {/* Coverage Panel */}
-        <div className={CARD.padded}>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Coverage</h2>
+        <div className={`${CARD.padded} lg:sticky lg:top-24`}>
+          <h2 className="text-sm font-semibold text-[var(--ink-3)] uppercase mb-3">Coverage</h2>
           {['early', 'late', 'night'].map(period => {
             const cov = coverage[period];
             if (!cov) return null;
@@ -720,7 +749,7 @@ export default function DailyStatus() {
                     {cov.escalation.status}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                <div className="grid grid-cols-2 gap-2 text-xs text-[var(--ink-2)]">
                   <div>Heads: <strong>{cov.coverage.headCount}/{cov.coverage.required.heads}</strong></div>
                   <div>Skill: <strong>{cov.coverage.skillPoints.toFixed(1)}/{cov.coverage.required.skill_points}</strong></div>
                 </div>
@@ -728,9 +757,9 @@ export default function DailyStatus() {
             );
           })}
 
-          <div className="border-t mt-3 pt-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Costs</h3>
-            <div className="space-y-1 text-xs text-gray-600">
+          <div className="border-t border-[var(--line)] mt-3 pt-3">
+            <h3 className="text-xs font-semibold text-[var(--ink-3)] uppercase mb-2">Costs</h3>
+            <div className="space-y-1 text-xs text-[var(--ink-2)]">
               <div className="flex justify-between"><span>Base:</span><span>£{cost.base.toFixed(2)}</span></div>
               {cost.otPremium > 0 && <div className="flex justify-between text-orange-600"><span>OT Prem:</span><span>£{cost.otPremium.toFixed(2)}</span></div>}
               {cost.agencyDay > 0 && <div className="flex justify-between text-red-600"><span>AG Day:</span><span>£{cost.agencyDay.toFixed(2)}</span></div>}
@@ -741,14 +770,14 @@ export default function DailyStatus() {
             </div>
           </div>
 
-          <div className="border-t mt-3 pt-2 text-xs text-gray-500">
+          <div className="border-t border-[var(--line)] mt-3 pt-2 text-xs text-[var(--ink-3)]">
             AL: {alCount}/{schedData.config.max_al_same_day} | Sick: {sickStaff.length} | No show: {noShowStaff.length}
           </div>
 
           {/* Day Notes */}
-          <div className="border-t mt-3 pt-3">
+          <div className="border-t border-[var(--line)] mt-3 pt-3">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase">Handover Notes</h3>
+              <h3 className="text-xs font-semibold text-[var(--ink-3)] uppercase">Handover Notes</h3>
               <span className={`text-[11px] ${
                 dayNoteState === 'saving' ? 'text-blue-600' :
                 dayNoteState === 'saved' ? 'text-emerald-600' :
@@ -802,18 +831,24 @@ export default function DailyStatus() {
         </div>
 
         {/* Staff Lists */}
-        <div className={`lg:col-span-2 ${CARD.padded}`}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
-            {canEdit && <div className="flex gap-1.5 print:hidden">
-              <button onClick={() => withLockCheck(() => setModal('sick'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Sick</button>
-              <button onClick={() => withLockCheck(() => setModal('noshow'))} disabled={saving} className={`${BADGE.pink} cursor-pointer transition-colors duration-150 hover:bg-pink-100 disabled:opacity-50`}>+No Show</button>
-              <button onClick={() => withLockCheck(() => setModal('al'))} disabled={saving} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100 disabled:opacity-50`}>+AL</button>
-              <button onClick={() => withLockCheck(() => setModal('ot'))} disabled={saving} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100 disabled:opacity-50`}>+OT</button>
-              <button onClick={() => withLockCheck(() => setModal('agency'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Agency</button>
-              <button onClick={() => withLockCheck(() => setModal('training'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Training</button>
-              <button onClick={() => withLockCheck(() => setModal('sleepIn'))} disabled={saving} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100 disabled:opacity-50`}>+Sleep In</button>
-              <button onClick={() => withLockCheck(() => setModal('swap'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Swap</button>
+        <div className={`${CARD.padded} min-w-0`}>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--ink-3)] uppercase">Staff</h2>
+              <p className="text-xs text-[var(--ink-3)]">{staffForDay.length} scheduled records | {availableCover.length} available cover</p>
+            </div>
+            {canEdit && <div className="flex flex-wrap justify-end gap-1.5 print:hidden">
+              {quickActions.map(([label, modalName, tone]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => withLockCheck(() => setModal(modalName))}
+                  disabled={saving}
+                  className={`inline-flex min-h-8 items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors duration-150 hover:brightness-95 disabled:opacity-50 ${tone}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>}
           </div>
 
@@ -825,16 +860,22 @@ export default function DailyStatus() {
           <StaffTable title="Annual Leave" staff={alStaff} bgColor="bg-yellow-50 text-yellow-700" />
 
           {/* Available Cover */}
-          <div className="mt-3 border-t pt-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Available Cover ({availableCover.length})</h3>
+          <div className="mt-4 border-t border-[var(--line)] pt-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-[var(--ink-3)] uppercase">Available Cover ({availableCover.length})</h3>
+              <span className="text-[11px] text-[var(--ink-4)]">Fatigue days</span>
+            </div>
             {availableCover.length === 0 ? (
-              <div className="text-xs text-gray-400">No available staff</div>
+              <div className="rounded-lg border border-dashed border-[var(--line-2)] px-3 py-4 text-sm text-[var(--ink-3)]">No available staff</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {availableCover.map(s => (
-                  <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-2 py-1 text-xs">
-                    <span className="font-medium">{s.name} <span className="text-gray-400">({s.role})</span></span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                  <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2 text-xs">
+                    <span className="min-w-0 font-medium">
+                      <span className="block truncate">{s.name}</span>
+                      <span className="block truncate font-normal text-[var(--ink-4)]">{s.role}</span>
+                    </span>
+                    <span className={`inline-flex shrink-0 items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
                       s.fatigue.exceeded ? ESC_COLORS.red.badge :
                       s.fatigue.atRisk ? ESC_COLORS.amber.badge : ESC_COLORS.green.badge
                     }`}>{s.fatigue.consecutive}d</span>

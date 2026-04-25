@@ -8,14 +8,14 @@ export default function ErrorState({
   className = '',
 }) {
   return (
-    <div className={`rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-red-700 ${className}`.trim()} role="alert">
+    <div className={`rounded-xl border border-[var(--alert)] bg-[var(--alert-soft)] px-4 py-4 text-[var(--alert)] ${className}`.trim()} role="alert">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-red-800">{title}</p>
+          <p className="text-sm font-semibold text-[var(--alert)]">{title}</p>
           <p className="mt-1 text-sm break-words">{message || 'Something went wrong.'}</p>
         </div>
         {onRetry && (
-          <button type="button" onClick={onRetry} className={`${BTN.secondary} ${BTN.sm} shrink-0 border-red-200 bg-white text-red-700 hover:bg-red-100`}>
+          <button type="button" onClick={onRetry} className={`${BTN.secondary} ${BTN.sm} shrink-0 border-[var(--alert)] bg-[var(--paper)] text-[var(--alert)] hover:bg-[var(--alert-soft)]`}>
             {retryLabel}
           </button>
         )}

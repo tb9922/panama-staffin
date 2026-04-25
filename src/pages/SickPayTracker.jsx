@@ -204,7 +204,7 @@ export default function SickPayTracker() {
           </p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={() => { setCreateForm(EMPTY_CREATE); setShowCreate(true); }}>
+          <button type="button" className={BTN.primary} onClick={() => { setCreateForm(EMPTY_CREATE); setShowCreate(true); }}>
             Record Sick Period
           </button>
         )}
@@ -217,35 +217,35 @@ export default function SickPayTracker() {
 
       {/* Fit note alerts */}
       {fitNoteAlerts.length > 0 && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>Fit note required for {fitNoteAlerts.length} staff member{fitNoteAlerts.length !== 1 ? 's' : ''}:</strong>{' '}
           {fitNoteAlerts.map(p => {
             const days = daysOpen(p.start_date, p.end_date);
             return `${staffMap[p.staff_id]?.name || p.staff_id} (${days} days)`;
           }).join(', ')}.{' '}
           A GP fit note is required for absences exceeding 7 calendar days.
-        </div>
+        </InlineNotice>
       )}
 
       {/* SSP config */}
       {sspConfig && (
-        <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[
             { label: 'SSP weekly rate', value: `£${parseFloat(sspConfig.weekly_rate).toFixed(2)}` },
             { label: 'Waiting days', value: sspConfig.waiting_days === 0 ? 'None (2026 rules)' : `${sspConfig.waiting_days} days` },
             { label: 'Max duration', value: `${sspConfig.max_weeks} weeks` },
             { label: 'LEL weekly', value: sspConfig.lel_weekly ? `£${parseFloat(sspConfig.lel_weekly).toFixed(2)}` : 'Abolished' },
           ].map(({ label, value }) => (
-            <div key={label} className={`${CARD.padded} text-center`}>
-              <div className="text-xs text-gray-500 mb-1">{label}</div>
-              <div className="text-lg font-semibold text-gray-900">{value}</div>
+            <div key={label} className={CARD.padded}>
+              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-4)]">{label}</div>
+              <div className="mt-2 font-mono text-xl font-semibold text-[var(--ink)]">{value}</div>
             </div>
           ))}
         </div>
       )}
 
       {/* Summary + filter */}
-      <div className="mb-4 flex items-center gap-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex gap-3 flex-wrap text-sm">
           <span className={`px-3 py-1 rounded-full ${BADGE.amber}`}>
             {openPeriods.length} open
@@ -259,14 +259,21 @@ export default function SickPayTracker() {
             </span>
           )}
         </div>
-        <div className="ml-auto w-56">
-          <StaffPicker value={staffFilter} onChange={setStaffFilter} showAll small />
+        <div className="w-full sm:ml-auto sm:w-56">
+          <StaffPicker id="sick-pay-staff-filter" label="Filter by staff" value={staffFilter} onChange={setStaffFilter} showAll small />
         </div>
       </div>
 
       {/* Sick periods table */}
       <div className={CARD.flush}>
-        <table className={TABLE.table}>
+        <div className="flex flex-col gap-1 border-b border-[var(--line)] bg-[var(--paper)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--ink)]">Sick periods</h2>
+            <p className="text-xs text-[var(--ink-3)]">SSP eligibility, fit-note status, linked periods, and open absence tracking.</p>
+          </div>
+        </div>
+        <div className={TABLE.wrapper} tabIndex={0} aria-label="Sick periods table">
+          <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>Staff Member</th>
@@ -332,7 +339,7 @@ export default function SickPayTracker() {
                   </td>
                   {canEdit && (
                     <td className={TABLE.td}>
-                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openUpdateModal(period)}>
+                      <button type="button" className={BTN.ghost + ' ' + BTN.xs} onClick={() => openUpdateModal(period)} title={`Update sick period for ${staff?.name || period.staff_id}`}>
                         Update
                       </button>
                     </td>
@@ -341,7 +348,8 @@ export default function SickPayTracker() {
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <div className="mt-4 text-xs text-gray-400 space-y-1">
@@ -370,24 +378,25 @@ export default function SickPayTracker() {
             required
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Start Date</label>
-              <input type="date" className={INPUT.base}
+              <label htmlFor="sick-pay-start-date" className={INPUT.label}>Start Date</label>
+              <input id="sick-pay-start-date" type="date" className={INPUT.base}
                 value={createForm.start_date}
                 onChange={e => cfield('start_date', e.target.value)} />
             </div>
             <div>
-              <label className={INPUT.label}>End Date (leave blank if ongoing)</label>
-              <input type="date" className={INPUT.base}
+              <label htmlFor="sick-pay-end-date" className={INPUT.label}>End Date (leave blank if ongoing)</label>
+              <input id="sick-pay-end-date" type="date" className={INPUT.base}
                 value={createForm.end_date}
                 onChange={e => cfield('end_date', e.target.value)} />
             </div>
           </div>
 
           <div>
-            <label className={INPUT.label}>Qualifying Days Per Week</label>
+            <label htmlFor="sick-pay-qualifying-days" className={INPUT.label}>Qualifying Days Per Week</label>
             <select
+              id="sick-pay-qualifying-days"
               className={INPUT.select}
               value={createForm.qualifying_days_per_week}
               onChange={e => cfield('qualifying_days_per_week', e.target.value)}
@@ -402,8 +411,9 @@ export default function SickPayTracker() {
           </div>
 
           <div>
-            <label className={INPUT.label}>Linked to Previous Period (optional)</label>
+            <label htmlFor="sick-pay-linked-period" className={INPUT.label}>Linked to Previous Period (optional)</label>
             <select
+              id="sick-pay-linked-period"
               className={INPUT.select}
               value={createForm.linked_to_period_id}
               onChange={e => cfield('linked_to_period_id', e.target.value)}
@@ -423,8 +433,9 @@ export default function SickPayTracker() {
           </div>
 
           <div>
-            <label className={INPUT.label}>Notes</label>
+            <label htmlFor="sick-pay-create-notes" className={INPUT.label}>Notes</label>
             <textarea className={INPUT.base} rows={2}
+              id="sick-pay-create-notes"
               value={createForm.notes}
               onChange={e => cfield('notes', e.target.value)}
               placeholder="e.g. Self-certified absence, fit note requested" />
@@ -454,8 +465,8 @@ export default function SickPayTracker() {
 
         <div className="space-y-4">
           <div>
-            <label className={INPUT.label}>End Date (set to close period)</label>
-            <input type="date" className={INPUT.base}
+            <label htmlFor="sick-pay-update-end-date" className={INPUT.label}>End Date (set to close period)</label>
+            <input id="sick-pay-update-end-date" type="date" className={INPUT.base}
               value={updateForm.end_date}
               onChange={e => ufield('end_date', e.target.value)} />
           </div>
@@ -473,16 +484,17 @@ export default function SickPayTracker() {
 
           {updateForm.fit_note_received && (
             <div>
-              <label className={INPUT.label}>Fit Note Date</label>
-              <input type="date" className={INPUT.base}
+              <label htmlFor="sick-pay-fit-note-date" className={INPUT.label}>Fit Note Date</label>
+              <input id="sick-pay-fit-note-date" type="date" className={INPUT.base}
                 value={updateForm.fit_note_date}
                 onChange={e => ufield('fit_note_date', e.target.value)} />
             </div>
           )}
 
           <div>
-            <label className={INPUT.label}>Notes</label>
+            <label htmlFor="sick-pay-update-notes" className={INPUT.label}>Notes</label>
             <textarea className={INPUT.base} rows={2}
+              id="sick-pay-update-notes"
               value={updateForm.notes}
               onChange={e => ufield('notes', e.target.value)}
               placeholder="e.g. Fit note received, return to work interview completed" />

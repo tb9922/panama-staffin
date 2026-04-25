@@ -64,6 +64,7 @@ export function DataProvider({ children }) {
   const homeRole = activeHomeObj?.roleId || null;
   const staffId = activeHomeObj?.staffId || null;
   const scanIntakeEnabled = Boolean(activeHomeObj?.scanIntakeEnabled ?? activeHomeObj?.config?.scan_intake_enabled);
+  const staffPortalEnabled = activeHomeObj?.staffPortalEnabled !== false;
   const scanIntakeTargets = useMemo(() => {
     const configured = activeHomeObj?.scanIntakeTargets ?? activeHomeObj?.config?.scan_intake_targets;
     if (Array.isArray(configured) && configured.length > 0) {
@@ -95,6 +96,7 @@ export function DataProvider({ children }) {
       switchHome, refreshHomes, setError, clearError,
       homeRole, staffId, canRead, canWrite,
       activeHomeObj, scanIntakeEnabled, scanIntakeTargets, isScanTargetEnabled,
+      staffPortalEnabled,
     }}>
       {children}
     </DataCtx.Provider>
