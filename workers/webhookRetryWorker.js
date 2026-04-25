@@ -1,7 +1,7 @@
 import { pool } from '../db.js';
 import { config } from '../config.js';
 import logger from '../logger.js';
-import { purgeWebhookDeliveries } from '../repositories/webhookRepo.js';
+import { purgeDeliveriesOlderThan as purgeWebhookDeliveries } from '../repositories/webhookRepo.js';
 import { processRetries as processWebhookRetries } from '../services/webhookService.js';
 
 function startInterval(fn, ms) {

@@ -77,7 +77,7 @@ echo "[$(date --iso-8601=seconds)] Checksum: ${BACKUP_DIR}/${FILENAME}.sha256"
 
 if [ "${VERIFY_AFTER_BACKUP:-false}" = "true" ] && [ -f "./scripts/verify-backup.sh" ]; then
   echo "[$(date --iso-8601=seconds)] Running restore verification..."
-  BACKUP_FILE="${BACKUP_DIR}/${FILENAME}" ./scripts/verify-backup.sh
+  BACKUP_FILE="${BACKUP_DIR}/${FILENAME}" bash ./scripts/verify-backup.sh
   echo "[$(date --iso-8601=seconds)] Restore verification passed"
 fi
 
