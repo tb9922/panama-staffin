@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as homeRepo from '../repositories/homeRepo.js';  // kept for access-log optional home lookup
-import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
+import { hasAccess, findHomeSlugsForUser, getHomeRole } from '../repositories/userHomeRepo.js';
+import { hasModuleAccess } from '../shared/roles.js';
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -22,6 +23,30 @@ const router = Router();
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
 const dateSchema = nullableDateInput;
+
+function isVerifiedPlatformAdmin(req) {
+  const dbUser = req.authDbUser;
+  return !!(dbUser?.active && dbUser.role === 'admin' && dbUser.is_platform_admin);
+}
+
+async function getReadableAccessLogHomeSlugs(username, isPlatformAdmin) {
+  if (isPlatformAdmin) {
+    const homes = await homeRepo.listAllWithIds();
+    return homes.map((home) => home.slug);
+  }
+
+  const allSlugs = await findHomeSlugsForUser(username);
+  const eligible = [];
+  for (const slug of allSlugs) {
+    const home = await homeRepo.findBySlug(slug);
+    if (!home) continue;
+    const assignment = await getHomeRole(username, home.id);
+    if (assignment && hasModuleAccess(assignment.role_id, 'gdpr', 'read')) {
+      eligible.push(slug);
+    }
+  }
+  return eligible;
+}
 
 function buildSarAuditSummary(data) {
   const counts = Object.entries(data?.data || {})
@@ -417,21 +442,28 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
 
 // ── Access Log ───────────────────────────────────────────────────────────────
 
-// GET /api/gdpr/access-log?home=X — access log scoped to home (or user's homes if omitted)
-router.get('/access-log', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+// GET /api/gdpr/access-log?home=X - access log scoped to home, or all readable homes if omitted.
+router.get('/access-log', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const homeP = homeIdSchema.safeParse(req.query.home);
+    if (!homeP.success) return res.status(400).json({ error: homeP.error.issues[0].message });
+    const isPlatformAdmin = isVerifiedPlatformAdmin(req);
     let homeSlugs;
     if (homeP.success && homeP.data) {
       const home = await homeRepo.findBySlug(homeP.data);
       if (!home) return res.status(404).json({ error: 'Home not found' });
-      const allowed = await hasAccess(req.user.username, home.id);
-      if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
+      const assignment = isPlatformAdmin ? null : await getHomeRole(req.user.username, home.id);
+      if (!isPlatformAdmin && (!assignment || !hasModuleAccess(assignment.role_id, 'gdpr', 'read'))) {
+        return res.status(403).json({ error: 'You do not have GDPR read access for this home' });
+      }
       homeSlugs = [home.slug];
     } else {
-      homeSlugs = await findHomeSlugsForUser(req.user.username);
+      homeSlugs = await getReadableAccessLogHomeSlugs(req.user.username, isPlatformAdmin);
+      if (!isPlatformAdmin && homeSlugs.length === 0) {
+        return res.status(403).json({ error: 'No GDPR read permission on any accessible home' });
+      }
     }
     res.json(await gdprService.getAccessLog({ limit, offset, homeSlugs }));
   } catch (err) { next(err); }

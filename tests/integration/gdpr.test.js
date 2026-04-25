@@ -18,11 +18,17 @@ import { app } from '../../server.js';
 const PREFIX = 'gdpr-test';
 const ADMIN_USER = `${PREFIX}-admin`;
 const VIEWER_USER = `${PREFIX}-viewer`;
+const MANAGER_USER = `${PREFIX}-home-manager`;
+const PLATFORM_USER = `${PREFIX}-platform-admin`;
+const STALE_PLATFORM_USER = `${PREFIX}-stale-platform`;
 const ADMIN_PW = 'GdprTestAdmin!2025';
 const VIEWER_PW = 'GdprTestViewer!2025';
+const MANAGER_PW = 'GdprTestManager!2025';
+const PLATFORM_PW = 'GdprTestPlatform!2025';
+const STALE_PLATFORM_PW = 'GdprTestStale!2025';
 const BASE = '/api/gdpr';
 
-let adminToken, viewerToken;
+let adminToken, viewerToken, managerToken, platformToken;
 let homeAId, homeBId;
 let homeASlug, homeBSlug;
 
@@ -35,6 +41,7 @@ async function cleanup() {
   const homeIds = rows.map(r => r.id);
 
   for (const hid of homeIds) {
+    await pool.query(`DELETE FROM access_log WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM gdpr_processors WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM dp_complaints WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM consent_records WHERE home_id = $1`, [hid]).catch(() => {});
@@ -69,6 +76,8 @@ beforeAll(async () => {
 
   const adminHash = await bcrypt.hash(ADMIN_PW, 4);
   const viewerHash = await bcrypt.hash(VIEWER_PW, 4);
+  const managerHash = await bcrypt.hash(MANAGER_PW, 4);
+  const platformHash = await bcrypt.hash(PLATFORM_PW, 4);
   await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'admin', true, 'GDPR Test Admin', 'test-setup')`,
@@ -79,6 +88,16 @@ beforeAll(async () => {
      VALUES ($1, $2, 'viewer', true, 'GDPR Test Viewer', 'test-setup')`,
     [VIEWER_USER, viewerHash]
   );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'GDPR Test Home Manager', 'test-setup')`,
+    [MANAGER_USER, managerHash]
+  );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+     VALUES ($1, $2, 'admin', true, 'GDPR Test Platform Admin', 'test-setup', true)`,
+    [PLATFORM_USER, platformHash]
+  );
 
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup'), ($1, $3, 'home_manager', 'test-setup')`,
@@ -87,6 +106,18 @@ beforeAll(async () => {
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'viewer', 'test-setup')`,
     [VIEWER_USER, homeAId]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup')`,
+    [MANAGER_USER, homeAId]
+  );
+
+  await pool.query(
+    `INSERT INTO access_log (user_name, user_role, method, endpoint, home_id, data_categories, status_code)
+     VALUES
+       ('gdpr-fixture-a', 'home_manager', 'GET', '/fixture/home-a', $1, ARRAY['staff'], 200),
+       ('gdpr-fixture-b', 'home_manager', 'GET', '/fixture/home-b', $2, ARRAY['staff'], 200)`,
+    [homeAId, homeBId]
   );
 
   // Insert a staff member in home A for SAR/erasure tests
@@ -108,6 +139,18 @@ beforeAll(async () => {
     .send({ username: VIEWER_USER, password: VIEWER_PW })
     .expect(200);
   viewerToken = viewerRes.body.token;
+
+  const managerRes = await request(app)
+    .post('/api/login')
+    .send({ username: MANAGER_USER, password: MANAGER_PW })
+    .expect(200);
+  managerToken = managerRes.body.token;
+
+  const platformRes = await request(app)
+    .post('/api/login')
+    .send({ username: PLATFORM_USER, password: PLATFORM_PW })
+    .expect(200);
+  platformToken = platformRes.body.token;
 }, 15000);
 
 afterAll(async () => {
@@ -200,6 +243,12 @@ function adminPut(path, body) {
 }
 function viewerGet(path) {
   return request(app).get(BASE + path).set('Authorization', `Bearer ${viewerToken}`);
+}
+function managerGet(path) {
+  return request(app).get(BASE + path).set('Authorization', `Bearer ${managerToken}`);
+}
+function platformGet(path) {
+  return request(app).get(BASE + path).set('Authorization', `Bearer ${platformToken}`);
 }
 function viewerPost(path, body) {
   return request(app).post(BASE + path).set('Authorization', `Bearer ${viewerToken}`).send(body);
@@ -771,6 +820,47 @@ describe('Access Log — /access-log', () => {
   it('GET with home param scopes to that home', async () => {
     const res = await adminGet(`/access-log?home=${homeASlug}`).expect(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('home_manager can access their home access log without legacy admin role', async () => {
+    const res = await managerGet('/access-log').expect(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.every(row => row.home_id === homeAId)).toBe(true);
+  });
+
+  it('home_manager cannot access another home access log', async () => {
+    await managerGet(`/access-log?home=${homeBSlug}`).expect(403);
+  });
+
+  it('platform admin without home role rows can access all homes', async () => {
+    const res = await platformGet('/access-log?limit=500').expect(200);
+    const homeIds = new Set(res.body.map(row => row.home_id));
+    expect(homeIds.has(homeAId)).toBe(true);
+    expect(homeIds.has(homeBId)).toBe(true);
+  });
+
+  it('does not trust a stale platform-admin JWT claim', async () => {
+    const staleHash = await bcrypt.hash(STALE_PLATFORM_PW, 4);
+    await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+       VALUES ($1, $2, 'admin', true, 'GDPR Test Stale Platform', 'test-setup', true)`,
+      [STALE_PLATFORM_USER, staleHash]
+    );
+    const loginRes = await request(app)
+      .post('/api/login')
+      .send({ username: STALE_PLATFORM_USER, password: STALE_PLATFORM_PW })
+      .expect(200);
+
+    await pool.query(`UPDATE users SET is_platform_admin = false WHERE username = $1`, [STALE_PLATFORM_USER]);
+
+    await request(app)
+      .get(`${BASE}/access-log?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .expect(403);
+  });
+
+  it('rejects invalid home params instead of falling back to all readable homes', async () => {
+    await adminGet('/access-log?home=bad%20home').expect(400);
   });
 
   it('viewer cannot access log (403)', async () => {

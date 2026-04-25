@@ -104,7 +104,9 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (record === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, record);
+    const changes = diffFields(existing, record, {
+      extraSensitive: ['description', 'best_interest_decision', 'decision_area_detail'],
+    });
     await auditService.log('dols_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(record);
   } catch (err) { next(err); }

@@ -40,6 +40,11 @@ const SELF_SERVICE_ROUTES = new Set([
   'GET /api/payroll/ssp-config',
 ]);
 
+const CUSTOM_AUTHZ_ROUTES = new Map([
+  ['GET /api/audit', 'custom scoped audit-log authorization'],
+  ['GET /api/gdpr/access-log', 'custom scoped GDPR access-log authorization'],
+]);
+
 const AUTH_Z_PATTERNS = [
   'requireAdmin',
   'requirePlatformAdmin',
@@ -118,6 +123,7 @@ for (const { key, middlewareStr, file } of allRoutes) {
   const isPublic = PUBLIC_ROUTES.has(key);
   const isTokenGated = TOKEN_GATED_ROUTES.has(key);
   const isSelfService = SELF_SERVICE_ROUTES.has(key);
+  const customAuthZ = CUSTOM_AUTHZ_ROUTES.get(key);
 
   const issues = [];
 
@@ -130,7 +136,7 @@ for (const { key, middlewareStr, file } of allRoutes) {
       issues.push('FAIL: missing requireAuth');
       pass = false;
     }
-    if (!isSelfService && !hasAuthZ) {
+    if (!isSelfService && !customAuthZ && !hasAuthZ) {
       issues.push('FAIL: missing authorization middleware');
       pass = false;
     }
@@ -145,6 +151,8 @@ for (const { key, middlewareStr, file } of allRoutes) {
     status = 'PASS (ops token)';
   } else if (isSelfService) {
     status = 'PASS (self-service)';
+  } else if (customAuthZ) {
+    status = `PASS (${customAuthZ})`;
   } else {
     const authZUsed = AUTH_Z_PATTERNS.filter((pattern) => middlewareStr.includes(pattern));
     status = `PASS (${authZUsed.join(' + ')})`;

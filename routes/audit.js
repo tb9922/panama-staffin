@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess, requireModule, requirePlatformAdmin } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule, requirePlatformAdmin } from '../middleware/auth.js';
 import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
-import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
+import { findHomeSlugsForUser, getHomeRole } from '../repositories/userHomeRepo.js';
+import { hasModuleAccess } from '../shared/roles.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { zodError } from '../errors.js';
 
@@ -20,16 +21,48 @@ const listQuerySchema = z.object({
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().default(''),
 });
 
-router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+function isVerifiedPlatformAdmin(req) {
+  const dbUser = req.authDbUser;
+  return !!(dbUser?.active && dbUser.role === 'admin' && dbUser.is_platform_admin);
+}
+
+async function userCanReadAuditForHome(username, homeId, isPlatformAdmin) {
+  if (isPlatformAdmin) return true;
+  const assignment = await getHomeRole(username, homeId);
+  if (!assignment) return false;
+  return hasModuleAccess(assignment.role_id, 'config', 'read');
+}
+
+async function getAuditHomeSlugs(username, isPlatformAdmin) {
+  if (isPlatformAdmin) {
+    const homes = await homeRepo.listAllWithIds();
+    return homes.map((home) => home.slug);
+  }
+
+  const slugs = await findHomeSlugsForUser(username);
+  const eligibleSlugs = [];
+  for (const slug of slugs) {
+    const home = await homeRepo.findBySlug(slug);
+    if (!home) continue;
+    if (await userCanReadAuditForHome(username, home.id, false)) {
+      eligibleSlugs.push(slug);
+    }
+  }
+  return eligibleSlugs;
+}
+
+router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
+    const isPlatformAdmin = isVerifiedPlatformAdmin(req);
+
     if (parsed.data.home) {
       const home = await homeRepo.findBySlug(parsed.data.home);
       if (!home) return res.status(404).json({ error: 'Home not found' });
-      const allowed = await hasAccess(req.user.username, home.id);
-      if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
+      const allowed = await userCanReadAuditForHome(req.user.username, home.id, isPlatformAdmin);
+      if (!allowed) return res.status(403).json({ error: 'You do not have audit read access for this home' });
       const result = await auditService.search({
         homeSlug: parsed.data.home,
         action: parsed.data.action,
@@ -42,7 +75,10 @@ router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, nex
       return res.json(result);
     }
 
-    const slugs = await findHomeSlugsForUser(req.user.username);
+    const slugs = await getAuditHomeSlugs(req.user.username, isPlatformAdmin);
+    if (!isPlatformAdmin && slugs.length === 0) {
+      return res.status(403).json({ error: 'No audit-read permission on any accessible home' });
+    }
     const result = await auditService.search({
       homeSlugs: slugs,
       action: parsed.data.action,
