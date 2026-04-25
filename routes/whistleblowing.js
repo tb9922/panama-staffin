@@ -103,7 +103,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (concern === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    let changes = diffFields(existing, concern);
+    // Redact allegation description + findings from audit diff — the text is unique
+    // enough in a small care home to identify the whistleblower, defeating the
+    // anonymity the `raised_by_role` strip below is meant to preserve.
+    let changes = diffFields(existing, concern, { extraSensitive: ['description', 'findings', 'resolution'] });
     // Strip raised_by_role from audit diff for anonymous concerns to prevent de-anonymisation
     if (concern.anonymous) {
       changes = changes.filter(c => c.field !== 'raised_by_role');

@@ -431,8 +431,8 @@ router.get('/access-log', readRateLimiter, requireAuth, async (req, res, next) =
     if (homeP.success && homeP.data) {
       const home = await homeRepo.findBySlug(homeP.data);
       if (!home) return res.status(404).json({ error: 'Home not found' });
-      const role = isPlatformAdmin ? null : await getHomeRole(req.user.username, home.id);
-      if (!isPlatformAdmin && (!role || !hasModuleAccess(role, 'gdpr', 'read'))) {
+      const assignment = isPlatformAdmin ? null : await getHomeRole(req.user.username, home.id);
+      if (!isPlatformAdmin && (!assignment || !hasModuleAccess(assignment.role_id, 'gdpr', 'read'))) {
         return res.status(403).json({ error: 'You do not have GDPR read access for this home' });
       }
       homeSlugs = [home.slug];
@@ -444,8 +444,8 @@ router.get('/access-log', readRateLimiter, requireAuth, async (req, res, next) =
         const home = await homeRepo.findBySlug(slug);
         if (!home) continue;
         if (isPlatformAdmin) { eligible.push(slug); continue; }
-        const role = await getHomeRole(req.user.username, home.id);
-        if (role && hasModuleAccess(role, 'gdpr', 'read')) eligible.push(slug);
+        const assignment = await getHomeRole(req.user.username, home.id);
+        if (assignment && hasModuleAccess(assignment.role_id, 'gdpr', 'read')) eligible.push(slug);
       }
       if (eligible.length === 0) return res.status(403).json({ error: 'No GDPR read permission on any accessible home' });
       homeSlugs = eligible;

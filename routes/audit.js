@@ -24,14 +24,20 @@ const listQuerySchema = z.object({
 // Audit log read access — home managers & deputy managers need this for CQC
 // managerial responsibility under Reg 17. Previously this route used `requireAdmin`,
 // locking out per-home managers. We now check the audit-read permission per-home:
-// - With ?home=X: requires the user to have 'reports' read access on that specific home
-// - Without ?home=: scopes to the user's accessible homes (role allowed on each)
+// - With ?home=X: requires config:read on that specific home
+// - Without ?home=: scopes to the user's accessible homes (config:read on each)
 // - Platform admins: unrestricted
+//
+// Why `config:read` and not `reports:read`? The role matrix (shared/roles.js) grants
+// `reports:read` to shift_coordinator, finance_officer, hr_officer, training_lead and
+// viewer — none of whom should see home-wide audit trails. `config:read` is granted
+// only to home_manager (write) and deputy_manager (read), matching the managerial
+// intent. Platform admins bypass the check regardless.
 async function userCanReadAuditForHome(username, homeId, isPlatformAdmin) {
   if (isPlatformAdmin) return true;
-  const role = await getHomeRole(username, homeId);
-  if (!role) return false;
-  return hasModuleAccess(role, 'reports', 'read');
+  const assignment = await getHomeRole(username, homeId);
+  if (!assignment) return false;
+  return hasModuleAccess(assignment.role_id, 'config', 'read');
 }
 
 router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
