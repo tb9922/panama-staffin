@@ -93,18 +93,19 @@ export default function AppLayout() {
     () => getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin),
     [homeRole, isPlatformAdmin, visibleSectionIds],
   );
-  const expandedSections = useMemo(() => {
-    const next = {};
-    visibleSectionIds.forEach((sectionId) => {
-      next[sectionId] = sectionOverrides[sectionId] ?? defaultExpandedSections[sectionId] ?? false;
-    });
-    return next;
-  }, [defaultExpandedSections, sectionOverrides, visibleSectionIds]);
-  const notificationOpen = notificationPath === location.pathname;
   const activeNavContext = useMemo(
     () => findActiveNavContext(location.pathname, visibleTopItems, visibleSections),
     [location.pathname, visibleSections, visibleTopItems],
   );
+  const activeSectionId = activeNavContext.section?.id || null;
+  const expandedSections = useMemo(() => {
+    const next = {};
+    visibleSectionIds.forEach((sectionId) => {
+      next[sectionId] = sectionOverrides[sectionId] ?? (sectionId === activeSectionId || Boolean(defaultExpandedSections[sectionId]));
+    });
+    return next;
+  }, [activeSectionId, defaultExpandedSections, sectionOverrides, visibleSectionIds]);
+  const notificationOpen = notificationPath === location.pathname;
 
   function toggleNotificationPanel() {
     setNotificationPath(current => (current === location.pathname ? null : location.pathname));
