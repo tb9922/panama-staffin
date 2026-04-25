@@ -827,7 +827,9 @@ describe('Payroll Runs — /runs', () => {
 
 describe('Agency — /agency', () => {
   let providerId;
+  let providerVersion;
   let shiftId;
+  let shiftVersion;
 
   describe('Providers', () => {
     it('POST creates provider', async () => {
@@ -840,6 +842,7 @@ describe('Agency — /agency', () => {
       expect(res.body).toHaveProperty('id');
       expect(res.body.name).toBe('Test Agency Co');
       providerId = res.body.id;
+      providerVersion = res.body.version;
     });
 
     it('POST rejects missing name', async () => {
@@ -859,13 +862,24 @@ describe('Agency — /agency', () => {
         name: 'Updated Agency Co',
         rate_day: 24,
         rate_night: 27,
+        _version: providerVersion,
       }).expect(200);
       expect(res.body.name).toBe('Updated Agency Co');
+      providerVersion = res.body.version;
+    });
+
+    it('PUT rejects provider updates without a version', async () => {
+      await adminPut(`/agency/providers/${providerId}?home=${homeASlug}`, {
+        name: 'Unversioned Agency Co',
+        rate_day: 24,
+        rate_night: 27,
+      }).expect(400);
     });
 
     it('PUT returns 404 for nonexistent', async () => {
       await adminPut(`/agency/providers/999999?home=${homeASlug}`, {
         name: 'Ghost Provider',
+        _version: 1,
       }).expect(404);
     });
   });
@@ -884,6 +898,7 @@ describe('Agency — /agency', () => {
       // Verify server-calculated total_cost
       expect(parseFloat(res.body.total_cost)).toBe(176); // 8 * 22
       shiftId = res.body.id;
+      shiftVersion = res.body.version;
     });
 
     it('POST rejects invalid shift_code', async () => {
@@ -924,8 +939,20 @@ describe('Agency — /agency', () => {
         shift_code: 'AG-L',
         hours: 8,
         hourly_rate: 24,
+        _version: shiftVersion,
       }).expect(200);
       expect(parseFloat(res.body.total_cost)).toBe(192); // 8 * 24
+      shiftVersion = res.body.version;
+    });
+
+    it('PUT rejects shift updates without a version', async () => {
+      await adminPut(`/agency/shifts/${shiftId}?home=${homeASlug}`, {
+        agency_id: providerId,
+        date: '2099-06-01',
+        shift_code: 'AG-L',
+        hours: 8,
+        hourly_rate: 24,
+      }).expect(400);
     });
   });
 

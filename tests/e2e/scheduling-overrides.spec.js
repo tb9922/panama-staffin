@@ -11,6 +11,7 @@ import { test, expect } from '@playwright/test';
 
 const TEST_DATE = '2026-03-02';
 const ALICE_ID = 'S001';
+const API_BASE = process.env.E2E_API_BASE || 'http://localhost:3001';
 
 test.describe('Scheduling — Daily Status', () => {
   test('Daily Status loads for today with staff table', async ({ page }) => {
@@ -52,7 +53,7 @@ test.describe('Scheduling — Daily Status', () => {
       return m ? m[1] : '';
     });
     await page.request.delete(
-      `http://localhost:3001/api/scheduling/overrides?home=e2e-test-home&date=${TEST_DATE}&staffId=${ALICE_ID}`,
+      `${API_BASE}/api/scheduling/overrides?home=e2e-test-home&date=${TEST_DATE}&staffId=${ALICE_ID}`,
       { headers: { 'X-CSRF-Token': csrfToken } },
     );
 

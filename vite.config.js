@@ -2,15 +2,17 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+const apiTarget = process.env.VITE_DEV_API_TARGET || 'http://localhost:3001';
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    sourcemap: true,
+    sourcemap: false,
     chunkSizeWarningLimit: 1000, // ExcelJS (937KB) is lazy-loaded on export - not a perf concern
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': apiTarget,
     },
   },
   test: {

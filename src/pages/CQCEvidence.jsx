@@ -257,8 +257,18 @@ function CQCEvidenceInner({ data }) {
   const loadEvidence = useCallback(async () => {
     try {
       const home = getCurrentHome();
-      const result = await getCqcEvidence(home);
-      if (isMounted.current) setEvidence(result.evidence || []);
+      const all = [];
+      let offset = 0;
+      let total = Infinity;
+      while (all.length < total) {
+        const result = await getCqcEvidence(home, { limit: 500, offset });
+        const rows = result.evidence || [];
+        all.push(...rows);
+        total = result._total ?? all.length;
+        if (rows.length === 0) break;
+        offset += rows.length;
+      }
+      if (isMounted.current) setEvidence(all);
     } catch (err) {
       // Non-fatal: evidence list stays empty rather than breaking the whole page
       if (isMounted.current) console.error('Failed to load CQC evidence:', err);

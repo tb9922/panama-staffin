@@ -454,7 +454,7 @@ describe('calculateRun', () => {
     await pool.query(
       `INSERT INTO timesheet_entries
          (home_id, staff_id, date, scheduled_start, scheduled_end, actual_start, actual_end, break_minutes, payable_hours, status)
-       VALUES ($1, 'TP01', '2025-11-03', '07:00', '15:00', '07:00', '13:00', 0, 6, 'pending')
+       VALUES ($1, 'TP01', '2025-11-03', '07:00', '15:00', '07:00', '13:00', 0, 6, 'approved')
        ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
          payable_hours = EXCLUDED.payable_hours,
          actual_end = EXCLUDED.actual_end,
@@ -505,7 +505,7 @@ describe('calculateRun', () => {
     await pool.query(
       `INSERT INTO timesheet_entries
          (home_id, staff_id, date, scheduled_start, scheduled_end, actual_start, actual_end, break_minutes, payable_hours, status)
-       VALUES ($1, 'TP02', '2025-11-04', '14:00', '22:00', '14:00', '20:00', 0, 6, 'pending')
+       VALUES ($1, 'TP02', '2025-11-04', '14:00', '22:00', '14:00', '20:00', 0, 6, 'approved')
        ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
          payable_hours = EXCLUDED.payable_hours,
          actual_end = EXCLUDED.actual_end,

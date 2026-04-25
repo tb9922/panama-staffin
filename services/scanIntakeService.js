@@ -320,6 +320,8 @@ async function confirmCqc(client, homeId, intakeItem, body, username) {
 }
 
 async function confirmRecordAttachment(client, homeId, intakeItem, body, username) {
+  const exists = await recordAttachmentsRepo.parentExists(homeId, body.module, body.record_id, client);
+  if (!exists) throw Object.assign(new Error('Attachment parent record not found'), { statusCode: 404 });
   const moved = await moveIntoRecordAttachmentStore({
     homeId,
     intakeItem,

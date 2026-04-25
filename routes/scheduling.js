@@ -341,7 +341,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const training = trainingResult.rows;
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
-    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training, hourAdjustmentsOut = hourAdjustments;
+    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = dayNotes;
     if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
@@ -357,7 +357,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
       staffOut = staff
         .filter(({ id }) => id === req.staffId)
-        .map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
+        .map(({ id, name, role, team, pref, default_shift, start_date, active }) => ({ id, name, role, team, pref, default_shift, start_date, active }));
       overridesOut = {};
       hourAdjustmentsOut = {};
       for (const [date, entries] of Object.entries(overrides)) {
@@ -368,6 +368,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       }
       trainingOut = [];
       onboardingOut = undefined;
+      dayNotesOut = {};
       // Strip commercially sensitive fields — staff don't need cost parameters
       configOut = buildSchedulingConfigOut(req.home.config, { ownDataOnly: true });
     }
@@ -378,7 +379,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       staff: staffOut,
       overrides: overridesOut,
       hour_adjustments: hourAdjustmentsOut,
-      day_notes: dayNotes,
+      day_notes: dayNotesOut,
       training: trainingOut,
       ...(onboardingOut !== undefined && { onboarding: onboardingOut }),
     });

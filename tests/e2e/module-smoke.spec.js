@@ -3,8 +3,30 @@ import { expect, test } from '@playwright/test';
 
 const HOME_SLUG = 'e2e-test-home';
 const BOB_ID = 'S002';
-const LEAVE_DATE = '2026-04-24'; // cycleDay 11 -> Bob (Day B) is working
 const NO_SHOW_DATE = '2026-04-20'; // cycleDay 7 -> Bob (Day B) is working
+const API_BASE = process.env.E2E_API_BASE || 'http://localhost:3001';
+const CYCLE_START = Date.UTC(2025, 0, 6);
+const BOB_WORKING_CYCLE_DAYS = new Set([2, 3, 7, 8, 11, 12, 13]);
+const LEAVE_DATE = nextBobWorkingDate();
+
+function nextBobWorkingDate() {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + 1);
+  for (let i = 0; i < 90; i += 1) {
+    const cycleDay = Math.floor((date.getTime() - CYCLE_START) / 86_400_000) % 14;
+    if (BOB_WORKING_CYCLE_DAYS.has(cycleDay)) return date.toISOString().slice(0, 10);
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  throw new Error('Unable to find a future Bob working date');
+}
+
+function dayMonthRegex(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  const day = date.getUTCDate();
+  const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
+  return new RegExp(`${day}\\s+${month}`, 'i');
+}
 
 async function getCsrfToken(page) {
   return page.evaluate(() => {
@@ -16,7 +38,7 @@ async function getCsrfToken(page) {
 async function deleteOverrideIfPresent(page, date, staffId) {
   const csrfToken = await getCsrfToken(page);
   await page.request.delete(
-    `http://localhost:3001/api/scheduling/overrides?home=${HOME_SLUG}&date=${date}&staffId=${staffId}`,
+    `${API_BASE}/api/scheduling/overrides?home=${HOME_SLUG}&date=${date}&staffId=${staffId}`,
     { headers: { 'X-CSRF-Token': csrfToken } },
   );
 }
@@ -39,7 +61,7 @@ test.describe('Module smoke', () => {
     await expect(page.getByText(/1 AL days booked \([\d.]+h\)/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Saving...')).not.toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('No upcoming AL bookings')).not.toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Fri,?\s+24 Apr/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(dayMonthRegex(LEAVE_DATE))).toBeVisible({ timeout: 10_000 });
     const coverPlanDialog = page.getByRole('dialog', { name: /Cover Plan/i });
     if (await coverPlanDialog.isVisible().catch(() => false)) {
       await coverPlanDialog.getByRole('button', { name: 'Dismiss' }).click();
@@ -48,7 +70,7 @@ test.describe('Module smoke', () => {
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Annual Leave' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Fri,?\s+24 Apr/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(dayMonthRegex(LEAVE_DATE))).toBeVisible({ timeout: 10_000 });
 
     await deleteOverrideIfPresent(page, LEAVE_DATE, BOB_ID);
   });

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
@@ -19,6 +20,32 @@ function normaliseMatchValues(values) {
   return [...new Set((values || [])
     .map((value) => typeof value === 'string' ? value.trim() : '')
     .filter(Boolean))];
+}
+
+function anonymisedStaffPrefix(staffId) {
+  return String(staffId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4) || 'staff';
+}
+
+function anonymisedStaffHash(homeId, staffId) {
+  return createHash('sha256').update(`${homeId}:${staffId}`).digest('hex').slice(0, 8);
+}
+
+async function resolveAnonymisedStaffName(client, homeId, staffId, startDate) {
+  const prefix = anonymisedStaffPrefix(staffId);
+  const baseName = `[REDACTED-${prefix}]`;
+  const { rowCount } = await client.query(
+    `SELECT 1
+       FROM staff
+      WHERE home_id = $1
+        AND id <> $2
+        AND deleted_at IS NULL
+        AND lower(regexp_replace(btrim(name), '[[:space:]]+', ' ', 'g')) =
+            lower(regexp_replace(btrim($3), '[[:space:]]+', ' ', 'g'))
+        AND COALESCE(start_date, DATE '1900-01-01') = COALESCE($4::date, DATE '1900-01-01')
+      LIMIT 1`,
+    [homeId, staffId, baseName, startDate || null],
+  );
+  return rowCount > 0 ? `[REDACTED-${prefix}-${anonymisedStaffHash(homeId, staffId)}]` : baseName;
 }
 
 async function findWebhookDeliveriesByPayload(conn, homeId, values) {
@@ -604,17 +631,16 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       }
     }
 
-    const anon = `[REDACTED-${staffId.slice(0, 4)}]`;
-
     // Capture original name BEFORE anonymising — needed for name-keyed tables
     // (hr_case_notes.author, handover_entries.author, access_log.user_name)
     const { rows: [staffRow] } = await client.query(
-      `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
+      `SELECT name, start_date FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
     );
     const originalName = staffRow?.name;
     if (originalName?.startsWith('[REDACTED-')) {
       throw new ConflictError('Staff has already been anonymised');
     }
+    const anon = await resolveAnonymisedStaffName(client, homeId, staffId, staffRow?.start_date);
     const { rows: linkedUsers } = originalName
       ? await client.query(
           `SELECT u.username FROM users u

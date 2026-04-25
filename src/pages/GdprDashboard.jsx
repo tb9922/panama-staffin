@@ -201,9 +201,9 @@ export default function GdprDashboard() {
     setSaving(true);
     try {
       const data = { ...form };
-      // Combine date + time into UTC ISO datetime for precise ICO deadline calculation
+      // Interpret the form time as local UK/browser time, then send the exact instant.
       if (data.discovered_time) {
-        data.discovered_date = new Date(`${data.discovered_date}T${data.discovered_time}Z`).toISOString();
+        data.discovered_date = new Date(`${data.discovered_date}T${data.discovered_time}`).toISOString();
       }
       delete data.discovered_time;
       if (data.data_categories && typeof data.data_categories === 'string') {
@@ -371,6 +371,20 @@ export default function GdprDashboard() {
       else if (type === 'breach') await updateDataBreach(home, id, { status, _version });
       else if (type === 'complaint') await updateDPComplaint(home, id, { status, _version });
       showNotice(`${type === 'request' ? 'Request' : type === 'breach' ? 'Breach' : 'Complaint'} status updated to ${status}.`);
+      load();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  }
+
+  async function handleVerifyIdentity(request) {
+    if (saving || !request) return;
+    setSaving(true);
+    try {
+      await updateDataRequest(home, request.id, {
+        identity_verified: true,
+        status: request.status === 'received' ? 'in_progress' : request.status,
+        _version: request.version,
+      });
+      showNotice('Identity verified. GDPR request actions are now available.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -727,10 +741,16 @@ export default function GdprDashboard() {
                           {r.deadline} {overdue ? `(${Math.abs(days)}d overdue)` : r.status !== 'completed' && r.status !== 'rejected' ? `(${days}d)` : ''}
                         </span>
                       </td>
-                      <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(r.status)]}>{r.status}</span></td>
+                      <td className={TABLE.td}>
+                        <span className={BADGE[getStatusBadgeKey(r.status)]}>{r.status}</span>
+                        {r.identity_verified && <span className={`${BADGE.green} ml-1`}>ID verified</span>}
+                      </td>
                       <td className={TABLE.td}>
                         {canEdit && <div className="flex gap-1 flex-wrap">
-                          {r.request_type === 'sar' && r.status !== 'completed' && (
+                          {!r.identity_verified && r.status !== 'completed' && r.status !== 'rejected' && (
+                            <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleVerifyIdentity(r)}>Verify ID</button>
+                          )}
+                          {r.request_type === 'sar' && r.status !== 'completed' && r.identity_verified && (
                             <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleGatherData(r.id)}>Gather</button>
                           )}
                           {r.request_type === 'erasure' && r.status !== 'completed' && r.identity_verified && (

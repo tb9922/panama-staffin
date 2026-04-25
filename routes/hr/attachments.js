@@ -72,6 +72,7 @@ router.get('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, req
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
+    if (!await hrRepo.caseExists(req.home.id, parsed.data, caseId)) return res.status(404).json({ error: 'HR case not found' });
     const files = await hrRepo.findAttachments(parsed.data, caseId, req.home.id);
     res.json(files);
   } catch (err) { next(err); }
@@ -85,6 +86,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
     if (!caseTypeParsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
+    if (!await hrRepo.caseExists(req.home.id, caseTypeParsed.data, caseId)) return res.status(404).json({ error: 'HR case not found' });
     req._homeId = req.home.id;
     upload.single('file')(req, res, async (err) => {
       if (err) {

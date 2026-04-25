@@ -80,13 +80,25 @@ export default function IncidentTracker() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getIncidents(home);
-      setIncidents(result.incidents || []);
-      const types = result.incidentTypes && result.incidentTypes.length > 0
-        ? result.incidentTypes
+      const all = [];
+      let firstResult = null;
+      let offset = 0;
+      let total = Infinity;
+      while (all.length < total) {
+        const result = await getIncidents(home, { limit: 500, offset });
+        if (!firstResult) firstResult = result;
+        const rows = result.incidents || [];
+        all.push(...rows);
+        total = result._total ?? all.length;
+        if (rows.length === 0) break;
+        offset += rows.length;
+      }
+      setIncidents(all);
+      const types = firstResult?.incidentTypes && firstResult.incidentTypes.length > 0
+        ? firstResult.incidentTypes
         : DEFAULT_INCIDENT_TYPES;
       setIncidentTypes(types.filter(t => t.active !== false));
-      setStaff(result.staff || []);
+      setStaff(firstResult?.staff || []);
     } catch (err) {
       setError(err.message || 'Failed to load incidents');
     } finally {
@@ -292,8 +304,34 @@ export default function IncidentTracker() {
     return null;
   }
 
-  function handleExport() {
-    const rows = filtered.map(inc => {
+  async function handleExport() {
+    let exportList = incidents;
+    if (home) {
+      const all = [];
+      let offset = 0;
+      let total = Infinity;
+      while (all.length < total) {
+        const page = await getIncidents(home, { limit: 500, offset });
+        const rows = page.incidents || [];
+        all.push(...rows);
+        total = page._total ?? all.length;
+        if (rows.length === 0) break;
+        offset += rows.length;
+      }
+      exportList = all;
+    }
+    if (filterType) exportList = exportList.filter(i => i.type === filterType);
+    if (filterSeverity) exportList = exportList.filter(i => i.severity === filterSeverity);
+    if (filterStatus) exportList = exportList.filter(i => i.investigation_status === filterStatus);
+    if (search) {
+      const q = search.toLowerCase();
+      exportList = exportList.filter(i =>
+        i.description?.toLowerCase().includes(q) ||
+        i.person_affected_name?.toLowerCase().includes(q) ||
+        i.type?.toLowerCase().includes(q)
+      );
+    }
+    const rows = exportList.map(inc => {
       const typeDef = incidentTypes.find(t => t.id === inc.type);
       const sevDef = SEVERITY_LEVELS.find(s => s.id === inc.severity);
       const statusDef = INVESTIGATION_STATUSES.find(s => s.id === inc.investigation_status);

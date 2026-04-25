@@ -44,6 +44,15 @@ function parseModuleAndRecord(req, res) {
   return { moduleId: moduleParsed.data, recordId: recordParsed.data };
 }
 
+async function requireExistingParent(req, res, moduleId, recordId) {
+  const exists = await recordAttachmentsRepo.parentExists(req.home.id, moduleId, recordId);
+  if (!exists) {
+    res.status(404).json({ error: 'Attachment parent record not found' });
+    return false;
+  }
+  return true;
+}
+
 const storage = multer.diskStorage({
   destination(req, file, cb) {
     const moduleId = safePath(req.params.module);
@@ -106,6 +115,7 @@ router.get('/:module/:recordId', readRateLimiter, requireAuth, requireHomeAccess
     const parsed = parseModuleAndRecord(req, res);
     if (!parsed) return;
     await withRecordModuleAccess(req, res, next, parsed.moduleId, 'read', async () => {
+      if (!await requireExistingParent(req, res, parsed.moduleId, parsed.recordId)) return;
       const files = await recordAttachmentsRepo.findAttachments(req.home.id, parsed.moduleId, parsed.recordId);
       res.json(files);
     });
@@ -118,6 +128,7 @@ router.post('/:module/:recordId', writeRateLimiter, requireAuth, requireHomeAcce
   const parsed = parseModuleAndRecord(req, res);
   if (!parsed) return;
   await withRecordModuleAccess(req, res, next, parsed.moduleId, 'write', async () => {
+    if (!await requireExistingParent(req, res, parsed.moduleId, parsed.recordId)) return;
     upload.single('file')(req, res, async (err) => {
       if (err) {
         if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 20MB)' });

@@ -28,6 +28,37 @@ export async function findStaffSickOverrides(homeId, staffId, cutoff, client) {
   return rows;
 }
 
+export async function findRtwAbsenceSpells(homeId, cutoff, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT staff_id, absence_start_date, absence_end_date, absence_days
+       FROM hr_rtw_interviews
+      WHERE home_id = $1
+        AND deleted_at IS NULL
+        AND absence_start_date IS NOT NULL
+        AND COALESCE(absence_end_date, absence_start_date) >= $2
+      ORDER BY staff_id, absence_start_date`,
+    [homeId, cutoff]
+  );
+  return rows;
+}
+
+export async function findStaffRtwAbsenceSpells(homeId, staffId, cutoff, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT absence_start_date, absence_end_date, absence_days
+       FROM hr_rtw_interviews
+      WHERE home_id = $1
+        AND staff_id = $2
+        AND deleted_at IS NULL
+        AND absence_start_date IS NOT NULL
+        AND COALESCE(absence_end_date, absence_start_date) >= $3
+      ORDER BY absence_start_date`,
+    [homeId, staffId, cutoff]
+  );
+  return rows;
+}
+
 /**
  * Home config (for absence_triggers lookup).
  */

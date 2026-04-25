@@ -85,14 +85,14 @@ describe('getHMRCTaxMonth', () => {
 });
 
 describe('getHMRCPaymentDueDate', () => {
-  it('tax month 1 (Apr-May) → Jun 19', () => {
-    expect(getHMRCPaymentDueDate(2025, 1)).toBe('2025-06-19');
+  it('tax month 1 (Apr-May) -> May 19', () => {
+    expect(getHMRCPaymentDueDate(2025, 1)).toBe('2025-05-19');
   });
-  it('tax month 11 (Feb-Mar) → Apr 19', () => {
-    expect(getHMRCPaymentDueDate(2025, 11)).toBe('2026-04-19');
+  it('tax month 11 (Feb-Mar) -> Mar 19', () => {
+    expect(getHMRCPaymentDueDate(2025, 11)).toBe('2026-03-19');
   });
-  it('tax month 12 (Mar-Apr) → May 19 next year', () => {
-    expect(getHMRCPaymentDueDate(2025, 12)).toBe('2026-05-19');
+  it('tax month 12 (Mar-Apr) -> Apr 19 next year', () => {
+    expect(getHMRCPaymentDueDate(2025, 12)).toBe('2026-04-19');
   });
 });
 

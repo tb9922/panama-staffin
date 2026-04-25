@@ -1,5 +1,47 @@
 import { pool } from '../db.js';
 
+const PARENT_TABLES = {
+  incident: { table: 'incidents', idExpr: 'id', softDelete: true },
+  complaint: { table: 'complaints', idExpr: 'id', softDelete: true },
+  ipc_audit: { table: 'ipc_audits', idExpr: 'id', softDelete: true },
+  maintenance: { table: 'maintenance', idExpr: 'id', softDelete: true },
+  bed: { table: 'beds', idExpr: 'id::text' },
+  handover_entry: { table: 'handover_entries', idExpr: 'id::text' },
+  payroll_run: { table: 'payroll_runs', idExpr: 'id::text' },
+  investigation_meeting: { table: 'hr_investigation_meetings', idExpr: 'id::text', softDelete: true },
+  supervision: { table: 'supervisions', idExpr: 'id' },
+  appraisal: { table: 'appraisals', idExpr: 'id' },
+  fire_drill: { table: 'fire_drills', idExpr: 'id' },
+  policy_review: { table: 'policy_reviews', idExpr: 'id', softDelete: true },
+  risk: { table: 'risk_register', idExpr: 'id', softDelete: true },
+  whistleblowing: { table: 'whistleblowing_concerns', idExpr: 'id', softDelete: true },
+  dols: { table: 'dols', idExpr: 'id', softDelete: true },
+  mca_assessment: { table: 'mca_assessments', idExpr: 'id', softDelete: true },
+  dpia: { table: 'dpia_assessments', idExpr: 'id::text', softDelete: true },
+  ropa: { table: 'ropa_activities', idExpr: 'id::text', softDelete: true },
+  finance_expense: { table: 'finance_expenses', idExpr: 'id::text', softDelete: true },
+  finance_resident: { table: 'finance_residents', idExpr: 'id::text', softDelete: true },
+  finance_invoice: { table: 'finance_invoices', idExpr: 'id::text', softDelete: true },
+  finance_payment_schedule: { table: 'finance_payment_schedule', idExpr: 'id::text', softDelete: true },
+  payroll_rate_rule: { table: 'pay_rate_rules', idExpr: 'id::text' },
+  payroll_timesheet: { table: 'timesheet_entries', idExpr: 'id::text' },
+  payroll_tax_code: { table: 'tax_codes', idExpr: 'id::text', softDelete: true },
+  payroll_pension: { table: 'pension_enrolments', idExpr: 'id::text' },
+  payroll_sick_period: { table: 'sick_periods', idExpr: 'id::text' },
+  agency_provider: { table: 'agency_providers', idExpr: 'id::text' },
+  agency_shift: { table: 'agency_shifts', idExpr: 'id::text' },
+  care_certificate: { table: 'care_certificates', idExpr: 'staff_id' },
+  staff_register: { table: 'staff', idExpr: 'id', softDelete: true },
+};
+
+function parseScheduleOverrideId(recordId) {
+  const raw = String(recordId || '').trim();
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})(?:::\s*|[:|])(.+)$/);
+  if (!match) return null;
+  const staffId = match[2].trim();
+  return staffId ? { date: match[1], staffId } : null;
+}
+
 const COLS = `
   id,
   home_id,
@@ -27,7 +69,45 @@ function shape(row) {
     description: row.description,
     uploaded_by: row.uploaded_by,
     created_at: row.created_at,
-  } : null;
+} : null;
+}
+
+export async function parentExists(homeId, moduleId, recordId, client) {
+  const conn = client || pool;
+  const recordKey = String(recordId || '').trim();
+  if (!recordKey) return false;
+
+  if (moduleId === 'budget_month') {
+    return /^\d{4}-\d{2}$/.test(recordKey);
+  }
+
+  if (moduleId === 'schedule_override') {
+    const parsed = parseScheduleOverrideId(recordKey);
+    if (!parsed) return false;
+    const { rows } = await conn.query(
+      `SELECT 1
+         FROM shift_overrides
+        WHERE home_id = $1
+          AND date = $2::date
+          AND staff_id = $3
+        LIMIT 1`,
+      [homeId, parsed.date, parsed.staffId]
+    );
+    return rows.length > 0;
+  }
+
+  const parent = PARENT_TABLES[moduleId];
+  if (!parent) return false;
+  const { rows } = await conn.query(
+    `SELECT 1
+       FROM ${parent.table}
+      WHERE home_id = $1
+        AND ${parent.idExpr} = $2
+        ${parent.softDelete ? 'AND deleted_at IS NULL' : ''}
+      LIMIT 1`,
+    [homeId, recordKey]
+  );
+  return rows.length > 0;
 }
 
 export async function findAttachments(homeId, moduleId, recordId, client) {

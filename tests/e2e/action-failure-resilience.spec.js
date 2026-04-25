@@ -4,9 +4,31 @@ import { expect, test } from '@playwright/test';
 const HOME_SLUG = 'e2e-test-home';
 const ALICE_ID = 'S001';
 const BOB_ID = 'S002';
-const ANNUAL_LEAVE_DATE = '2026-04-24';
 const DAILY_STATUS_DATE = '2026-03-02';
 const ROSTER_OVERRIDE_DATE = '2026-04-20';
+const API_BASE = process.env.E2E_API_BASE || 'http://localhost:3001';
+const CYCLE_START = Date.UTC(2025, 0, 6);
+const BOB_WORKING_CYCLE_DAYS = new Set([2, 3, 7, 8, 11, 12, 13]);
+const ANNUAL_LEAVE_DATE = nextBobWorkingDate();
+
+function nextBobWorkingDate() {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + 1);
+  for (let i = 0; i < 90; i += 1) {
+    const cycleDay = Math.floor((date.getTime() - CYCLE_START) / 86_400_000) % 14;
+    if (BOB_WORKING_CYCLE_DAYS.has(cycleDay)) return date.toISOString().slice(0, 10);
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  throw new Error('Unable to find a future Bob working date');
+}
+
+function dayMonthRegex(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  const day = date.getUTCDate();
+  const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
+  return new RegExp(`${day}\\s+${month}`, 'i');
+}
 
 async function getCsrfToken(page) {
   return page.evaluate(() => {
@@ -18,7 +40,7 @@ async function getCsrfToken(page) {
 async function upsertOverride(page, { date, staffId, shift, al_hours }) {
   const csrfToken = await getCsrfToken(page);
   const response = await page.request.put(
-    `http://localhost:3001/api/scheduling/overrides?home=${HOME_SLUG}`,
+    `${API_BASE}/api/scheduling/overrides?home=${HOME_SLUG}`,
     {
       headers: { 'X-CSRF-Token': csrfToken },
       data: { date, staffId, shift, ...(al_hours != null ? { al_hours } : {}) },
@@ -30,7 +52,7 @@ async function upsertOverride(page, { date, staffId, shift, al_hours }) {
 async function deleteOverrideIfPresent(page, date, staffId) {
   const csrfToken = await getCsrfToken(page);
   await page.request.delete(
-    `http://localhost:3001/api/scheduling/overrides?home=${HOME_SLUG}&date=${date}&staffId=${staffId}`,
+    `${API_BASE}/api/scheduling/overrides?home=${HOME_SLUG}&date=${date}&staffId=${staffId}`,
     { headers: { 'X-CSRF-Token': csrfToken } },
   );
 }
@@ -45,10 +67,11 @@ test.describe('Action failure resilience', () => {
     await upsertOverride(page, { date: ANNUAL_LEAVE_DATE, staffId: BOB_ID, shift: 'AL', al_hours: 8 });
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    const bookingCard = page.locator('div.bg-amber-50').filter({ hasText: 'Bob Jones' }).filter({ hasText: /24 Apr/i }).first();
+    const bookingCard = page.locator('div.bg-amber-50').filter({ hasText: 'Bob Jones' }).filter({ hasText: dayMonthRegex(ANNUAL_LEAVE_DATE) }).first();
     await expect(bookingCard).toBeVisible({ timeout: 10_000 });
 
-    await page.route('**/api/scheduling/overrides?home=e2e-test-home&date=2026-04-24&staffId=S002', async (route) => {
+    const annualLeaveDeleteRoute = `**/api/scheduling/overrides?home=${HOME_SLUG}&date=${ANNUAL_LEAVE_DATE}&staffId=${BOB_ID}`;
+    await page.route(annualLeaveDeleteRoute, async (route) => {
       if (route.request().method() === 'DELETE') {
         await route.fulfill({
           status: 500,
@@ -70,7 +93,7 @@ test.describe('Action failure resilience', () => {
     await expect(page.getByText('Unable to load annual leave')).not.toBeVisible();
     await expect(bookingCard).toBeVisible({ timeout: 10_000 });
 
-    await page.unroute('**/api/scheduling/overrides?home=e2e-test-home&date=2026-04-24&staffId=S002');
+    await page.unroute(annualLeaveDeleteRoute);
     await deleteOverrideIfPresent(page, ANNUAL_LEAVE_DATE, BOB_ID);
   });
 

@@ -49,6 +49,12 @@ const overrideRequestDecisionSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
 });
 
+function normalizeStaffPayload(payload) {
+  const normalized = { ...payload };
+  if (typeof normalized.name === 'string') normalized.name = normalized.name.trim().replace(/\s+/g, ' ');
+  return normalized;
+}
+
 // POST /api/staff?home=X — create a new staff member
 // Server generates the ID inside a transaction to prevent concurrent collisions.
 // Client-provided IDs are allowed for imports/backfills, but POST must never
@@ -57,7 +63,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = staffBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const data = parsed.data;
+    const data = normalizeStaffPayload(parsed.data);
     const staff = await withTransaction(async (client) => {
       if (!data.id) {
         data.id = await staffRepo.nextId(req.home.id, client);
@@ -82,7 +88,7 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     const existing = await staffRepo.findById(req.home.id, idParsed.data);
     if (!existing) return res.status(404).json({ error: 'Staff member not found' });
     const { version } = splitVersion(parsed.data);
-    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, definedWithoutVersion(parsed.data), version);
+    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, normalizeStaffPayload(definedWithoutVersion(parsed.data)), version);
     if (staff === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }

@@ -855,7 +855,7 @@ export async function getPayrollTotal(homeId, from, to) {
     `SELECT COALESCE(SUM(total_gross), 0) AS total
      FROM payroll_runs
      WHERE home_id = $1 AND status IN ('approved','locked','exported')
-       AND period_start >= $2 AND period_end <= $3`,
+       AND period_start <= $3 AND period_end >= $2`,
     [homeId, from, to]);
   return rows[0]?.total != null ? parseFloat(rows[0].total) : 0;
 }

@@ -74,6 +74,7 @@ if (process.env.ENCRYPTION_KEY) {
 export const config = {
   // Server
   port: parseIntEnv(process.env.PORT, 3001),
+  host: process.env.HOST || '0.0.0.0',
   sentryDsn: process.env.SENTRY_DSN || null,
   sentryTracesSampleRate: parseFloatEnv(process.env.SENTRY_TRACES_SAMPLE_RATE, 0),
   allowedOrigin: process.env.ALLOWED_ORIGIN,

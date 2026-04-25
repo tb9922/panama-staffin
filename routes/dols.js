@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { denyHomeRoles, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -13,6 +13,10 @@ import { validateDolsReviewStatusChange } from '../lib/statusTransitions.js';
 import { validateDolsAuthorisationWindow } from '../shared/dolsValidation.js';
 
 const router = Router();
+const sensitiveComplianceWrite = [
+  requireModule('compliance', 'write'),
+  denyHomeRoles(['training_lead'], 'Training leads cannot modify DoLS or MCA records'),
+];
 const idSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
 const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
@@ -74,7 +78,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/dols?home=X — create DoLS record
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const parsed = dolsBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -87,7 +91,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
 });
 
 // PUT /api/dols/:id?home=X — update DoLS record
-router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -113,7 +117,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 });
 
 // DELETE /api/dols/:id?home=X — soft delete DoLS record
-router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -125,7 +129,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
 });
 
 // POST /api/dols/mca?home=X — create MCA assessment
-router.post('/mca', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/mca', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const parsed = mcaBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -136,7 +140,7 @@ router.post('/mca', writeRateLimiter, requireAuth, requireHomeAccess, requireMod
 });
 
 // PUT /api/dols/mca/:id?home=X — update MCA assessment
-router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -156,7 +160,7 @@ router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, require
 });
 
 // DELETE /api/dols/mca/:id?home=X — soft delete MCA assessment
-router.delete('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.delete('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

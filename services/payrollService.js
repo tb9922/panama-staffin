@@ -335,7 +335,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         const ts = tsMap.get(`${s.id}:${date}`) || null;
         const adjustment = hourAdjustments?.[date]?.[s.id] || null;
         let hours;
-        if (ts && ts.payable_hours != null && (['approved', 'locked'].includes(ts.status) || adjustment)) {
+        if (ts && ts.payable_hours != null && ['approved', 'locked'].includes(ts.status)) {
           hours = parseFloat(ts.payable_hours);
         } else {
           hours = getDefaultShiftHours(shift, home.config);

@@ -1,6 +1,9 @@
 import { test as setup, expect } from '@playwright/test';
 import fs from 'fs';
 
+const API_BASE = process.env.E2E_API_BASE || 'http://localhost:3001';
+const UI_BASE = process.env.E2E_BASE_URL || 'http://localhost:5173';
+
 const USERS = [
   { username: 'admin', password: 'admin12345', stateFile: '.playwright/admin-state.json' },
   { username: 'viewer', password: 'viewer12345', stateFile: '.playwright/viewer-state.json' },
@@ -42,7 +45,7 @@ function buildState(loginResponse, setCookieHeaders) {
       }] : []),
     ],
     origins: [{
-      origin: 'http://localhost:5173',
+      origin: UI_BASE,
       localStorage: [
         {
           name: 'user',
@@ -62,7 +65,7 @@ function buildState(loginResponse, setCookieHeaders) {
 
 for (const { username, password, stateFile } of USERS) {
   setup(`authenticate as ${username}`, async ({ request }) => {
-    const res = await request.post('http://localhost:3001/api/login', {
+    const res = await request.post(`${API_BASE}/api/login`, {
       data: { username, password },
     });
     expect(res.ok(), `Login failed for ${username}: ${res.status()}`).toBeTruthy();

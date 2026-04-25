@@ -38,7 +38,7 @@ import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
-import { nullableDateInput } from '../lib/zodHelpers.js';
+import { nullableDateInput, requiredDateInput } from '../lib/zodHelpers.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
 import { calculateAccrual } from '../src/lib/accrual.js';
 import { getActualShift, getLeaveYear, getShiftHours, isWorkingShift } from '../shared/rotation.js';
@@ -152,6 +152,7 @@ async function assertNoSickPeriodOverlap(homeId, staffId, startDate, endDate, ex
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
 const dateSchema     = nullableDateInput;
+const requiredDateSchema = requiredDateInput;
 const optTime        = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{2}:\d{2}$/).nullable().optional());
 const ruleIdSchema   = z.coerce.number().int().positive();
 const runIdSchema    = z.coerce.number().int().positive();
@@ -170,7 +171,7 @@ const ruleBodySchema = z.object({
 
 const timesheetBodySchema = z.object({
   staff_id:        z.string().min(1).max(20),
-  date:            dateSchema,
+  date:            requiredDateSchema,
   scheduled_start: optTime,
   scheduled_end:   optTime,
   actual_start:    optTime,
@@ -186,8 +187,8 @@ const timesheetBodySchema = z.object({
 });
 
 const runBodySchema = z.object({
-  period_start:   dateSchema,
-  period_end:     dateSchema,
+  period_start:   requiredDateSchema,
+  period_end:     requiredDateSchema,
   pay_date:       dateSchema.optional(),
   pay_frequency:  z.enum(['weekly', 'fortnightly', 'monthly']).default('monthly'),
   notes:          z.string().max(500).nullable().optional(),
@@ -199,11 +200,12 @@ const providerBodySchema = z.object({
   rate_day:   z.number().positive().nullable().optional(),
   rate_night: z.number().positive().nullable().optional(),
   active:     z.boolean().optional().default(true),
+  _version:   z.number().int().nonnegative().optional(),
 });
 
 const agencyShiftBodySchema = z.object({
   agency_id:    z.number().int().positive(),
-  date:         dateSchema,
+  date:         requiredDateSchema,
   shift_code:   z.enum(['AG-E', 'AG-L', 'AG-N']),
   hours:        z.number().positive(),
   hourly_rate:  z.number().positive(),
@@ -211,6 +213,7 @@ const agencyShiftBodySchema = z.object({
   invoice_ref:  z.string().max(100).nullable().optional(),
   reconciled:   z.boolean().optional().default(false),
   role_covered: z.string().max(100).nullable().optional(),
+  _version:     z.number().int().nonnegative().optional(),
 });
 
 const timesheetBatchBodySchema = z.object({
@@ -219,7 +222,7 @@ const timesheetBatchBodySchema = z.object({
 
 const hourAdjustmentBodySchema = z.object({
   staff_id: z.string().min(1).max(20),
-  date: dateSchema,
+  date: requiredDateSchema,
   kind: z.enum(['annual_leave', 'paid_authorised_absence']),
   hours: z.number().positive().max(24),
   note: z.string().max(500).nullable().optional(),
@@ -826,8 +829,12 @@ router.put('/agency/providers/:id', writeRateLimiter, requireAuth, requireHomeAc
     if (!idP.success) return res.status(400).json({ error: 'Invalid provider ID' });
     const parsed = providerBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const provider = await agencyRepo.updateProvider(idP.data, req.home.id, parsed.data);
-    if (!provider) return res.status(404).json({ error: 'Provider not found' });
+    const { _version, ...data } = parsed.data;
+    if (_version == null) return res.status(400).json({ error: 'Version is required. Refresh and try again.' });
+    const existing = await agencyRepo.findProviderById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Provider not found' });
+    const provider = await agencyRepo.updateProvider(idP.data, req.home.id, data, null, _version);
+    if (!provider) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'agency_provider' });
     res.json(provider);
   } catch (err) { next(err); }
@@ -864,9 +871,13 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
     if (!idP.success) return res.status(400).json({ error: 'Invalid shift ID' });
     const parsed = agencyShiftBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
-    const shift = await agencyRepo.updateShift(idP.data, req.home.id, data);
-    if (!shift) return res.status(404).json({ error: 'Shift not found' });
+    const { _version, ...payload } = parsed.data;
+    if (_version == null) return res.status(400).json({ error: 'Version is required. Refresh and try again.' });
+    const existing = await agencyRepo.findShiftById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Shift not found' });
+    const data = { ...payload, total_cost: Math.round(payload.hours * payload.hourly_rate * 100) / 100 };
+    const shift = await agencyRepo.updateShift(idP.data, req.home.id, data, null, _version);
+    if (!shift) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'agency_shift' });
     res.json(shift);
   } catch (err) { next(err); }

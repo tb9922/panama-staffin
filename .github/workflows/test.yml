@@ -87,7 +87,7 @@ jobs:
           ALLOWED_ORIGIN: http://localhost:5173
 
       - name: Run unit tests
-        run: npm test
+        run: npm run test:ci
         env:
           DB_HOST: localhost
           DB_PORT: 5432
@@ -201,17 +201,21 @@ jobs:
             git pull --ff-only origin main
             npm ci
             npm run build
+            find dist -name '*.map' -delete
             bash ./scripts/backup-db.sh
-            pm2 stop panama || true
+            pm2 stop panama panama-webhooks || true
             if ! node scripts/migrate.js; then
               echo "Migration failed — rolling back code to $PREV_COMMIT"
               git checkout "$PREV_COMMIT"
               npm ci
               npm run build
-              pm2 start panama --update-env || pm2 restart panama --update-env
+              find dist -name '*.map' -delete
+              pm2 startOrReload ecosystem.config.cjs --env production --update-env
               exit 1
             fi
-            pm2 start panama --update-env || pm2 restart panama --update-env
+            npm prune --omit=dev
+            pm2 startOrReload ecosystem.config.cjs --env production --update-env
             sleep 5
             curl -f http://localhost:3001/health || exit 1
+            curl -f http://localhost:3001/readiness || exit 1
             echo "Health check passed — deploy complete: $(date)"

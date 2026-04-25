@@ -21,7 +21,7 @@ const inviteBodySchema = z.object({
 
 const consumeInviteSchema = z.object({
   token: z.string().length(64),
-  username: z.string().min(1).max(100),
+  username: z.string().min(3).max(100),
   password: z.string().min(10).max(200),
 });
 

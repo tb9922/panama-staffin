@@ -396,7 +396,12 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
             const isExpanded = expanded === s.id;
             return (
               <div key={s.id} className={CARD.padded}>
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExpanded ? null : s.id)}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between text-left"
+                  onClick={() => setExpanded(isExpanded ? null : s.id)}
+                  aria-expanded={isExpanded}
+                >
                   <div>
                     <span className="font-medium text-gray-900">{s.name}</span>
                     <span className="text-xs text-gray-400 ml-2">{s.team} · {s.role}</span>
@@ -405,7 +410,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                     <span className={`text-sm font-bold ${pct >= 90 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span>
                     <span className="text-gray-400 text-xs">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                   </div>
-                </div>
+                </button>
                 {isExpanded && (
                   <div className="mt-3 border-t border-gray-100 pt-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -415,9 +420,11 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                         const display = STATUS_DISPLAY[r.status];
                         const canOpen = !readOnly || !!r.record;
                         return (
-                          <div
+                          <button
+                            type="button"
                             key={t.id}
-                            className={`flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 text-xs transition-colors ${canOpen ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+                            disabled={!canOpen}
+                            className={`flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-left text-xs transition-colors ${canOpen ? 'hover:bg-gray-100' : 'cursor-default opacity-80'}`}
                             onClick={() => canOpen && openRecordModal(s.id, t.id)}
                           >
                             <div>
@@ -428,7 +435,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                               )}
                             </div>
                             <span className={BADGE[display.badgeKey]}>{display.label}</span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>

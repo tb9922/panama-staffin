@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import Modal from '../Modal.jsx';
 import { BADGE, BTN, INPUT, MODAL, TABLE } from '../../lib/design.js';
 
@@ -52,32 +53,54 @@ export default function BedManagerModals({
   statusLabels,
   getTransitionLabel,
 }) {
+  const id = useId();
+  const ids = {
+    addRoomNumber: `${id}-add-room-number`,
+    addRoomName: `${id}-add-room-name`,
+    addRoomType: `${id}-add-room-type`,
+    addFloor: `${id}-add-floor`,
+    addNotes: `${id}-add-notes`,
+    editRoomNumber: `${id}-edit-room-number`,
+    editRoomName: `${id}-edit-room-name`,
+    editRoomType: `${id}-edit-room-type`,
+    editFloor: `${id}-edit-floor`,
+    editNotes: `${id}-edit-notes`,
+    transitionResident: `${id}-transition-resident`,
+    transitionReservedUntil: `${id}-transition-reserved-until`,
+    transitionHoldExpires: `${id}-transition-hold-expires`,
+    transitionReason: `${id}-transition-reason`,
+    transitionReleaseReason: `${id}-transition-release-reason`,
+    transitionNotes: `${id}-transition-notes`,
+    moveTarget: `${id}-move-target`,
+    revertReason: `${id}-revert-reason`,
+  };
+
   return (
     <>
       <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add Bed">
         <form onSubmit={handleAddBed}>
           <div className="space-y-4">
             <div>
-              <label className={INPUT.label}>Room Number *</label>
-              <input className={INPUT.base} required value={addForm.room_number} onChange={e => setAddForm(form => ({ ...form, room_number: e.target.value }))} />
+              <label htmlFor={ids.addRoomNumber} className={INPUT.label}>Room Number *</label>
+              <input id={ids.addRoomNumber} className={INPUT.base} required value={addForm.room_number} onChange={e => setAddForm(form => ({ ...form, room_number: e.target.value }))} />
             </div>
             <div>
-              <label className={INPUT.label}>Room Name</label>
-              <input className={INPUT.base} value={addForm.room_name} onChange={e => setAddForm(form => ({ ...form, room_name: e.target.value }))} />
+              <label htmlFor={ids.addRoomName} className={INPUT.label}>Room Name</label>
+              <input id={ids.addRoomName} className={INPUT.base} value={addForm.room_name} onChange={e => setAddForm(form => ({ ...form, room_name: e.target.value }))} />
             </div>
             <div>
-              <label className={INPUT.label}>Room Type</label>
-              <select className={INPUT.select} value={addForm.room_type} onChange={e => setAddForm(form => ({ ...form, room_type: e.target.value }))}>
+              <label htmlFor={ids.addRoomType} className={INPUT.label}>Room Type</label>
+              <select id={ids.addRoomType} className={INPUT.select} value={addForm.room_type} onChange={e => setAddForm(form => ({ ...form, room_type: e.target.value }))}>
                 {roomTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Floor</label>
-              <input className={INPUT.base} value={addForm.floor} onChange={e => setAddForm(form => ({ ...form, floor: e.target.value }))} />
+              <label htmlFor={ids.addFloor} className={INPUT.label}>Floor</label>
+              <input id={ids.addFloor} className={INPUT.base} value={addForm.floor} onChange={e => setAddForm(form => ({ ...form, floor: e.target.value }))} />
             </div>
             <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={addForm.notes} onChange={e => setAddForm(form => ({ ...form, notes: e.target.value }))} />
+              <label htmlFor={ids.addNotes} className={INPUT.label}>Notes</label>
+              <textarea id={ids.addNotes} className={INPUT.base} rows={2} value={addForm.notes} onChange={e => setAddForm(form => ({ ...form, notes: e.target.value }))} />
             </div>
           </div>
           <div className={MODAL.footer}>
@@ -98,8 +121,9 @@ export default function BedManagerModals({
         <form onSubmit={handleEditBed}>
           <div className="space-y-4">
             <div>
-              <label className={INPUT.label}>Room Number *</label>
+              <label htmlFor={ids.editRoomNumber} className={INPUT.label}>Room Number *</label>
               <input
+                id={ids.editRoomNumber}
                 className={INPUT.base}
                 required
                 value={editForm.room_number}
@@ -111,22 +135,22 @@ export default function BedManagerModals({
               )}
             </div>
             <div>
-              <label className={INPUT.label}>Room Name</label>
-              <input className={INPUT.base} value={editForm.room_name} onChange={e => setEditForm(form => ({ ...form, room_name: e.target.value }))} />
+              <label htmlFor={ids.editRoomName} className={INPUT.label}>Room Name</label>
+              <input id={ids.editRoomName} className={INPUT.base} value={editForm.room_name} onChange={e => setEditForm(form => ({ ...form, room_name: e.target.value }))} />
             </div>
             <div>
-              <label className={INPUT.label}>Room Type</label>
-              <select className={INPUT.select} value={editForm.room_type} onChange={e => setEditForm(form => ({ ...form, room_type: e.target.value }))}>
+              <label htmlFor={ids.editRoomType} className={INPUT.label}>Room Type</label>
+              <select id={ids.editRoomType} className={INPUT.select} value={editForm.room_type} onChange={e => setEditForm(form => ({ ...form, room_type: e.target.value }))}>
                 {roomTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Floor</label>
-              <input className={INPUT.base} value={editForm.floor} onChange={e => setEditForm(form => ({ ...form, floor: e.target.value }))} />
+              <label htmlFor={ids.editFloor} className={INPUT.label}>Floor</label>
+              <input id={ids.editFloor} className={INPUT.base} value={editForm.floor} onChange={e => setEditForm(form => ({ ...form, floor: e.target.value }))} />
             </div>
             <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={editForm.notes} onChange={e => setEditForm(form => ({ ...form, notes: e.target.value }))} />
+              <label htmlFor={ids.editNotes} className={INPUT.label}>Notes</label>
+              <textarea id={ids.editNotes} className={INPUT.base} rows={2} value={editForm.notes} onChange={e => setEditForm(form => ({ ...form, notes: e.target.value }))} />
             </div>
           </div>
           <div className={MODAL.footer}>
@@ -145,8 +169,8 @@ export default function BedManagerModals({
           <div className="space-y-4">
             {transitionTarget === 'occupied' && (
               <div>
-                <label className={INPUT.label}>Resident *</label>
-                <select className={INPUT.select} required value={transitionMeta.residentId || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, residentId: parseInt(e.target.value, 10) || undefined }))}>
+                <label htmlFor={ids.transitionResident} className={INPUT.label}>Resident *</label>
+                <select id={ids.transitionResident} className={INPUT.select} required value={transitionMeta.residentId || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, residentId: parseInt(e.target.value, 10) || undefined }))}>
                   <option value="">Select resident...</option>
                   {residents.map(resident => (
                     <option key={resident.id} value={resident.id}>{resident.name || resident.resident_name}</option>
@@ -157,22 +181,22 @@ export default function BedManagerModals({
 
             {transitionTarget === 'reserved' && (
               <div>
-                <label className={INPUT.label}>Reserved Until</label>
-                <input type="date" className={INPUT.base} value={transitionMeta.reservedUntil || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, reservedUntil: e.target.value }))} />
+                <label htmlFor={ids.transitionReservedUntil} className={INPUT.label}>Reserved Until</label>
+                <input id={ids.transitionReservedUntil} type="date" className={INPUT.base} value={transitionMeta.reservedUntil || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, reservedUntil: e.target.value }))} />
               </div>
             )}
 
             {transitionTarget === 'hospital_hold' && (
               <div>
-                <label className={INPUT.label}>Hold Expires *</label>
-                <input type="date" className={INPUT.base} required value={transitionMeta.holdExpires || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, holdExpires: e.target.value }))} />
+                <label htmlFor={ids.transitionHoldExpires} className={INPUT.label}>Hold Expires *</label>
+                <input id={ids.transitionHoldExpires} type="date" className={INPUT.base} required value={transitionMeta.holdExpires || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, holdExpires: e.target.value }))} />
               </div>
             )}
 
             {transitionTarget === 'vacating' && (
               <div>
-                <label className={INPUT.label}>Reason *</label>
-                <select className={INPUT.select} required value={transitionMeta.reason || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, reason: e.target.value }))}>
+                <label htmlFor={ids.transitionReason} className={INPUT.label}>Reason *</label>
+                <select id={ids.transitionReason} className={INPUT.select} required value={transitionMeta.reason || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, reason: e.target.value }))}>
                   <option value="">Select reason...</option>
                   {vacatingReasons.map(reason => <option key={reason.value} value={reason.value}>{reason.label}</option>)}
                 </select>
@@ -181,8 +205,8 @@ export default function BedManagerModals({
 
             {transitionBed?.status === 'reserved' && transitionTarget === 'available' && (
               <div>
-                <label className={INPUT.label}>Release Reason *</label>
-                <select className={INPUT.select} required value={transitionMeta.releaseReason || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, releaseReason: e.target.value }))}>
+                <label htmlFor={ids.transitionReleaseReason} className={INPUT.label}>Release Reason *</label>
+                <select id={ids.transitionReleaseReason} className={INPUT.select} required value={transitionMeta.releaseReason || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, releaseReason: e.target.value }))}>
                   <option value="">Select reason...</option>
                   {releaseReasons.map(reason => <option key={reason.value} value={reason.value}>{reason.label}</option>)}
                 </select>
@@ -190,8 +214,8 @@ export default function BedManagerModals({
             )}
 
             <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={transitionMeta.notes || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, notes: e.target.value }))} />
+              <label htmlFor={ids.transitionNotes} className={INPUT.label}>Notes</label>
+              <textarea id={ids.transitionNotes} className={INPUT.base} rows={2} value={transitionMeta.notes || ''} onChange={e => setTransitionMeta(meta => ({ ...meta, notes: e.target.value }))} />
             </div>
           </div>
           <div className={MODAL.footer}>
@@ -206,8 +230,8 @@ export default function BedManagerModals({
           <div className="space-y-4">
             <p className="text-sm text-gray-600">Move {moveBed?.resident_name || 'resident'} to a different available bed.</p>
             <div>
-              <label className={INPUT.label}>Target Bed *</label>
-              <select className={INPUT.select} required value={moveTargetId} onChange={e => setMoveTargetId(e.target.value)}>
+              <label htmlFor={ids.moveTarget} className={INPUT.label}>Target Bed *</label>
+              <select id={ids.moveTarget} className={INPUT.select} required value={moveTargetId} onChange={e => setMoveTargetId(e.target.value)}>
                 <option value="">Select available bed...</option>
                 {availableBeds.map(bed => (
                   <option key={bed.id} value={bed.id}>Room {bed.room_number}{bed.room_name ? ` - ${bed.room_name}` : ''}</option>
@@ -267,8 +291,8 @@ export default function BedManagerModals({
           <div className="space-y-4">
             <p className="text-sm text-gray-600">Revert the most recent status transition for this bed. This action is audited.</p>
             <div>
-              <label className={INPUT.label}>Reason *</label>
-              <textarea className={INPUT.base} rows={2} required value={revertReason} onChange={e => setRevertReason(e.target.value)} placeholder="Why is this transition being reverted?" />
+              <label htmlFor={ids.revertReason} className={INPUT.label}>Reason *</label>
+              <textarea id={ids.revertReason} className={INPUT.base} rows={2} required value={revertReason} onChange={e => setRevertReason(e.target.value)} placeholder="Why is this transition being reverted?" />
             </div>
           </div>
           <div className={MODAL.footer}>

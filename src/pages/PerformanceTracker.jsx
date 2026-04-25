@@ -173,10 +173,25 @@ export default function PerformanceTracker() {
 
   async function handleExport() {
     const { downloadXLSX } = await import('../lib/excel.js');
+    const exportRows = [];
+    let exportOffset = 0;
+    let exportTotal = Infinity;
+    while (exportRows.length < exportTotal) {
+      const filters = { limit: 500, offset: exportOffset };
+      if (filterStaff) filters.staffId = filterStaff;
+      if (filterStatus) filters.status = filterStatus;
+      if (filterType) filters.type = filterType;
+      const res = await getHrPerformance(home, filters);
+      const rows = res?.rows || [];
+      exportRows.push(...rows);
+      exportTotal = res?.total ?? exportRows.length;
+      if (rows.length === 0) break;
+      exportOffset += rows.length;
+    }
     downloadXLSX('performance_cases', [{
       name: 'Performance',
       headers: ['Staff ID', 'Date Raised', 'Type', 'Status', 'Outcome', 'Outcome Date'],
-      rows: items.map(i => [
+      rows: exportRows.map(i => [
         i.staff_id, i.date_raised,
         PERFORMANCE_TYPES.find(t => t.id === i.type)?.name || i.type,
         PERFORMANCE_STATUSES.find(s => s.id === i.status)?.name || i.status,

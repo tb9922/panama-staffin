@@ -64,8 +64,8 @@ export function getHMRCTaxMonth(date) {
 /**
  * Returns the HMRC payment due date string (YYYY-MM-DD) — 19th of the month
  * following the tax month end.
- * taxMonth 1 (Apr 6 - May 5) → due June 19.
- * taxMonth 12 (Mar 6 - Apr 5) → due May 19 of taxYear+1.
+ * taxMonth 1 (Apr 6 - May 5) -> due May 19.
+ * taxMonth 12 (Mar 6 - Apr 5) -> due Apr 19 of taxYear+1.
  */
 export function getHMRCPaymentDueDate(taxYear, taxMonth) {
   // Tax month 1 starts April (month 4). Tax month n starts at: ((taxMonth + 2) % 12) + 1
@@ -74,8 +74,8 @@ export function getHMRCPaymentDueDate(taxYear, taxMonth) {
   // Tax months 1-9 start in Apr-Dec of taxYear; months 10-12 start in Jan-Mar of taxYear+1.
   let dueYear = startCalMonth < 4 ? taxYear + 1 : taxYear;
 
-  // Due on 19th of month 2 months after start (month after the end month).
-  let dueMonth = startCalMonth + 2;
+  // Due on the 19th of the month in which the tax month ends.
+  let dueMonth = startCalMonth + 1;
   if (dueMonth > 12) {
     dueMonth -= 12;
     dueYear += 1;

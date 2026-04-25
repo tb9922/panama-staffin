@@ -275,12 +275,12 @@ const isPm2Process = process.env.pm_id != null || process.env.NODE_APP_INSTANCE 
 const isTestProcess = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 const isPlaywrightWebServer = process.env.PANAMA_E2E_SERVER === '1';
 const shouldListen = isPlaywrightWebServer || (!isTestProcess && (isDirectRun || isPm2Process));
-const server = shouldListen ? app.listen(config.port, async () => {
+const server = shouldListen ? app.listen(config.port, config.host, async () => {
   // Request + connection timeouts
   server.setTimeout(30000);        // 30s max request duration
   server.keepAliveTimeout = 65000; // slightly above typical LB idle (60s)
   server.headersTimeout = 66000;   // must exceed keepAliveTimeout
-  logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
+  logger.info({ host: config.host, port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
   await loadDenyList().catch(err =>
     logger.error({ err: err?.message }, 'Failed to load token deny list — revoked tokens may be accepted')

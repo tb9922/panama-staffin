@@ -1,5 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
+const apiPort = Number(process.env.E2E_API_PORT || 3137);
+const uiPort = Number(process.env.E2E_UI_PORT || 5173);
+const apiBaseURL = process.env.E2E_API_BASE || `http://localhost:${apiPort}`;
+const uiBaseURL = process.env.E2E_BASE_URL || `http://localhost:${uiPort}`;
+
+process.env.E2E_API_BASE = apiBaseURL;
+process.env.E2E_BASE_URL = uiBaseURL;
+
 export default defineConfig({
   globalSetup: './scripts/seed-e2e.js',
   testDir: 'tests/e2e',
@@ -9,7 +17,7 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: uiBaseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -48,16 +56,25 @@ export default defineConfig({
   webServer: [
     {
       command: 'node server.js',
-      port: 3001,
+      port: apiPort,
       reuseExistingServer: false,
       timeout: 30_000,
-      env: { ...process.env, NODE_ENV: 'test', PANAMA_E2E_SERVER: '1' },
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        PANAMA_E2E_SERVER: '1',
+        ENABLE_STAFF_PORTAL: '1',
+        PORT: String(apiPort),
+        HOST: '127.0.0.1',
+        ALLOWED_ORIGIN: uiBaseURL,
+      },
     },
     {
-      command: 'npx vite',
-      port: 5173,
+      command: `npx vite --host 127.0.0.1 --port ${uiPort}`,
+      port: uiPort,
       reuseExistingServer: false,
       timeout: 30_000,
+      env: { ...process.env, VITE_DEV_API_TARGET: apiBaseURL },
     },
   ],
 });

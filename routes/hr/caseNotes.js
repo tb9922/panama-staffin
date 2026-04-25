@@ -13,6 +13,7 @@ router.get('/case-notes/:caseType/:caseId', requireAuth, requireHomeAccess, requ
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseIdP = idSchema.safeParse(req.params.caseId);
     if (!caseIdP.success) return res.status(400).json({ error: 'Invalid case ID' });
+    if (!await hrRepo.caseExists(req.home.id, caseTypeP.data, caseIdP.data)) return res.status(404).json({ error: 'HR case not found' });
     res.json(await hrRepo.findCaseNotes(req.home.id, caseTypeP.data, caseIdP.data));
   } catch (err) { next(err); }
 });
@@ -24,6 +25,7 @@ router.post('/case-notes/:caseType/:caseId', requireAuth, requireHomeAccess, req
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseIdP = idSchema.safeParse(req.params.caseId);
     if (!caseIdP.success) return res.status(400).json({ error: 'Invalid case ID' });
+    if (!await hrRepo.caseExists(req.home.id, caseTypeP.data, caseIdP.data)) return res.status(404).json({ error: 'HR case not found' });
     const parsed = caseNoteBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrRepo.createCaseNote(req.home.id, caseTypeP.data, caseIdP.data, {

@@ -201,10 +201,24 @@ export default function DisciplinaryTracker() {
 
   async function handleExport() {
     const { downloadXLSX } = await import('../lib/excel.js');
+    const exportRows = [];
+    let exportOffset = 0;
+    let exportTotal = Infinity;
+    while (exportRows.length < exportTotal) {
+      const filters = { limit: 500, offset: exportOffset };
+      if (filterStaff) filters.staffId = filterStaff;
+      if (filterStatus) filters.status = filterStatus;
+      const res = await getHrDisciplinary(home, filters);
+      const rows = res?.rows || [];
+      exportRows.push(...rows);
+      exportTotal = res?.total ?? exportRows.length;
+      if (rows.length === 0) break;
+      exportOffset += rows.length;
+    }
     downloadXLSX('disciplinary_cases', [{
       name: 'Disciplinary',
       headers: ['Staff ID', 'Date Raised', 'Category', 'Status', 'Outcome', 'Raised By', 'Source'],
-      rows: cases.map(c => [
+      rows: exportRows.map(c => [
         c.staff_id, c.date_raised,
         DISCIPLINARY_CATEGORIES.find(cat => cat.id === c.category)?.name || c.category,
         DISCIPLINARY_STATUSES.find(s => s.id === c.status)?.name || c.status,

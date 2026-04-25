@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, CARE_TYPES, getLabel, formatCurrency } from '../../lib/finance.js';
@@ -13,6 +13,27 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const readOnly = !canEdit;
+  const id = useId();
+  const ids = {
+    residentName: `${id}-resident-name`,
+    roomNumber: `${id}-room-number`,
+    admissionDate: `${id}-admission-date`,
+    careType: `${id}-care-type`,
+    fundingType: `${id}-funding-type`,
+    fundingAuthority: `${id}-funding-authority`,
+    fundingReference: `${id}-funding-reference`,
+    notes: `${id}-notes`,
+    weeklyFee: `${id}-weekly-fee`,
+    laContribution: `${id}-la-contribution`,
+    chcContribution: `${id}-chc-contribution`,
+    fncAmount: `${id}-fnc-amount`,
+    topUpAmount: `${id}-top-up-amount`,
+    topUpPayer: `${id}-top-up-payer`,
+    topUpContact: `${id}-top-up-contact`,
+    lastFeeReview: `${id}-last-fee-review`,
+    nextFeeReview: `${id}-next-fee-review`,
+    feeChangeReason: `${id}-fee-change-reason`,
+  };
 
   const feeChanged = form.weekly_fee != resident.weekly_fee;
 
@@ -90,46 +111,46 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
       {tab === 'profile' && (
         <div className="space-y-3">
           <div>
-            <label className={INPUT.label}>Resident Name *</label>
-            <input className={INPUT.base} value={form.resident_name || ''} onChange={e => set('resident_name', e.target.value)} disabled={readOnly} />
+            <label htmlFor={ids.residentName} className={INPUT.label}>Resident Name *</label>
+            <input id={ids.residentName} className={INPUT.base} value={form.resident_name || ''} onChange={e => set('resident_name', e.target.value)} disabled={readOnly} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Room Number</label>
-              <input className={INPUT.base} value={form.room_number || ''} onChange={e => set('room_number', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.roomNumber} className={INPUT.label}>Room Number</label>
+              <input id={ids.roomNumber} className={INPUT.base} value={form.room_number || ''} onChange={e => set('room_number', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Admission Date</label>
-              <input type="date" className={INPUT.base} value={form.admission_date || ''} onChange={e => set('admission_date', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.admissionDate} className={INPUT.label}>Admission Date</label>
+              <input id={ids.admissionDate} type="date" className={INPUT.base} value={form.admission_date || ''} onChange={e => set('admission_date', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Care Type</label>
-              <select className={INPUT.select} value={form.care_type || ''} onChange={e => set('care_type', e.target.value)} disabled={readOnly}>
+              <label htmlFor={ids.careType} className={INPUT.label}>Care Type</label>
+              <select id={ids.careType} className={INPUT.select} value={form.care_type || ''} onChange={e => set('care_type', e.target.value)} disabled={readOnly}>
                 {CARE_TYPES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Funding Type</label>
-              <select className={INPUT.select} value={form.funding_type || ''} onChange={e => set('funding_type', e.target.value)} disabled={readOnly}>
+              <label htmlFor={ids.fundingType} className={INPUT.label}>Funding Type</label>
+              <select id={ids.fundingType} className={INPUT.select} value={form.funding_type || ''} onChange={e => set('funding_type', e.target.value)} disabled={readOnly}>
                 {FUNDING_TYPES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Funding Authority</label>
-              <input className={INPUT.base} value={form.funding_authority || ''} onChange={e => set('funding_authority', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.fundingAuthority} className={INPUT.label}>Funding Authority</label>
+              <input id={ids.fundingAuthority} className={INPUT.base} value={form.funding_authority || ''} onChange={e => set('funding_authority', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Funding Reference</label>
-              <input className={INPUT.base} value={form.funding_reference || ''} onChange={e => set('funding_reference', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.fundingReference} className={INPUT.label}>Funding Reference</label>
+              <input id={ids.fundingReference} className={INPUT.base} value={form.funding_reference || ''} onChange={e => set('funding_reference', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Notes</label>
-            <textarea className={INPUT.base} rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} disabled={readOnly} />
+            <label htmlFor={ids.notes} className={INPUT.label}>Notes</label>
+            <textarea id={ids.notes} className={INPUT.base} rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} disabled={readOnly} />
           </div>
         </div>
       )}
@@ -138,52 +159,52 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Weekly Fee</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.weeklyFee} className={INPUT.label}>Weekly Fee</label>
+              <input id={ids.weeklyFee} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>LA Contribution</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.laContribution} className={INPUT.label}>LA Contribution</label>
+              <input id={ids.laContribution} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>CHC Contribution</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.chcContribution} className={INPUT.label}>CHC Contribution</label>
+              <input id={ids.chcContribution} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>FNC Amount</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.fncAmount} className={INPUT.label}>FNC Amount</label>
+              <input id={ids.fncAmount} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className={INPUT.label}>Top-Up Amount</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.topUpAmount} className={INPUT.label}>Top-Up Amount</label>
+              <input id={ids.topUpAmount} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Top-Up Payer</label>
-              <input className={INPUT.base} value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.topUpPayer} className={INPUT.label}>Top-Up Payer</label>
+              <input id={ids.topUpPayer} className={INPUT.base} value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Top-Up Contact</label>
-              <input className={INPUT.base} value={form.top_up_contact || ''} onChange={e => set('top_up_contact', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.topUpContact} className={INPUT.label}>Top-Up Contact</label>
+              <input id={ids.topUpContact} className={INPUT.base} value={form.top_up_contact || ''} onChange={e => set('top_up_contact', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Last Fee Review</label>
-              <input type="date" className={INPUT.base} value={form.last_fee_review || ''} onChange={e => set('last_fee_review', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.lastFeeReview} className={INPUT.label}>Last Fee Review</label>
+              <input id={ids.lastFeeReview} type="date" className={INPUT.base} value={form.last_fee_review || ''} onChange={e => set('last_fee_review', e.target.value)} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Next Fee Review</label>
-              <input type="date" className={INPUT.base} value={form.next_fee_review || ''} onChange={e => set('next_fee_review', e.target.value)} disabled={readOnly} />
+              <label htmlFor={ids.nextFeeReview} className={INPUT.label}>Next Fee Review</label>
+              <input id={ids.nextFeeReview} type="date" className={INPUT.base} value={form.next_fee_review || ''} onChange={e => set('next_fee_review', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           {feeChanged && canEdit && (
             <div>
-              <label className={INPUT.label}>Fee Change Reason *</label>
-              <input className={INPUT.base} value={feeChangeReason} onChange={e => setFeeChangeReason(e.target.value)} placeholder="e.g. Annual fee uplift" />
+              <label htmlFor={ids.feeChangeReason} className={INPUT.label}>Fee Change Reason *</label>
+              <input id={ids.feeChangeReason} className={INPUT.base} value={feeChangeReason} onChange={e => setFeeChangeReason(e.target.value)} placeholder="e.g. Annual fee uplift" />
             </div>
           )}
           {resident.last_payment_date && (

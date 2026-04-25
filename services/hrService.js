@@ -43,6 +43,29 @@ function groupSpells(dates) {
   return spells;
 }
 
+function toDateOnly(value) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+function addRtwSpellDates(targetSet, row, cutoff) {
+  const start = toDateOnly(row.absence_start_date);
+  if (!start) return;
+  const end = toDateOnly(row.absence_end_date) || start;
+  let current = start < cutoff ? cutoff : start;
+  while (current <= end) {
+    targetSet.add(current);
+    const next = new Date(`${current}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    current = next.toISOString().slice(0, 10);
+  }
+}
+
+function getOrCreateDateSet(map, staffId) {
+  if (!map.has(staffId)) map.set(staffId, new Set());
+  return map.get(staffId);
+}
+
 /**
  * Calculate Bradford Factor scores for all staff with SICK overrides in the
  * rolling 12 months. Formula: S x S x D (S = separate spells, D = total days).
@@ -52,22 +75,26 @@ export async function calculateBradfordScores(homeId) {
   const yearAgo = new Date(Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate()));
   const cutoff = yearAgo.toISOString().slice(0, 10);
 
-  const [sickRows, homeConfig] = await Promise.all([
+  const [sickRows, rtwRows, homeConfig] = await Promise.all([
     hrRepo.findSickOverrides(homeId, cutoff),
+    hrRepo.findRtwAbsenceSpells(homeId, cutoff),
     hrRepo.findHomeConfig(homeId),
   ]);
   const triggers = homeConfig.absence_triggers || DEFAULT_TRIGGERS;
 
-  // Group rows by staff_id
+  // Group absence dates by staff_id. A Set de-duplicates overlaps where RTW
+  // records and rota SICK overrides describe the same spell.
   const byStaff = new Map();
   for (const row of sickRows) {
-    const dateStr = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : row.date;
-    if (!byStaff.has(row.staff_id)) byStaff.set(row.staff_id, []);
-    byStaff.get(row.staff_id).push(dateStr);
+    getOrCreateDateSet(byStaff, row.staff_id).add(toDateOnly(row.date));
+  }
+  for (const row of rtwRows) {
+    addRtwSpellDates(getOrCreateDateSet(byStaff, row.staff_id), row, cutoff);
   }
 
   const results = [];
-  for (const [staff_id, dates] of byStaff) {
+  for (const [staff_id, dateSet] of byStaff) {
+    const dates = [...dateSet].filter(Boolean).sort();
     const spells = groupSpells(dates);
     const totalDays = spells.reduce((sum, s) => sum + s.days, 0);
     const s = spells.length;
@@ -93,15 +120,16 @@ export async function getAbsenceSummary(homeId, staffId) {
   const yearAgo = new Date(Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate()));
   const cutoff = yearAgo.toISOString().slice(0, 10);
 
-  const [sickRows, homeConfig] = await Promise.all([
+  const [sickRows, rtwRows, homeConfig] = await Promise.all([
     hrRepo.findStaffSickOverrides(homeId, staffId, cutoff),
+    hrRepo.findStaffRtwAbsenceSpells(homeId, staffId, cutoff),
     hrRepo.findHomeConfig(homeId),
   ]);
   const triggers = homeConfig.absence_triggers || DEFAULT_TRIGGERS;
 
-  const dates = sickRows.map(r =>
-    r.date instanceof Date ? r.date.toISOString().slice(0, 10) : r.date
-  );
+  const dateSet = new Set(sickRows.map(r => toDateOnly(r.date)).filter(Boolean));
+  for (const row of rtwRows) addRtwSpellDates(dateSet, row, cutoff);
+  const dates = [...dateSet].sort();
   const spells = groupSpells(dates);
   const totalDays = spells.reduce((sum, s) => sum + s.days, 0);
   const s = spells.length;

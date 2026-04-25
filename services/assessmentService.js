@@ -198,7 +198,8 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
 }
 
 export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = todayLocalISO()) {
-  const data = await gatherCqcData(homeId);
+  const dateRange = getDateRange(dateRangeDays);
+  const data = await gatherCqcData(homeId, formatDate(dateRange.from), formatDate(dateRange.to));
   if (!data) return null;
-  return buildReadinessPayload(data, getDateRange(dateRangeDays), asOfDate);
+  return buildReadinessPayload(data, dateRange, asOfDate);
 }

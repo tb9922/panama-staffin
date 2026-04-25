@@ -14,10 +14,10 @@ export { findFlexWorking, findFlexWorkingById, createFlexWorking, updateFlexWork
 export { findEdi, findEdiById, createEdi, updateEdi } from './edi.js';
 export { findTupe, findTupeById, createTupe, updateTupe } from './tupe.js';
 export { findRenewals, findRenewalById, createRenewal, updateRenewal } from './renewal.js';
-export { findCaseNotes, createCaseNote, deleteCaseNote } from './caseNotes.js';
+export { findCaseNotes, createCaseNote, deleteCaseNote, caseExists } from './caseNotes.js';
 export { findAttachments, findAttachmentById, createAttachment, deleteAttachment } from './attachments.js';
 export { findMeetings, findMeetingById, createMeeting, updateMeeting, deleteMeeting } from './meetings.js';
-export { findSickOverrides, findStaffSickOverrides, findHomeConfig } from './absence.js';
+export { findSickOverrides, findStaffSickOverrides, findRtwAbsenceSpells, findStaffRtwAbsenceSpells, findHomeConfig } from './absence.js';
 export { getActiveWarnings } from './warnings.js';
 export { getHrStats } from './stats.js';
 export { purgeExpiredRecords } from './gdpr.js';

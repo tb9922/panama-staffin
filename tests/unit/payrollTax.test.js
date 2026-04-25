@@ -29,8 +29,8 @@ describe('payrollTax', () => {
   });
 
   it('derives the HMRC payment due date from tax year and tax month', () => {
-    expect(getHMRCPaymentDueDate(2026, 1)).toBe('2026-06-19');
-    expect(getHMRCPaymentDueDate(2026, 12)).toBe('2027-05-19');
+    expect(getHMRCPaymentDueDate(2026, 1)).toBe('2026-05-19');
+    expect(getHMRCPaymentDueDate(2026, 12)).toBe('2027-04-19');
   });
 
   it('parses standard, Scottish, Welsh, BR, D0, D1, and K tax codes', () => {

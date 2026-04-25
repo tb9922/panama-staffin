@@ -222,6 +222,19 @@ export function requireModule(moduleId, level = 'read', options = {}) {
 }
 
 /**
+ * Block specific home roles after requireHomeAccess has populated req.homeRole.
+ * Platform admins still bypass because their home assignment was re-verified.
+ */
+export function denyHomeRoles(roleIds, message = 'Insufficient permissions') {
+  const blocked = new Set(roleIds);
+  return (req, res, next) => {
+    if (req.user.is_platform_admin && req.homeRole != null) return next();
+    if (blocked.has(req.homeRole)) return res.status(403).json({ error: message });
+    next();
+  };
+}
+
+/**
  * Home manager check - for user management within a home.
  * Must be used AFTER requireHomeAccess (needs req.homeRole).
  */

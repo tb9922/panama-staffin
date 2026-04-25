@@ -53,6 +53,7 @@ function ProviderModal({ existing, onSave, onClose }) {
         rate_day:   form.rate_day !== '' ? parseFloat(form.rate_day) : null,
         rate_night: form.rate_night !== '' ? parseFloat(form.rate_night) : null,
         active:     form.active,
+        ...(existing ? { _version: existing.version } : {}),
       };
       if (existing) {
         await updateAgencyProvider(homeSlug, existing.id, payload);
@@ -82,11 +83,11 @@ function ProviderModal({ existing, onSave, onClose }) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={INPUT.label}>Day Rate (£/hr)</label>
-            <input type="number" step="0.01" className={INPUT.base} value={form.rate_day} onChange={e => set('rate_day', e.target.value)} placeholder="e.g. 18.50" />
+            <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.rate_day} onChange={e => set('rate_day', e.target.value)} placeholder="e.g. 18.50" />
           </div>
           <div>
             <label className={INPUT.label}>Night Rate (£/hr)</label>
-            <input type="number" step="0.01" className={INPUT.base} value={form.rate_night} onChange={e => set('rate_night', e.target.value)} placeholder="e.g. 22.00" />
+            <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.rate_night} onChange={e => set('rate_night', e.target.value)} placeholder="e.g. 22.00" />
           </div>
         </div>
         {existing && (
@@ -154,6 +155,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
         invoice_ref:  form.invoice_ref || null,
         role_covered: form.role_covered || null,
         reconciled:   form.reconciled,
+        ...(existing ? { _version: existing.version } : {}),
       };
       if (existing) {
         await updateAgencyShift(homeSlug, existing.id, payload);
@@ -195,7 +197,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
           </div>
           <div>
             <label className={INPUT.label}>Hours *</label>
-            <input type="number" step="0.5" className={INPUT.base} value={form.hours} onChange={e => set('hours', e.target.value)} placeholder="e.g. 12" />
+            <input type="number" step="0.5" inputMode="decimal" className={INPUT.base} value={form.hours} onChange={e => set('hours', e.target.value)} placeholder="e.g. 12" />
           </div>
           <div>
             <label className={INPUT.label}>Rate (£/hr) *</label>

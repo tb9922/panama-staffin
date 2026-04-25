@@ -201,6 +201,10 @@ router.put('/requests/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     const statusError = validateGdprRequestStatusChange(existing, parsed.data);
     if (statusError) return res.status(400).json({ error: statusError });
     const { version, payload } = splitVersion(parsed.data);
+    if (payload.status === 'completed') {
+      payload.completed_date = new Date().toISOString().slice(0, 10);
+      payload.completed_by = req.user.username;
+    }
     const result = await gdprService.updateRequest(idP.data, req.home.id, payload, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);

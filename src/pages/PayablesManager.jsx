@@ -361,7 +361,7 @@ export default function PayablesManager() {
           </div>
           <div>
             <label className={INPUT.label}>Amount *</label>
-            <input type="number" step="0.01" value={form.amount ?? ''} onChange={event => setField('amount', event.target.value)} className={INPUT.base} />
+            <input type="number" step="0.01" inputMode="decimal" value={form.amount ?? ''} onChange={event => setField('amount', event.target.value)} className={INPUT.base} />
           </div>
           <div>
             <label className={INPUT.label}>Next Due *</label>

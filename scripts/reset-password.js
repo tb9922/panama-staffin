@@ -3,21 +3,36 @@
  * Reset a user's password and clear any account lockout.
  *
  * Usage:
- *   node scripts/reset-password.js admin NewPassword1
- *   node scripts/reset-password.js viewer ViewerPass1
+ *   RESET_PASSWORD='NewPassword1' node scripts/reset-password.js admin
+ *   echo 'NewPassword1' | node scripts/reset-password.js viewer
  *
  * Password requirements: 10+ chars, uppercase, lowercase, number.
  */
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import { readFileSync } from 'fs';
 
 const { Pool } = pg;
 
 const username = process.argv[2];
-const password = process.argv[3];
+let password = process.env.RESET_PASSWORD || '';
+if (!password && !process.stdin.isTTY) {
+  password = readFileSync(0, 'utf8').trim();
+}
 
 if (!username || !password) {
-  console.error('Usage: node scripts/reset-password.js <username> <password>');
+  console.error('Usage: RESET_PASSWORD=<password> node scripts/reset-password.js <username>');
+  console.error('   or: echo <password> | node scripts/reset-password.js <username>');
+  process.exit(1);
+}
+
+if (process.argv[3]) {
+  console.error('Refusing password via argv because it can leak through shell history and process lists.');
+  process.exit(1);
+}
+
+if (!process.env.DB_PASSWORD) {
+  console.error('DB_PASSWORD is required');
   process.exit(1);
 }
 
@@ -31,7 +46,7 @@ const pool = new Pool({
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'panama_dev',
   user: process.env.DB_USER || 'panama',
-  password: process.env.DB_PASSWORD || 'panama_dev_secret',
+  password: process.env.DB_PASSWORD,
 });
 
 try {

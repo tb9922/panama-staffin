@@ -11,10 +11,15 @@ import { validatePassword } from './userService.js';
 
 const INVITE_TTL_HOURS = 72;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+const USERNAME_RE = /^[a-z0-9._-]+$/;
 
 function ensureStrongPassword(password) {
   const err = validatePassword(password);
   if (err) throw new ValidationError(err);
+}
+
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
 }
 
 export async function createInvite({ homeId, staffId, createdBy }) {
@@ -48,6 +53,10 @@ export async function createInvite({ homeId, staffId, createdBy }) {
 
 export async function consumeInvite({ token, username, password }) {
   ensureStrongPassword(password);
+  const normalizedUsername = normalizeUsername(username);
+  if (normalizedUsername.length < 3 || normalizedUsername.length > 100 || !USERNAME_RE.test(normalizedUsername)) {
+    throw new ValidationError('Username must be 3-100 characters and use letters, numbers, dots, underscores, or hyphens');
+  }
 
   return withTransaction(async (client) => {
     const invite = await staffAuthRepo.findInviteToken(token, client);
@@ -56,11 +65,11 @@ export async function consumeInvite({ token, username, password }) {
     if (new Date(invite.expiresAt) <= new Date()) throw new AppError('Invite token has expired', 410, 'INVITE_EXPIRED');
     if (!invite.staffActive) throw new ForbiddenError('Staff member is not active');
 
-    const existingStaffCredentials = await staffAuthRepo.findByUsername(username, client);
+    const existingStaffCredentials = await staffAuthRepo.findByUsername(normalizedUsername, client);
     if (existingStaffCredentials) {
       throw new ConflictError('Username is already in use', 'USERNAME_TAKEN');
     }
-    const existingUser = await userRepo.findByUsername(username).catch((err) => {
+    const existingUser = await userRepo.findByUsername(normalizedUsername).catch((err) => {
       if (err.code === '42P01') return null;
       throw err;
     });
@@ -72,18 +81,18 @@ export async function consumeInvite({ token, username, password }) {
     const credentials = await staffAuthRepo.createCredentials({
       homeId: invite.homeId,
       staffId: invite.staffId,
-      username,
+      username: normalizedUsername,
       passwordHash,
     }, client);
     await staffAuthRepo.consumeInviteToken(token, client);
-    await authRepo.clearForUser(username);
+    await authRepo.clearForUser(normalizedUsername);
 
-    await auditService.log('staff_invite_consumed', invite.homeSlug, username, {
+    await auditService.log('staff_invite_consumed', invite.homeSlug, normalizedUsername, {
       staff_id: invite.staffId,
     }, client);
 
     return {
-      username,
+      username: normalizedUsername,
       role: 'staff_member',
       displayName: credentials.staffName || '',
       isPlatformAdmin: false,

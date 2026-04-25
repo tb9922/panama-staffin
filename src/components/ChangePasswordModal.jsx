@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import Modal from './Modal.jsx';
 import { changeOwnPassword } from '../lib/api.js';
 import { BTN, INPUT, MODAL } from '../lib/design.js';
@@ -10,6 +10,9 @@ export default function ChangePasswordModal({ onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+  const currentPasswordId = useId();
+  const nextPasswordId = useId();
+  const confirmPasswordId = useId();
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -46,17 +49,17 @@ export default function ChangePasswordModal({ onClose }) {
           <>
             <div className="space-y-3">
               <div>
-                <label className={INPUT.label}>Current Password</label>
-                <input className={INPUT.base} type="password" value={current} onChange={e => setCurrent(e.target.value)} required autoFocus aria-describedby={error ? 'pw-error' : undefined} aria-invalid={!!error} />
+                <label htmlFor={currentPasswordId} className={INPUT.label}>Current Password</label>
+                <input id={currentPasswordId} className={INPUT.base} type="password" value={current} onChange={e => setCurrent(e.target.value)} required autoFocus aria-describedby={error ? 'pw-error' : undefined} aria-invalid={!!error} />
               </div>
               <div>
-                <label className={INPUT.label}>New Password</label>
-                <input className={INPUT.base} type="password" value={nextPassword} onChange={e => setNextPassword(e.target.value)} required minLength={10} maxLength={200} aria-describedby={error ? 'pw-error' : undefined} aria-invalid={!!error} />
+                <label htmlFor={nextPasswordId} className={INPUT.label}>New Password</label>
+                <input id={nextPasswordId} className={INPUT.base} type="password" value={nextPassword} onChange={e => setNextPassword(e.target.value)} required minLength={10} maxLength={200} aria-describedby={error ? 'pw-error' : undefined} aria-invalid={!!error} />
                 <p className="mt-1 text-xs text-gray-500">Minimum 10 characters</p>
               </div>
               <div>
-                <label className={INPUT.label}>Confirm New Password</label>
-                <input className={INPUT.base} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required aria-describedby={error ? 'pw-error' : undefined} aria-invalid={!!error} />
+                <label htmlFor={confirmPasswordId} className={INPUT.label}>Confirm New Password</label>
+                <input id={confirmPasswordId} className={INPUT.base} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required aria-describedby={error ? 'pw-error' : undefined} aria-invalid={!!error} />
               </div>
             </div>
             <div className={MODAL.footer}>

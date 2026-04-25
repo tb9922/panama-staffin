@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { parseDate } from '../lib/rotation.js';
+import { formatDate, parseDate } from '../lib/rotation.js';
+import { getDateRange } from '../lib/cqc.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
@@ -72,7 +73,12 @@ function ReportsInner({ data }) {
         if (selectedSnapshotId) {
           snapshot = await getSnapshot(homeSlug, selectedSnapshotId);
         }
-        generateBoardPackPDF(data, boardDays, snapshot);
+        const range = getDateRange(boardDays);
+        const reportData = await getSchedulingData(homeSlug, {
+          from: formatDate(range.from),
+          to: formatDate(range.to),
+        });
+        generateBoardPackPDF(reportData, boardDays, snapshot);
         dateRange = `${boardDays} days${snapshot ? ` (snapshot: ${snapshot.computed_at?.slice(0, 10)})` : ''}`;
       }
       logReportDownload(type, dateRange);

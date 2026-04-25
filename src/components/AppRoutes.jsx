@@ -70,13 +70,13 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* Scheduling */}
-      <Route path="/" element={<RouteErrorBoundary><RequireModule module="scheduling"><Dashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/" element={<RouteErrorBoundary><RequireModule module="scheduling" allowOwn><Dashboard /></RequireModule></RouteErrorBoundary>} />
       <Route path="/day" element={<RouteErrorBoundary><RequireModule module="scheduling"><DailyStatus /></RequireModule></RouteErrorBoundary>} />
       <Route path="/day/:date" element={<RouteErrorBoundary><RequireModule module="scheduling"><DailyStatus /></RequireModule></RouteErrorBoundary>} />
       <Route path="/handover" element={<RouteErrorBoundary><RequireModule module="scheduling"><HandoverNotes /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/rotation" element={<RouteErrorBoundary><RequireModule module="scheduling"><RotationGrid /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/rotation" element={<RouteErrorBoundary><RequireModule module="scheduling" allowOwn><RotationGrid /></RequireModule></RouteErrorBoundary>} />
       <Route path="/scenarios" element={<RouteErrorBoundary><RequireModule module="scheduling"><ScenarioModel /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/leave" element={<RouteErrorBoundary><RequireModule module="scheduling"><AnnualLeave /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/leave" element={<RouteErrorBoundary><RequireModule module="scheduling" allowOwn><AnnualLeave /></RequireModule></RouteErrorBoundary>} />
 
       {/* Staff */}
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
@@ -134,7 +134,7 @@ export default function AppRoutes() {
       <Route path="/payroll/sick-pay"   element={<RouteErrorBoundary><RequireModule module="payroll"><SickPayTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/hmrc"       element={<RouteErrorBoundary><RequireModule module="payroll"><HMRCDashboard /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/:runId"     element={<RouteErrorBoundary><RequireModule module="payroll"><PayrollDetail /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/payroll"            element={<RouteErrorBoundary><RequireModule module="payroll"><PayrollDashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/payroll"            element={<RouteErrorBoundary><RequireModule module="payroll" allowOwn><PayrollDashboard /></RequireModule></RouteErrorBoundary>} />
 
       {/* GDPR */}
       <Route path="/gdpr" element={<RouteErrorBoundary><RequireModule module="gdpr"><GdprDashboard /></RequireModule></RouteErrorBoundary>} />

@@ -298,11 +298,11 @@ export default function ContractManager() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={INPUT.label}>Hours/Week</label>
-                  <input type="number" step="0.5" className={INPUT.base} value={form.hours_per_week} onChange={e => f('hours_per_week', e.target.value)} />
+                  <input type="number" step="0.5" inputMode="decimal" className={INPUT.base} value={form.hours_per_week} onChange={e => f('hours_per_week', e.target.value)} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Hourly Rate</label>
-                  <input type="number" step="0.01" className={INPUT.base} value={form.hourly_rate} onChange={e => f('hourly_rate', e.target.value)} />
+                  <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.hourly_rate} onChange={e => f('hourly_rate', e.target.value)} />
                 </div>
               </div>
               <div>

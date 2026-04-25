@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 
 const HOME_SLUG = 'e2e-test-home';
 const STAFF_ID = 'S002';
+const API_BASE = process.env.E2E_API_BASE || 'http://localhost:3001';
 
 function isoForCurrentMonth(day = 15) {
   const now = new Date();
@@ -25,7 +26,7 @@ async function getCsrfToken(page) {
 async function deleteAdjustmentIfPresent(page, dateStr) {
   const csrfToken = await getCsrfToken(page);
   await page.request.delete(
-    `http://localhost:3001/api/payroll/timesheets/adjustments?home=${HOME_SLUG}&staff_id=${STAFF_ID}&date=${dateStr}`,
+    `${API_BASE}/api/payroll/timesheets/adjustments?home=${HOME_SLUG}&staff_id=${STAFF_ID}&date=${dateStr}`,
     { headers: { 'X-CSRF-Token': csrfToken } },
   );
 }
@@ -33,7 +34,7 @@ async function deleteAdjustmentIfPresent(page, dateStr) {
 async function upsertOverride(page, dateStr) {
   const csrfToken = await getCsrfToken(page);
   const response = await page.request.put(
-    `http://localhost:3001/api/scheduling/overrides?home=${HOME_SLUG}`,
+    `${API_BASE}/api/scheduling/overrides?home=${HOME_SLUG}`,
     {
       headers: { 'X-CSRF-Token': csrfToken },
       data: {
@@ -50,7 +51,7 @@ async function upsertOverride(page, dateStr) {
 async function upsertShortfallTimesheet(page, dateStr) {
   const csrfToken = await getCsrfToken(page);
   const response = await page.request.post(
-    `http://localhost:3001/api/payroll/timesheets?home=${HOME_SLUG}`,
+    `${API_BASE}/api/payroll/timesheets?home=${HOME_SLUG}`,
     {
       headers: { 'X-CSRF-Token': csrfToken },
       data: {

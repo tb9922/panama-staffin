@@ -326,8 +326,11 @@ export async function acknowledgeHandoverEntry(homeSlug, id) {
 
 // ── Incidents ────────────────────────────────────────────────────────────────
 
-export async function getIncidents(homeSlug) {
-  return apiFetch(`${API_BASE}/incidents?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getIncidents(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/incidents?${params}`, { headers: authHeaders() });
 }
 
 export async function createIncident(homeSlug, data) {
@@ -572,8 +575,11 @@ export async function deleteMcaAssessment(homeSlug, id) {
 
 // ── CQC Evidence ─────────────────────────────────────────────────────────────
 
-export async function getCqcEvidence(homeSlug) {
-  return apiFetch(`${API_BASE}/cqc-evidence?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getCqcEvidence(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/cqc-evidence?${params}`, { headers: authHeaders() });
 }
 
 export async function createCqcEvidence(homeSlug, data) {

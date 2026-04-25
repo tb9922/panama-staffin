@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { updateFinanceResident } from '../../lib/api.js';
@@ -17,6 +17,10 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const id = useId();
+  const reasonId = `${id}-reason`;
+  const dischargeDateId = `${id}-discharge-date`;
+  const notesId = `${id}-notes`;
 
   const hasBed = resident.bed != null;
   const bedManagerUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
@@ -63,18 +67,18 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
 
       <div className="space-y-3">
         <div>
-          <label className={INPUT.label}>Reason *</label>
-          <select className={INPUT.select} value={reason} onChange={e => setReason(e.target.value)}>
+          <label htmlFor={reasonId} className={INPUT.label}>Reason *</label>
+          <select id={reasonId} className={INPUT.select} value={reason} onChange={e => setReason(e.target.value)}>
             {DISCHARGE_REASONS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
           </select>
         </div>
         <div>
-          <label className={INPUT.label}>Discharge Date *</label>
-          <input type="date" className={INPUT.base} value={dischargeDate} onChange={e => setDischargeDate(e.target.value)} />
+          <label htmlFor={dischargeDateId} className={INPUT.label}>Discharge Date *</label>
+          <input id={dischargeDateId} type="date" className={INPUT.base} value={dischargeDate} onChange={e => setDischargeDate(e.target.value)} />
         </div>
         <div>
-          <label className={INPUT.label}>Notes</label>
-          <textarea className={INPUT.base} rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional discharge notes" />
+          <label htmlFor={notesId} className={INPUT.label}>Notes</label>
+          <textarea id={notesId} className={INPUT.base} rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional discharge notes" />
         </div>
       </div>
 

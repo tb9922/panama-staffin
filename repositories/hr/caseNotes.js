@@ -13,6 +13,31 @@ const CASE_SUBJECT_SQL = {
   performance: 'SELECT staff_id AS subject_id FROM hr_performance_cases WHERE home_id = $1 AND id = $2',
 };
 
+const CASE_TABLES = {
+  disciplinary: 'hr_disciplinary_cases',
+  grievance: 'hr_grievance_cases',
+  performance: 'hr_performance_cases',
+  rtw_interview: 'hr_rtw_interviews',
+  oh_referral: 'hr_oh_referrals',
+  contract: 'hr_contracts',
+  family_leave: 'hr_family_leave',
+  flexible_working: 'hr_flexible_working',
+  edi: 'hr_edi_records',
+  tupe: 'hr_tupe_transfers',
+  renewal: 'hr_rtw_dbs_renewals',
+};
+
+export async function caseExists(homeId, caseType, caseId, client) {
+  const table = CASE_TABLES[caseType];
+  if (!table) return false;
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT 1 FROM ${table} WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL LIMIT 1`,
+    [homeId, caseId]
+  );
+  return rows.length > 0;
+}
+
 async function resolveCaseSubject(homeId, caseType, caseId, conn) {
   const sql = CASE_SUBJECT_SQL[caseType];
   if (!sql) return { subject_type: null, subject_id: null };

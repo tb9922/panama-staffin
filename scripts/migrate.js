@@ -56,12 +56,16 @@ try {
 
 const { Pool } = pg;
 const sslEnabled = (process.env.DB_SSL || 'true').toLowerCase() !== 'false';
+const migrationStatementTimeout = parseInt(process.env.MIGRATION_STATEMENT_TIMEOUT_MS || '300000', 10);
+const migrationLockTimeout = parseInt(process.env.MIGRATION_LOCK_TIMEOUT_MS || '15000', 10);
+const migrationIdleTxTimeout = parseInt(process.env.MIGRATION_IDLE_TX_TIMEOUT_MS || '300000', 10);
 const pool = new Pool({
   host:     process.env.DB_HOST     || 'localhost',
   port:     parseInt(process.env.DB_PORT || '5432', 10),
   database: dbOverride || process.env.DB_NAME || 'panama_dev',
   user:     process.env.DB_USER     || 'panama',
   password: process.env.DB_PASSWORD,
+  options: `-c timezone=UTC -c statement_timeout=${migrationStatementTimeout} -c lock_timeout=${migrationLockTimeout} -c idle_in_transaction_session_timeout=${migrationIdleTxTimeout}`,
   ...(sslEnabled ? { ssl: { rejectUnauthorized: (process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false' } } : {}),
 });
 

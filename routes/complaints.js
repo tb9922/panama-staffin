@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { denyHomeRoles, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
@@ -13,6 +13,10 @@ import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js'
 import { validateComplaintStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
+const sensitiveComplianceWrite = [
+  requireModule('compliance', 'write'),
+  denyHomeRoles(['training_lead'], 'Training leads cannot modify complaint records'),
+];
 const idSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
 
@@ -83,7 +87,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/complaints?home=X
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -96,7 +100,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
 });
 
 // PUT /api/complaints/:id?home=X
-router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -123,7 +127,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 });
 
 // DELETE /api/complaints/:id?home=X
-router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -135,7 +139,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
 });
 
 // POST /api/complaints/surveys?home=X
-router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -148,7 +152,7 @@ router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, requir
 });
 
 // PUT /api/complaints/surveys/:id?home=X
-router.put('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.put('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -170,7 +174,7 @@ router.put('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, req
 });
 
 // DELETE /api/complaints/surveys/:id?home=X
-router.delete('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.delete('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

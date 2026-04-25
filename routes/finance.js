@@ -5,7 +5,7 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as financeService from '../services/financeService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
-import { nullableDateInput } from '../lib/zodHelpers.js';
+import { nullableDateInput, requiredDateInput } from '../lib/zodHelpers.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 
@@ -15,6 +15,7 @@ const router = Router();
 
 const idSchema = z.coerce.number().int().positive();
 const dateSchema = nullableDateInput;
+const requiredDateSchema = requiredDateInput;
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
@@ -23,6 +24,10 @@ const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 const safeStr = (v, max = 50) => typeof v === 'string' ? v.slice(0, max) : undefined;
 const safeDate = v => (typeof v === 'string' && dateRe.test(v)) ? v : undefined;
 const safeInt = v => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : undefined; };
+const optionalMoney = z.preprocess(
+  v => (typeof v === 'string' && v.trim() === '') ? undefined : v,
+  z.coerce.number().min(0).optional()
+);
 
 function handleConstraintError(err, res) {
   if (err.code === '23505') return res.status(409).json({ error: 'Duplicate record — invoice number already exists' });
@@ -42,11 +47,11 @@ const residentBodySchema = z.object({
   funding_type: z.enum(['self_funded', 'la_funded', 'chc_funded', 'split_funded', 'respite']).optional(),
   funding_authority: z.string().max(200).nullable().optional(),
   funding_reference: z.string().max(100).nullable().optional(),
-  weekly_fee: z.coerce.number().min(0).optional(),
-  la_contribution: z.coerce.number().min(0).optional(),
-  chc_contribution: z.coerce.number().min(0).optional(),
-  fnc_amount: z.coerce.number().min(0).optional(),
-  top_up_amount: z.coerce.number().min(0).optional(),
+  weekly_fee: optionalMoney,
+  la_contribution: optionalMoney,
+  chc_contribution: optionalMoney,
+  fnc_amount: optionalMoney,
+  top_up_amount: optionalMoney,
   top_up_payer: z.string().max(200).nullable().optional(),
   top_up_contact: z.string().max(300).nullable().optional(),
   last_fee_review: dateSchema.nullable().optional(),
@@ -100,7 +105,7 @@ const paymentSchema = z.object({
 // ── Expense Schemas ───────────────────────────────────────────────────────────
 
 const expenseBodySchema = z.object({
-  expense_date: dateSchema,
+  expense_date: requiredDateSchema,
   category: z.enum([
     'staffing', 'agency', 'food', 'utilities', 'maintenance', 'medical_supplies',
     'cleaning', 'insurance', 'rent', 'rates', 'training', 'equipment',
@@ -130,7 +135,7 @@ const expenseUpdateSchema = expenseBodySchema.partial().omit({ status: true }).e
 // ── Chase Log Schema ─────────────────────────────────────────────────────────
 
 const chaseBodySchema = z.object({
-  chase_date: dateSchema,
+  chase_date: requiredDateSchema,
   method: z.enum(['email', 'phone', 'letter', 'in_person', 'other']),
   contact_name: z.string().max(200).nullable().optional(),
   outcome: z.string().max(2000).nullable().optional(),
@@ -150,7 +155,7 @@ const paymentScheduleBodySchema = z.object({
   description: z.string().max(500).nullable().optional(),
   frequency: z.enum(['weekly', 'monthly', 'quarterly', 'annually']),
   amount: z.coerce.number().positive(),
-  next_due: dateSchema,
+  next_due: requiredDateSchema,
   auto_approve: z.boolean().optional(),
   on_hold: z.boolean().optional(),
   hold_reason: z.string().max(2000).nullable().optional(),

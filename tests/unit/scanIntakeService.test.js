@@ -29,6 +29,7 @@ vi.mock('../../repositories/documentIntakeRepo.js', () => ({
 }));
 
 vi.mock('../../repositories/recordAttachments.js', () => ({
+  parentExists: vi.fn(),
   create: vi.fn(),
 }));
 
@@ -103,6 +104,7 @@ describe('scanIntakeService maintenance and record filing', () => {
     documentIntakeRepo.findBySha.mockResolvedValue(null);
     documentIntakeRepo.findById.mockResolvedValue(intakeItem);
     documentIntakeRepo.update.mockResolvedValue({ id: 7, status: 'confirmed' });
+    recordAttachmentsRepo.parentExists.mockResolvedValue(true);
     recordAttachmentsRepo.create.mockResolvedValue({ id: 55 });
   });
 
@@ -169,6 +171,7 @@ describe('scanIntakeService maintenance and record filing', () => {
       },
     }, 'alice');
 
+    expect(recordAttachmentsRepo.parentExists).toHaveBeenCalledWith(12, 'maintenance', 'mnt-existing-2', { tx: true });
     expect(recordAttachmentsRepo.create).toHaveBeenCalledWith(12, 'maintenance', 'mnt-existing-2', expect.objectContaining({
       original_name: 'scan.pdf',
       description: 'Existing certificate',
@@ -181,5 +184,20 @@ describe('scanIntakeService maintenance and record filing', () => {
     }), { tx: true });
     expect(result.routed_module).toBe('maintenance');
     expect(result.routed_record_id).toBe('mnt-existing-2');
+  });
+
+  it('rejects contextual record-attachment scans when the parent record is missing', async () => {
+    recordAttachmentsRepo.parentExists.mockResolvedValue(false);
+
+    await expect(confirmScanIntake(12, 7, {
+      target: 'record_attachment',
+      record_attachment: {
+        module: 'maintenance',
+        record_id: 'missing-record',
+        description: 'Missing certificate',
+      },
+    }, 'alice')).rejects.toMatchObject({ statusCode: 404 });
+
+    expect(recordAttachmentsRepo.create).not.toHaveBeenCalled();
   });
 });

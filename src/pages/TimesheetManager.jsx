@@ -560,7 +560,13 @@ export default function TimesheetManager() {
                   return (
                     <tr key={staff.id} className={TABLE.tr}>
                       <td className={TABLE.td}>
-                        <p className="font-medium text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => navigate(`/payroll/monthly-timesheet/${staff.id}`)}>{staff.name}</p>
+                        <button
+                          type="button"
+                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                          onClick={() => navigate(`/payroll/monthly-timesheet/${staff.id}`)}
+                        >
+                          {staff.name}
+                        </button>
                         <p className="text-xs text-gray-400">{staff.role}</p>
                       </td>
                       <td className={TABLE.td}>

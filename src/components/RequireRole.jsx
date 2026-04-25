@@ -1,12 +1,14 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { ROLES } from '../../shared/roles.js';
+import { isOwnDataOnly, ROLES } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 
-export function RequireModule({ module, children }) {
-  const { canRead } = useData();
+export function RequireModule({ module, allowOwn = false, children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { canRead, homeRole } = useData();
   if (!canRead(module)) return <Navigate to="/" replace />;
+  if (!isPlatformAdmin && !allowOwn && isOwnDataOnly(homeRole, module)) return <Navigate to="/" replace />;
   return children;
 }
 

@@ -1,8 +1,9 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { denyHomeRoles, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as incidentRepo from '../repositories/incidentRepo.js';
+import * as financeRepo from '../repositories/financeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -15,6 +16,10 @@ import { validateIncidentStatusChange } from '../lib/statusTransitions.js';
 import { getCqcNotificationDeadline } from '../shared/incidents.js';
 
 const router = Router();
+const sensitiveComplianceWrite = [
+  requireModule('compliance', 'write'),
+  denyHomeRoles(['training_lead'], 'Training leads cannot modify incident records'),
+];
 const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
 function normalizeTimeInput(value) {
@@ -87,6 +92,7 @@ const incidentBodySchema = z.object({
   description:                z.string().max(10000).nullable().optional(),
   person_affected:            z.string().max(100).nullable().optional(),
   person_affected_name:       z.string().max(200).nullable().optional(),
+  resident_id:                 z.coerce.number().int().positive().nullable().optional(),
   staff_involved:             z.array(z.string().max(20)).max(100).optional(),
   immediate_action:           z.string().max(5000).nullable().optional(),
   medical_attention:          z.boolean().optional(),
@@ -142,6 +148,16 @@ const incidentUpdateSchema = incidentBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
+async function validateResidentId(homeId, residentId, res) {
+  if (residentId == null) return true;
+  const resident = await financeRepo.findResidentById(residentId, homeId);
+  if (!resident) {
+    res.status(400).json({ error: 'Resident does not exist for this home' });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/incidents?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -176,10 +192,11 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/incidents?home=X
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
     const { id: _id, ...incidentBody } = parsed.data;
     const incident = await incidentRepo.upsert(
@@ -196,7 +213,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
 });
 
 // PUT /api/incidents/:id?home=X
-router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -205,6 +222,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     // Only send fields that were actually provided in the request body
     const updates = definedWithoutVersion(parsed.data);
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+    if (!await validateResidentId(req.home.id, updates.resident_id, res)) return;
     const existing = await incidentRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Incident not found' });
     const statusError = validateIncidentStatusChange(existing, updates);
@@ -244,7 +262,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 });
 
 // DELETE /api/incidents/:id?home=X
-router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -256,7 +274,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
 });
 
 // POST /api/incidents/:id/freeze?home=X
-router.post('/:id/freeze', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/:id/freeze', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -278,7 +296,7 @@ router.get('/:id/addenda', readRateLimiter, requireAuth, requireHomeAccess, requ
 });
 
 // POST /api/incidents/:id/addenda?home=X
-router.post('/:id/addenda', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/:id/addenda', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });

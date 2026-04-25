@@ -676,7 +676,7 @@ function InvoicesTab({ home, canEdit }) {
                     {INVOICE_STATUSES.filter(s => ['draft', 'sent'].includes(s.id)).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select></div>
                 <div><label className={INPUT.label}>Adjustments</label>
-                  <input type="number" step="0.01" value={form.adjustments ?? ''} onChange={e => set('adjustments', e.target.value)} className={INPUT.base} /></div>
+                  <input type="number" step="0.01" inputMode="decimal" value={form.adjustments ?? ''} onChange={e => set('adjustments', e.target.value)} className={INPUT.base} /></div>
                 <div className="col-span-2"><label className={INPUT.label}>Notes</label>
                   <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
               </div>
@@ -694,11 +694,11 @@ function InvoicesTab({ home, canEdit }) {
                           {LINE_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                         </select></div>
                       <div className="col-span-1"><label className={INPUT.label}>Qty</label>
-                        <input type="number" step="0.01" value={line.quantity ?? 1} onChange={e => updateLine(idx, 'quantity', e.target.value)} className={INPUT.sm} /></div>
+                        <input type="number" step="0.01" inputMode="decimal" value={line.quantity ?? 1} onChange={e => updateLine(idx, 'quantity', e.target.value)} className={INPUT.sm} /></div>
                       <div className="col-span-2"><label className={INPUT.label}>Unit Price</label>
-                        <input type="number" step="0.01" value={line.unit_price ?? ''} onChange={e => updateLine(idx, 'unit_price', e.target.value)} className={INPUT.sm} /></div>
+                        <input type="number" step="0.01" inputMode="decimal" value={line.unit_price ?? ''} onChange={e => updateLine(idx, 'unit_price', e.target.value)} className={INPUT.sm} /></div>
                       <div className="col-span-2"><label className={INPUT.label}>Amount</label>
-                        <input type="number" step="0.01" value={line.amount ?? ''} onChange={e => updateLine(idx, 'amount', e.target.value)} className={`${INPUT.sm} bg-gray-50`} readOnly /></div>
+                        <input type="number" step="0.01" inputMode="decimal" value={line.amount ?? ''} onChange={e => updateLine(idx, 'amount', e.target.value)} className={`${INPUT.sm} bg-gray-50`} readOnly /></div>
                       <div className="col-span-1">
                         <button onClick={() => removeLine(idx)} className={`${BTN.ghost} ${BTN.xs} text-red-500`}>x</button>
                       </div>
@@ -727,7 +727,7 @@ function InvoicesTab({ home, canEdit }) {
                 {editing.balance_due > 0 && (
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className={INPUT.label}>Payment Amount *</label>
-                      <input type="number" step="0.01" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className={INPUT.base} placeholder={`Max: ${editing.balance_due}`} /></div>
+                      <input type="number" step="0.01" inputMode="decimal" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className={INPUT.base} placeholder={`Max: ${editing.balance_due}`} /></div>
                     <div><label className={INPUT.label}>Method</label>
                       <select value={payForm.payment_method} onChange={e => setPayForm(p => ({ ...p, payment_method: e.target.value }))} className={INPUT.select}>
                         {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}

@@ -40,8 +40,9 @@ services:
       DB_SSL: ${DB_SSL:-true}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:?ALLOWED_ORIGIN is required}
+      HOST: 0.0.0.0
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - uploads:/app/uploads
     restart: unless-stopped
