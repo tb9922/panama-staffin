@@ -97,25 +97,30 @@ export default function Config() {
     return obj ?? '';
   }
 
-  const Field = ({ label, path, type = 'number', step, unit }) => (
-    <div>
-      <label className={INPUT.label}>{label}</label>
-      <div className="flex items-center gap-1">
-        {type === 'number' ? (
-          <input type="number" step={step || 1} value={getVal(path)}
-            onChange={e => handleChange(path, e.target.value === '' ? '' : parseFloat(e.target.value))}
-            disabled={!canEdit}
-            className={INPUT.sm} />
-        ) : (
-          <input type={type} value={getVal(path)}
-            onChange={e => handleChange(path, e.target.value)}
-            disabled={!canEdit}
-            className={INPUT.sm} />
-        )}
-        {unit && <span className="whitespace-nowrap text-xs text-[var(--ink-4)]">{unit}</span>}
+  const inputIdFor = (path) => `config-${path.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+
+  const Field = ({ label, path, type = 'number', step, unit }) => {
+    const id = inputIdFor(path);
+    return (
+      <div>
+        <label htmlFor={id} className={INPUT.label}>{label}</label>
+        <div className="flex items-center gap-1">
+          {type === 'number' ? (
+            <input id={id} type="number" step={step || 1} value={getVal(path)}
+              onChange={e => handleChange(path, e.target.value === '' ? '' : parseFloat(e.target.value))}
+              disabled={!canEdit}
+              className={INPUT.sm} />
+          ) : (
+            <input id={id} type={type} value={getVal(path)}
+              onChange={e => handleChange(path, e.target.value)}
+              disabled={!canEdit}
+              className={INPUT.sm} />
+          )}
+          {unit && <span className="whitespace-nowrap text-xs text-[var(--ink-4)]">{unit}</span>}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -178,8 +183,8 @@ export default function Config() {
           <Field label="Home Name" path="home_name" type="text" />
           <Field label="Registered Beds" path="registered_beds" />
           <div>
-            <label className={INPUT.label}>Care Type</label>
-            <select value={config.care_type} onChange={e => handleChange('care_type', e.target.value)}
+            <label htmlFor="config-care-type" className={INPUT.label}>Care Type</label>
+            <select id="config-care-type" value={config.care_type} onChange={e => handleChange('care_type', e.target.value)}
               className={INPUT.select}>
               {['Residential', 'Nursing', 'Dementia', 'Mixed'].map(t => <option key={t}>{t}</option>)}
             </select>
@@ -281,28 +286,28 @@ export default function Config() {
               </div>
               <div className="grid grid-cols-1 gap-3">
                 <div>
-                  <label className={INPUT.label}>Name</label>
-                  <input type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
+                  <label htmlFor={`config-mobile-shift-${code}-name`} className={INPUT.label}>Name</label>
+                  <input id={`config-mobile-shift-${code}-name`} type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
                     disabled={!canEdit}
                     className={INPUT.sm} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={INPUT.label}>Start</label>
-                    <input type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
+                    <label htmlFor={`config-mobile-shift-${code}-start`} className={INPUT.label}>Start</label>
+                    <input id={`config-mobile-shift-${code}-start`} type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
                       disabled={!canEdit}
                       className={INPUT.sm} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>End</label>
-                    <input type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
+                    <label htmlFor={`config-mobile-shift-${code}-end`} className={INPUT.label}>End</label>
+                    <input id={`config-mobile-shift-${code}-end`} type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
                       disabled={!canEdit}
                       className={INPUT.sm} />
                   </div>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Hours</label>
-                  <input type="number" step="0.25" value={shift.hours}
+                  <label htmlFor={`config-mobile-shift-${code}-hours`} className={INPUT.label}>Hours</label>
+                  <input id={`config-mobile-shift-${code}-hours`} type="number" step="0.25" value={shift.hours}
                     onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
                     disabled={!canEdit}
                     className={INPUT.sm} />
@@ -328,19 +333,23 @@ export default function Config() {
                   <td className={TABLE.tdMono}><span className="font-bold">{code}</span></td>
                   <td className={TABLE.td}>
                     <input type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
+                      aria-label={`${code} shift name`}
                       className={INPUT.sm} />
                   </td>
                   <td className={TABLE.td}>
                     <input type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
+                      aria-label={`${code} shift start time`}
                       className={INPUT.sm} />
                   </td>
                   <td className={TABLE.td}>
                     <input type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
+                      aria-label={`${code} shift end time`}
                       className={INPUT.sm} />
                   </td>
                   <td className={TABLE.td}>
                     <input type="number" step="0.25" value={shift.hours}
                       onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
+                      aria-label={`${code} shift hours`}
                       className={`${INPUT.sm} w-20`} />
                   </td>
                 </tr>
@@ -398,8 +407,9 @@ export default function Config() {
           </label>
         </div>
         <div className="mt-4 border-t border-[var(--line)] pt-4">
-          <label className={INPUT.label}>Past-Date Edit PIN (4–6 digits)</label>
+          <label htmlFor="config-edit-lock-pin" className={INPUT.label}>Past-Date Edit PIN (4–6 digits)</label>
           <input
+            id="config-edit-lock-pin"
             type="password"
             inputMode="numeric"
             maxLength={6}
@@ -468,8 +478,8 @@ export default function Config() {
             <p className="mt-1 text-xs text-[var(--ink-3)]">Set per staff in hours (Staff Database).</p>
           </div>
           <div>
-            <label className={INPUT.label}>Leave Year Start</label>
-            <select value={config.leave_year_start || '04-01'}
+            <label htmlFor="config-leave-year-start" className={INPUT.label}>Leave Year Start</label>
+            <select id="config-leave-year-start" value={config.leave_year_start || '04-01'}
               onChange={e => handleChange('leave_year_start', e.target.value)}
               className={INPUT.select}>
               <option value="01-01">January (Calendar year)</option>
@@ -605,8 +615,8 @@ export default function Config() {
           ))}
         </div>
         <div className="flex gap-3">
-          <input type="date" value={newBhDate} onChange={e => setNewBhDate(e.target.value)} className={INPUT.sm} />
-          <input type="text" value={newBhName} onChange={e => setNewBhName(e.target.value)} placeholder="Holiday name" className={`${INPUT.sm} flex-1`} />
+          <input type="date" value={newBhDate} onChange={e => setNewBhDate(e.target.value)} aria-label="New bank holiday date" className={INPUT.sm} />
+          <input type="text" value={newBhName} onChange={e => setNewBhName(e.target.value)} aria-label="New bank holiday name" placeholder="Holiday name" className={`${INPUT.sm} flex-1`} />
           <button onClick={() => {
             if (newBhDate && newBhName) {
               handleChange('bank_holidays', [...(config.bank_holidays || []), { date: newBhDate, name: newBhName }]);
@@ -721,8 +731,9 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
 
       {/* Preset picker */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <label className="text-xs font-medium text-[var(--ink-2)]">Preset:</label>
+        <label htmlFor={`config-${scope}-rotation-preset`} className="text-xs font-medium text-[var(--ink-2)]">Preset:</label>
         <select
+          id={`config-${scope}-rotation-preset`}
           value={displayPresetId}
           onChange={e => applyPreset(e.target.value)}
           disabled={!canEdit}

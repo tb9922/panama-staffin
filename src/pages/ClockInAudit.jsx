@@ -147,23 +147,23 @@ export default function ClockInAudit() {
               <h2 className="text-lg font-semibold text-slate-900">Manual clock-in</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Staff ID</label>
-                  <input className={INPUT.base} value={manual.staffId} onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))} required />
+                  <label htmlFor="clock-manual-staff-id" className={INPUT.label}>Staff ID</label>
+                  <input id="clock-manual-staff-id" className={INPUT.base} value={manual.staffId} onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))} required />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Type</label>
-                  <select className={INPUT.select} value={manual.clockType} onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}>
+                  <label htmlFor="clock-manual-type" className={INPUT.label}>Type</label>
+                  <select id="clock-manual-type" className={INPUT.select} value={manual.clockType} onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}>
                     <option value="in">Clock in</option>
                     <option value="out">Clock out</option>
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Shift date</label>
-                  <input type="date" className={INPUT.base} value={manual.shiftDate} onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value }))} required />
+                  <label htmlFor="clock-manual-shift-date" className={INPUT.label}>Shift date</label>
+                  <input id="clock-manual-shift-date" type="date" className={INPUT.base} value={manual.shiftDate} onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value }))} required />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Note</label>
-                  <input className={INPUT.base} value={manual.note} onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))} />
+                  <label htmlFor="clock-manual-note" className={INPUT.label}>Note</label>
+                  <input id="clock-manual-note" className={INPUT.base} value={manual.note} onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))} />
                 </div>
               </div>
               <div className="mt-5 flex justify-end">
@@ -177,7 +177,8 @@ export default function ClockInAudit() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-900">Clock-ins by date</h2>
-              <input type="date" className={INPUT.sm} value={date} onChange={(e) => setDate(e.target.value)} />
+              <label htmlFor="clock-daily-date" className="sr-only">Clock-ins date</label>
+              <input id="clock-daily-date" type="date" className={INPUT.sm} value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="mt-4 space-y-3">
               {daily.length === 0 ? (

@@ -210,8 +210,9 @@ export default function EvidenceHub() {
       <div className={`${CARD.padded} mb-4`}>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2">
-            <label className={INPUT.label}>Search</label>
+            <label htmlFor="evidence-search" className={INPUT.label}>Search</label>
             <input
+              id="evidence-search"
               className={INPUT.base}
               placeholder="Search filename or description"
               value={filters.q}
@@ -219,8 +220,9 @@ export default function EvidenceHub() {
             />
           </div>
           <div>
-            <label className={INPUT.label}>Uploaded By</label>
+            <label htmlFor="evidence-uploaded-by" className={INPUT.label}>Uploaded By</label>
             <select
+              id="evidence-uploaded-by"
               className={INPUT.select}
               value={filters.uploadedBy}
               onChange={(event) => setFilters((current) => ({ ...current, uploadedBy: event.target.value }))}
@@ -232,8 +234,9 @@ export default function EvidenceHub() {
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Created From</label>
+            <label htmlFor="evidence-created-from" className={INPUT.label}>Created From</label>
             <input
+              id="evidence-created-from"
               type="date"
               className={INPUT.base}
               value={filters.dateFrom}
@@ -241,8 +244,9 @@ export default function EvidenceHub() {
             />
           </div>
           <div>
-            <label className={INPUT.label}>Created To</label>
+            <label htmlFor="evidence-created-to" className={INPUT.label}>Created To</label>
             <input
+              id="evidence-created-to"
               type="date"
               className={INPUT.base}
               value={filters.dateTo}
