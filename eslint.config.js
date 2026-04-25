@@ -36,6 +36,33 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }],
+      // P0-X1 — backend code MUST NOT import from src/ (the frontend tree).
+      // src/ files may use browser APIs (window, document, fetch) which crash on the server.
+      // Pure-function helpers needed by the backend belong in shared/.
+      // Per-file overrides below allow specific known-safe legacy imports while a proper
+      // file-relocation is tracked as P0-X1 in .review/full-main-review/_CODEX_MASTER_ACTION_PLAN.md.
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['../src/*', '../src/**', '../../src/*', '../../src/**'],
+            message: 'Backend code (services/routes/repositories/lib/shared) must not import from src/. Move pure-function helpers to shared/ or use a server-side equivalent. See P0-X1 in CODEX_MASTER_ACTION_PLAN.',
+          },
+        ],
+      }],
+    },
+  },
+  {
+    // P0-X1 KNOWN EXCEPTION — assessmentService imports server-authoritative scoring engines
+    // from src/lib/cqc.js, src/lib/cqcReadiness.js, src/lib/gdpr.js. These files (and their
+    // transitive imports) are verified browser-API-free as of 2026-04-20 (see grep audit
+    // documented in CODEX_MASTER_ACTION_PLAN.md). The full file relocation to shared/
+    // is the correct long-term fix but was deferred — it requires moving ~16 files and
+    // merging two with existing shared/ siblings, with extensive regression testing.
+    // Until that lands, the global rule above prevents any NEW services file from
+    // importing src/. This override is intentionally narrow to one filename.
+    files: ['services/assessmentService.js'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
   {

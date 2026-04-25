@@ -1,6 +1,6 @@
 import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
 import * as recordAttachmentsRepo from '../repositories/recordAttachments.js';
-import { getMaintenanceStatus, DEFAULT_MAINTENANCE_CATEGORIES } from '../src/lib/maintenance.js';
+import { getMaintenanceStatus, DEFAULT_MAINTENANCE_CATEGORIES } from '../shared/maintenance.js';
 
 const PAGE_SIZE = 500;
 const ATTACHMENT_PAGE_SIZE = 2000;

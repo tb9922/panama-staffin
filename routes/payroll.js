@@ -40,7 +40,7 @@ import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
-import { calculateAccrual } from '../src/lib/accrual.js';
+import { calculateAccrual } from '../shared/accrual.js';
 import { getActualShift, getLeaveYear, getShiftHours, isWorkingShift } from '../shared/rotation.js';
 
 const router = Router();

@@ -21,7 +21,7 @@ import {
   parseDate,
   resolveCycleStartDateForStaff,
 } from '../shared/rotation.js';
-import { calculateAccrual } from '../src/lib/accrual.js';
+import { calculateAccrual } from '../shared/accrual.js';
 
 const PROFILE_ALLOWLIST = new Set(['phone', 'address', 'emergency_contact']);
 const FINAL_PAYROLL_RUN_STATUSES = ['approved', 'exported', 'locked'];
