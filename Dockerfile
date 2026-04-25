@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:22.14.0-alpine AS builder
+FROM node:22.22.2-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -7,11 +7,13 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production
-FROM node:22.14.0-alpine
+FROM node:22.22.2-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev \
+  && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.js ./
 COPY --from=builder /app/config.js ./
