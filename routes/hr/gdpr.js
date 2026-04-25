@@ -8,8 +8,11 @@ import * as auditRepo from '../../repositories/auditRepo.js';
 
 const router = Router();
 
+// Audit log retention floor is 7 years per UK GDPR Art.5(1)(e) + ICO guidance for
+// employment/HR records under the Statute of Limitations 1980. Floor enforced at 7,
+// not 6, to prevent purging audit entries before the statutory minimum.
 const purgeBodySchema = z.object({
-  retention_years: z.coerce.number().int().min(6).max(99).default(6),
+  retention_years: z.coerce.number().int().min(7).max(99).default(7),
   dry_run: z.boolean().default(true),
 });
 
