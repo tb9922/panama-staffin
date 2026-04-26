@@ -340,7 +340,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                 <tr className="border-b border-[var(--line)]">
                   <th scope="col" className="sticky left-0 z-10 min-w-[140px] bg-[var(--paper)] px-2 py-2 text-left font-semibold text-[var(--ink-3)]">Staff</th>
                   {filteredTypes.map(t => (
-                    <th scope="col" key={t.id} className="px-0.5 py-2 text-center font-medium text-[var(--ink-3)]" style={{ minWidth: '80px', maxWidth: '120px', fontSize: '10px', lineHeight: '1.2' }}>
+                    <th scope="col" key={t.id} className="px-0.5 py-2 text-center font-medium text-[var(--ink-3)]" style={{ minWidth: '72px', maxWidth: '104px', fontSize: '10px', lineHeight: '1.2' }}>
                       {t.name}
                     </th>
                   ))}
