@@ -361,16 +361,29 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                         const r = staffMap?.get(t.id);
                         if (!r) return <td key={t.id} className="px-0.5 py-1 text-center"><div className="h-9 w-full" /></td>;
                         const display = STATUS_DISPLAY[r.status];
+                        const isNotRequired = r.status === TRAINING_STATUS.NOT_REQUIRED;
+                        const isDisabled = isNotRequired || (readOnly && !r.record);
+                        const canOpen = !isDisabled;
+                        const cellClass = `flex h-9 w-full items-center justify-center rounded-lg text-[10px] font-bold transition-all ${CELL_COLORS[r.status]} ${isDisabled ? 'cursor-default hover:shadow-none' : ''}`;
+                        const title = `${s.name} — ${t.name}: ${display.label}${r.daysUntilExpiry != null ? ` (${r.daysUntilExpiry}d)` : ''}${r.requiredLevel ? ` [needs ${r.requiredLevel.name}]` : ''}`;
                         return (
                           <td key={t.id} className="px-0.5 py-1 text-center">
-                            <button
-                              onClick={() => r.status !== TRAINING_STATUS.NOT_REQUIRED && openRecordModal(s.id, t.id)}
-                              disabled={r.status === TRAINING_STATUS.NOT_REQUIRED || (readOnly && !r.record)}
-                              className={`flex h-9 w-full items-center justify-center rounded-lg text-[10px] font-bold transition-all ${CELL_COLORS[r.status]} ${(readOnly && !r.record) ? 'cursor-default hover:shadow-none' : ''}`}
-                              title={`${s.name} — ${t.name}: ${display.label}${r.daysUntilExpiry != null ? ` (${r.daysUntilExpiry}d)` : ''}${r.requiredLevel ? ` [needs ${r.requiredLevel.name}]` : ''}`}
-                            >
-                              {display.symbol}
-                            </button>
+                            {isNotRequired ? (
+                              <div className={cellClass} title={title} aria-label={title}>
+                                {display.symbol}
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => canOpen && openRecordModal(s.id, t.id)}
+                                disabled={isDisabled}
+                                className={cellClass}
+                                title={title}
+                                aria-label={title}
+                              >
+                                {display.symbol}
+                              </button>
+                            )}
                           </td>
                         );
                       })}

@@ -5,7 +5,6 @@ import {
   calculateStaffPeriodHours, getShiftHours, SHIFT_COLORS, WORKING_SHIFTS,
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
-import { clickableRowProps } from '../lib/a11y.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, PAGE } from '../lib/design.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
@@ -744,11 +743,18 @@ export default function RotationGrid() {
             })}
             {/* Absence & Cover summary rows */}
             <tr
-              {...clickableRowProps(() => setSummaryExpanded(e => !e), { label: `${summaryExpanded ? 'Collapse' : 'Expand'} absent summary` })}
-              className="cursor-pointer select-none border-t-2 border-[var(--line-2)] bg-[var(--caution-soft)]"
+              className="select-none border-t-2 border-[var(--line-2)] bg-[var(--caution-soft)]"
             >
               <td className="sticky left-0 z-10 whitespace-nowrap border-r border-[var(--line)] bg-[var(--caution-soft)] px-3 py-1 font-semibold text-[10px] text-[var(--caution)]">
-                {summaryExpanded ? '▾' : '▸'} Absent
+                <button
+                  type="button"
+                  className="-mx-1 inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold text-[var(--caution)] hover:bg-[var(--paper)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  onClick={() => setSummaryExpanded(e => !e)}
+                  aria-expanded={summaryExpanded}
+                  aria-label={`${summaryExpanded ? 'Collapse' : 'Expand'} absent summary`}
+                >
+                  {summaryExpanded ? '▾' : '▸'} Absent
+                </button>
               </td>
               <td></td>
               {monthDates.map((date, i) => {
@@ -768,11 +774,18 @@ export default function RotationGrid() {
               <td colSpan={4}></td>
             </tr>
             <tr
-              {...clickableRowProps(() => setSummaryExpanded(e => !e), { label: `${summaryExpanded ? 'Collapse' : 'Expand'} cover summary` })}
-              className="cursor-pointer select-none bg-[var(--info-soft)]"
+              className="select-none bg-[var(--info-soft)]"
             >
               <td className="sticky left-0 z-10 whitespace-nowrap border-r border-[var(--line)] bg-[var(--info-soft)] px-3 py-1 font-semibold text-[10px] text-[var(--info)]">
-                {summaryExpanded ? '▾' : '▸'} Cover
+                <button
+                  type="button"
+                  className="-mx-1 inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold text-[var(--info)] hover:bg-[var(--paper)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  onClick={() => setSummaryExpanded(e => !e)}
+                  aria-expanded={summaryExpanded}
+                  aria-label={`${summaryExpanded ? 'Collapse' : 'Expand'} cover summary`}
+                >
+                  {summaryExpanded ? '▾' : '▸'} Cover
+                </button>
               </td>
               <td></td>
               {monthDates.map((date, i) => {

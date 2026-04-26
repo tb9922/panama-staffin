@@ -10,6 +10,7 @@ import { ROLES, getRoleLabel, isOwnDataOnly } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 import { hasDirtyState, subscribeDirtyState } from '../lib/dirtyStateRegistry.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
+import useAutoFormControlLabels from '../hooks/useAutoFormControlLabels.js';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
 import LoadingState from './LoadingState.jsx';
@@ -53,6 +54,8 @@ export default function AppLayout() {
   const [notificationPath, setNotificationPath] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(() => hasDirtyState());
   const { unreadCount } = useNotifications();
+
+  useAutoFormControlLabels();
 
   useEffect(() => subscribeDirtyState(setHasUnsavedChanges), []);
 
@@ -259,6 +262,18 @@ export default function AppLayout() {
                   <p className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">{activeHomeName}</p>
                 </div>
               </div>
+            )}
+            {sidebarOpen && (
+              <button
+                type="button"
+                className="ml-auto rounded-lg p-2.5 text-[var(--ink-3)] transition-colors hover:bg-[var(--paper-2)] hover:text-[var(--ink)] md:hidden"
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close navigation menu"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             )}
           </div>
           {sidebarOpen && (

@@ -13,7 +13,6 @@ import { BRADFORD_TRIGGERS, getAbsenceTriggerBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
-import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 import { todayLocalISO } from '../lib/localDates.js';
 import InlineNotice from '../components/InlineNotice.jsx';
@@ -415,8 +414,17 @@ export default function AbsenceManager() {
                 {summary.map(s => {
                   const trigger = getAbsenceTriggerBadge(s.trigger_level);
                   return (
-                    <tr key={s.staff_id} className={TABLE.tr + ' cursor-pointer'} {...clickableRowProps(() => handleSelectStaff(s.staff_id))}>
-                      <td className={TABLE.td + ' font-medium'}>{s.staff_id}</td>
+                    <tr key={s.staff_id} className={TABLE.tr}>
+                      <td className={TABLE.td}>
+                        <button
+                          type="button"
+                          className="rounded text-left font-medium text-[var(--accent)] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                          onClick={() => handleSelectStaff(s.staff_id)}
+                          aria-label={`Open absence detail for staff ${s.staff_id}`}
+                        >
+                          {s.staff_id}
+                        </button>
+                      </td>
                       <td className={TABLE.tdMono}>{s.spells ?? 0}</td>
                       <td className={TABLE.tdMono}>{s.days ?? 0}</td>
                       <td className={TABLE.tdMono + ' font-semibold'}>{s.score ?? 0}</td>

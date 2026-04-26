@@ -36,7 +36,7 @@ export const BADGE = {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 export const TAB = {
-  bar: 'mb-4 flex gap-1 overflow-x-auto border-b border-[var(--line)]',
+  bar: 'mb-4 flex flex-wrap gap-1 border-b border-[var(--line)] sm:flex-nowrap sm:overflow-x-auto',
   button: 'px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors',
   active: 'border-[var(--accent)] text-[var(--accent)]',
   inactive: 'border-transparent text-[var(--ink-3)] hover:text-[var(--ink)] hover:border-[var(--line-2)]',
