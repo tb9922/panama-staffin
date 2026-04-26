@@ -279,7 +279,12 @@ export default function StaffRegister() {
 
   async function handleRevokeSessions(staffMember) {
     if (!canEdit) return;
-    if (!window.confirm(`Sign out ${staffMember.name} from the staff portal everywhere? They'll need to log in again.`)) {
+    if (!await confirm({
+      title: 'Sign Out Staff Member',
+      message: `Sign out ${staffMember.name} from the staff portal everywhere? They'll need to log in again.`,
+      confirmLabel: 'Sign Out',
+      tone: 'danger',
+    })) {
       return;
     }
     setRevokeBusyId(staffMember.id);

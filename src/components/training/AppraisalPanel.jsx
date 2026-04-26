@@ -17,6 +17,7 @@ import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 import { todayLocalISO } from '../../lib/localDates.js';
 import { clickableRowProps } from '../../lib/a11y.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -29,6 +30,7 @@ const APR_STATUS_BADGE = {
 };
 
 export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, readOnly = false }) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [filterTeam, setFilterTeam] = useState('All');
   const [search, setSearch] = useState('');
   const [aprFilter, setAprFilter] = useState('all');
@@ -122,7 +124,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
 
   async function handleDelete() {
     if (readOnly) return;
-    if (!confirm('Delete this appraisal record?')) return;
+    if (!await confirm('Delete this appraisal record?')) return;
     setSaving(true);
     setError(null);
     try {
@@ -331,6 +333,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
           )}
         </div>
       </Modal>
+      {ConfirmDialog}
     </>
   );
 }

@@ -21,6 +21,7 @@ import ErrorState from '../components/ErrorState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 
 export default function Config() {
   const { canWrite } = useData();
@@ -826,6 +827,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
 // ── Cycle Start Tuning section ───────────────────────────────────────────────
 
 function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope = 'day' }) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const isNightScope = scope === 'night';
   const title = isNightScope ? 'Night Cycle Start Tuning' : 'Cycle Start Tuning';
   const targetKey = isNightScope ? 'cycle_start_date_night' : 'cycle_start_date';
@@ -849,6 +851,7 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
   const maxRatio = useMemo(() => scores ? Math.max(...scores.map(s => s.ratio)) : 0, [scores]);
 
   return (
+    <>
     <section className={`${CARD.padded} mb-5`}>
       <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-[var(--ink)]">{title}</h2>
@@ -893,10 +896,14 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
               {s.offset !== 0 && canEdit && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm(`Shift ${targetKey} by ${s.offset} day${s.offset === 1 ? '' : 's'}? ${isNightScope ? 'Night teams' : 'Day teams'} will re-align.`)) {
-                      onApplyOffset(s.offset);
-                    }
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Apply Cycle Offset',
+                      message: `Shift ${targetKey} by ${s.offset} day${s.offset === 1 ? '' : 's'}? ${isNightScope ? 'Night teams' : 'Day teams'} will re-align.`,
+                      confirmLabel: 'Apply',
+                      tone: 'danger',
+                    });
+                    if (ok) onApplyOffset(s.offset);
                   }}
                   className={`${BTN.ghost} ${BTN.xs} shrink-0`}
                 >
@@ -908,5 +915,7 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
         </div>
       )}
     </section>
+    {ConfirmDialog}
+    </>
   );
 }

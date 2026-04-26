@@ -10,6 +10,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
 import TrainingRecordModal from './TrainingRecordModal.jsx';
 import { todayLocalISO } from '../../lib/localDates.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -24,6 +25,7 @@ const CELL_COLORS = {
 };
 
 export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, configUpdatedAt, onReload, readOnly = false }) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [view, setView] = useState('matrix');
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -113,9 +115,9 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
     setAllTypes(allTypes.map(t => t.id === id ? { ...t, [field]: value } : t));
   }
 
-  function removeType(id) {
+  async function removeType(id) {
     if (readOnly) return;
-    if (!confirm('Remove this training type? Existing records will be kept.')) return;
+    if (!await confirm('Remove this training type? Existing records will be kept.')) return;
     setAllTypes(allTypes.filter(t => t.id !== id));
   }
 
@@ -654,6 +656,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
           )}
         </div>
       </Modal>
+      {ConfirmDialog}
     </>
   );
 }

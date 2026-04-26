@@ -32,7 +32,15 @@ export async function downloadXLSX(filename, sheets) {
     return true;
   } catch (err) {
     console.error('Excel export failed:', err);
-    alert('Export failed. Please try again.');
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('panama:toast', {
+        detail: {
+          title: 'Export failed',
+          message: 'Please try again.',
+          tone: 'error',
+        },
+      }));
+    }
     return false;
   }
 }

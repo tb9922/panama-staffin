@@ -4,9 +4,11 @@ import { MODAL, INPUT, BTN } from '../../lib/design.js';
 import { upsertTrainingRecord, deleteTrainingRecord } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
 import { todayLocalISO } from '../../lib/localDates.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 export default function TrainingRecordModal({ isOpen, onClose, staffId, staffName, typeId, typeName, type, existing, homeSlug, staff, onSaved, readOnly = false }) {
   const today = todayLocalISO();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const initForm = () => ({
     completed: existing?.completed || today,
@@ -71,7 +73,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
 
   async function handleDelete() {
     if (readOnly) return;
-    if (!confirm('Remove this training record?')) return;
+    if (!await confirm('Remove this training record?')) return;
     setSaving(true);
     setError(null);
     try {
@@ -86,6 +88,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   }
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title={readOnly ? 'View Training Record' : existing ? 'Edit Training' : 'Record Training'} size="lg">
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
@@ -169,5 +172,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         )}
       </div>
     </Modal>
+    {ConfirmDialog}
+    </>
   );
 }

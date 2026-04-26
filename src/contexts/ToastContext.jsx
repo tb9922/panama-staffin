@@ -53,6 +53,15 @@ export function ToastProvider({ children }) {
     timersRef.current.clear();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleToastEvent = (event) => {
+      showToast(event.detail || {});
+    };
+    window.addEventListener('panama:toast', handleToastEvent);
+    return () => window.removeEventListener('panama:toast', handleToastEvent);
+  }, [showToast]);
+
   const value = useMemo(() => ({
     toasts,
     showToast,

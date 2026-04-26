@@ -17,8 +17,10 @@ import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 import { todayLocalISO } from '../../lib/localDates.js';
 import { clickableRowProps } from '../../lib/a11y.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, readOnly = false }) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showModal, setShowModal] = useState(false);
   const [modalData, setModalData] = useState({ id: '', date: '', time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
@@ -88,7 +90,7 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
 
   async function handleDelete() {
     if (readOnly) return;
-    if (!confirm('Delete this fire drill record?')) return;
+    if (!await confirm('Delete this fire drill record?')) return;
     setSaving(true);
     setError(null);
     try {
@@ -294,6 +296,7 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
           )}
         </div>
       </Modal>
+      {ConfirmDialog}
     </>
   );
 }

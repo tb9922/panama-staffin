@@ -19,6 +19,7 @@ import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 import { todayLocalISO } from '../../lib/localDates.js';
 import { clickableRowProps } from '../../lib/a11y.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -31,6 +32,7 @@ const SUP_STATUS_BADGE = {
 };
 
 export default function SupervisionPanel({ supervisions, staff, homeSlug, config, onReload, readOnly = false }) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [filterTeam, setFilterTeam] = useState('All');
   const [search, setSearch] = useState('');
   const [supFilter, setSupFilter] = useState('all');
@@ -128,7 +130,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
 
   async function handleDelete() {
     if (readOnly) return;
-    if (!confirm('Delete this supervision record?')) return;
+    if (!await confirm('Delete this supervision record?')) return;
     setSaving(true);
     setError(null);
     try {
@@ -341,6 +343,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
           )}
         </div>
       </Modal>
+      {ConfirmDialog}
     </>
   );
 }

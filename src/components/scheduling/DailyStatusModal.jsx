@@ -4,6 +4,7 @@ import { isWorkingShift, isCareRole, getShiftHours } from '../../lib/rotation.js
 import { validateSwap } from '../../lib/escalation.js';
 import { calculateAccrual } from '../../lib/accrual.js';
 import { checkWTRImpact } from '../../lib/rotationAnalysis.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 const SHIFT_EDIT_OPTIONS = [
   { value: '__scheduled__', label: 'Scheduled shift' },
@@ -74,6 +75,7 @@ export default function DailyStatusModal({
   onHandleTemporarySwap,
   onHandleAgencyBooking,
 }) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const alBlockedForSelectedStaff = modal === 'al' && selectedStaff && (() => {
     const staff = schedData?.staff?.find(member => member.id === selectedStaff);
     if (!staff) return false;
@@ -82,6 +84,7 @@ export default function DailyStatusModal({
   })();
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title={getTitle(modal)} size="sm">
       {modal === 'swap' ? (
         <div className="space-y-3">
@@ -389,7 +392,7 @@ export default function DailyStatusModal({
                 }
                 return false;
               })()}
-              onClick={() => {
+              onClick={async () => {
                 if (modal === 'sick') onApplySickOverride(selectedStaff);
                 else if (modal === 'noshow') onApplyNoShowOverride(selectedStaff);
                 else if (modal === 'al') onApplyOverride(selectedStaff, 'AL', 'Annual leave', 'manual', false, null, {});
@@ -398,8 +401,13 @@ export default function DailyStatusModal({
                   const impact = checkWTRImpact(staff, dateStr, schedData.overrides, schedData.config, otShiftType);
                   if (!impact.ok) return; // belt-and-braces: disabled button should prevent this
                   if (impact.warn) {
-                    const msg = `${impact.message}\n\nProceed anyway?`;
-                    if (!window.confirm(msg)) return;
+                    const ok = await confirm({
+                      title: 'Working Time Warning',
+                      message: `${impact.message}\n\nProceed anyway?`,
+                      confirmLabel: 'Proceed',
+                      tone: 'danger',
+                    });
+                    if (!ok) return;
                   }
                   onApplyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
                 }
@@ -413,5 +421,7 @@ export default function DailyStatusModal({
         </div>
       )}
     </Modal>
+    {ConfirmDialog}
+    </>
   );
 }
