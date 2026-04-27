@@ -81,6 +81,8 @@ export async function findByHome(homeId, filters = {}, client = pool) {
   }
   if (filters.emergency_override === true || filters.emergency_override === 'true') {
     clauses.push('emergency_override = true');
+  } else if (filters.emergency_override === false || filters.emergency_override === 'false') {
+    clauses.push('emergency_override = false');
   }
   const limit = Math.min(parseInt(filters.limit ?? 100, 10) || 100, 500);
   const offset = Math.max(parseInt(filters.offset ?? 0, 10) || 0, 0);

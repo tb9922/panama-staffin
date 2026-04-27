@@ -187,6 +187,9 @@ function adminPost(path, body) {
 function adminPostApi(path, body) {
   return request(app).post('/api' + path).set('Authorization', `Bearer ${adminToken}`).send(body);
 }
+function adminGetApi(path) {
+  return request(app).get('/api' + path).set('Authorization', `Bearer ${adminToken}`);
+}
 function adminPutApi(path, body) {
   return request(app).put('/api' + path).set('Authorization', `Bearer ${adminToken}`).send(body);
 }
@@ -946,6 +949,38 @@ describe('Agency — /agency', () => {
 
       expect(updated.body.emergency_override).toBe(true);
       expect(updated.body.outcome).toBe('emergency_agency');
+    });
+
+    it('GET filters agency attempts by emergency override state', async () => {
+      const normal = await adminPostApi(`/agency-attempts?home=${homeASlug}`, {
+        gap_date: '2099-06-06',
+        shift_code: 'AG-E',
+        role_needed: 'Carer',
+        reason: 'Normal agency guard filter test',
+        overtime_offered: true,
+        overtime_refused: true,
+        internal_bank_checked: true,
+        internal_bank_candidate_count: 0,
+        viable_internal_candidate_count: 0,
+      }).expect(201);
+      const emergency = await adminPostApi(`/agency-attempts?home=${homeASlug}`, {
+        gap_date: '2099-06-07',
+        shift_code: 'AG-L',
+        role_needed: 'Carer',
+        reason: 'Emergency agency guard filter test',
+        emergency_override: true,
+        emergency_override_reason: 'No safe internal cover available at handover',
+      }).expect(201);
+
+      const normalList = await adminGetApi(`/agency-attempts?home=${homeASlug}&from=2099-06-06&to=2099-06-07&emergency_override=false`).expect(200);
+      expect(normalList.body.attempts.map(attempt => attempt.id)).toContain(normal.body.id);
+      expect(normalList.body.attempts.map(attempt => attempt.id)).not.toContain(emergency.body.id);
+      expect(normalList.body.attempts.every(attempt => attempt.emergency_override === false)).toBe(true);
+
+      const emergencyList = await adminGetApi(`/agency-attempts?home=${homeASlug}&from=2099-06-06&to=2099-06-07&emergency_override=true`).expect(200);
+      expect(emergencyList.body.attempts.map(attempt => attempt.id)).toContain(emergency.body.id);
+      expect(emergencyList.body.attempts.map(attempt => attempt.id)).not.toContain(normal.body.id);
+      expect(emergencyList.body.attempts.every(attempt => attempt.emergency_override === true)).toBe(true);
     });
 
     it('POST rejects agency shift without approval attempt', async () => {
