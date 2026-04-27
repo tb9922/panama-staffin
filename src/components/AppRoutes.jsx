@@ -21,6 +21,10 @@ const ComplaintsTracker = lazy(() => import('../pages/ComplaintsTracker.jsx'));
 const MaintenanceTracker = lazy(() => import('../pages/MaintenanceTracker.jsx'));
 const IpcAuditTracker = lazy(() => import('../pages/IpcAuditTracker.jsx'));
 const RiskRegister = lazy(() => import('../pages/RiskRegister.jsx'));
+const ManagerActions = lazy(() => import('../pages/ManagerActions.jsx'));
+const AuditCalendar = lazy(() => import('../pages/AuditCalendar.jsx'));
+const PortfolioDashboard = lazy(() => import('../pages/PortfolioDashboard.jsx'));
+const OutcomeMetrics = lazy(() => import('../pages/OutcomeMetrics.jsx'));
 const PolicyReviewTracker = lazy(() => import('../pages/PolicyReviewTracker.jsx'));
 const WhistleblowingTracker = lazy(() => import('../pages/WhistleblowingTracker.jsx'));
 const DolsTracker = lazy(() => import('../pages/DolsTracker.jsx'));
@@ -36,6 +40,7 @@ const PayrollDashboard = lazy(() => import('../pages/PayrollDashboard.jsx'));
 const ClockInAudit = lazy(() => import('../pages/ClockInAudit.jsx'));
 const PayrollDetail = lazy(() => import('../pages/PayrollDetail.jsx'));
 const AgencyTracker = lazy(() => import('../pages/AgencyTracker.jsx'));
+const InternalBank = lazy(() => import('../pages/InternalBank.jsx'));
 const TaxCodeManager = lazy(() => import('../pages/TaxCodeManager.jsx'));
 const PensionManager = lazy(() => import('../pages/PensionManager.jsx'));
 const SickPayTracker = lazy(() => import('../pages/SickPayTracker.jsx'));
@@ -48,6 +53,7 @@ const DisciplinaryTracker = lazy(() => import('../pages/DisciplinaryTracker.jsx'
 const GrievanceTracker = lazy(() => import('../pages/GrievanceTracker.jsx'));
 const PerformanceTracker = lazy(() => import('../pages/PerformanceTracker.jsx'));
 const AbsenceManager = lazy(() => import('../pages/AbsenceManager.jsx'));
+const ReflectivePractice = lazy(() => import('../pages/ReflectivePractice.jsx'));
 const ContractManager = lazy(() => import('../pages/ContractManager.jsx'));
 const FamilyLeaveTracker = lazy(() => import('../pages/FamilyLeaveTracker.jsx'));
 const FlexWorkingTracker = lazy(() => import('../pages/FlexWorkingTracker.jsx'));
@@ -80,6 +86,7 @@ export default function AppRoutes() {
 
       {/* Staff */}
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/internal-bank" element={<RouteErrorBoundary><RequireModule module="staff"><InternalBank /></RequireModule></RouteErrorBoundary>} />
       <Route path="/onboarding" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/training" element={<RouteErrorBoundary><RequireModule module="compliance"><TrainingMatrix /></RequireModule></RouteErrorBoundary>} />
       <Route path="/sick-trends" element={<RouteErrorBoundary><RequireModule module="staff"><SickTrends /></RequireModule></RouteErrorBoundary>} />
@@ -94,6 +101,8 @@ export default function AppRoutes() {
       <Route path="/ipc" element={<RouteErrorBoundary><RequireModule module="compliance"><IpcAuditTracker /></RequireModule></RouteErrorBoundary>} />
 
       {/* Governance */}
+      <Route path="/actions" element={<RouteErrorBoundary><RequireModule module="governance"><ManagerActions /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/audit-calendar" element={<RouteErrorBoundary><RequireModule module="governance"><AuditCalendar /></RequireModule></RouteErrorBoundary>} />
       <Route path="/risks" element={<RouteErrorBoundary><RequireModule module="governance"><RiskRegister /></RequireModule></RouteErrorBoundary>} />
       <Route path="/policies" element={<RouteErrorBoundary><RequireModule module="governance"><PolicyReviewTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/speak-up" element={<RouteErrorBoundary><RequireModule module="governance"><WhistleblowingTracker /></RequireModule></RouteErrorBoundary>} />
@@ -105,6 +114,7 @@ export default function AppRoutes() {
       <Route path="/hr/grievance"      element={<RouteErrorBoundary><RequireModule module="hr"><GrievanceTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/hr/performance"    element={<RouteErrorBoundary><RequireModule module="hr"><PerformanceTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/hr/absence"        element={<RouteErrorBoundary><RequireModule module="hr"><AbsenceManager /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/hr/reflective-practice" element={<RouteErrorBoundary><RequireModule module="hr"><ReflectivePractice /></RequireModule></RouteErrorBoundary>} />
       <Route path="/hr/contracts"      element={<RouteErrorBoundary><RequireModule module="hr"><ContractManager /></RequireModule></RouteErrorBoundary>} />
       <Route path="/hr/family-leave"   element={<RouteErrorBoundary><RequireModule module="hr"><FamilyLeaveTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/hr/flex-working"   element={<RouteErrorBoundary><RequireModule module="hr"><FlexWorkingTracker /></RequireModule></RouteErrorBoundary>} />
@@ -142,6 +152,8 @@ export default function AppRoutes() {
       <Route path="/dpia" element={<RouteErrorBoundary><RequireModule module="gdpr"><DpiaManager /></RequireModule></RouteErrorBoundary>} />
 
       {/* Reports & System */}
+      <Route path="/portfolio" element={<RouteErrorBoundary><RequireModule module="reports"><PortfolioDashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/outcomes" element={<RouteErrorBoundary><RequireModule module="reports"><OutcomeMetrics /></RequireModule></RouteErrorBoundary>} />
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
       <Route path="/evidence" element={<RouteErrorBoundary><RequireEvidenceHub><EvidenceHub /></RequireEvidenceHub></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />

@@ -21,7 +21,7 @@ test.describe('RBAC — Viewer restrictions', () => {
 
   test('viewer does NOT see admin-only nav sections', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 });
     // HR & People and Finance are admin-only nav groups
     await expect(page.getByRole('button', { name: 'HR & People' })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Finance' })).not.toBeVisible();

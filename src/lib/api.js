@@ -205,6 +205,14 @@ export async function listNotifications() {
   return apiFetch(`${API_BASE}/notifications?home=${h(home)}`, { headers: authHeaders() });
 }
 
+export async function getPortfolioKpis() {
+  return apiFetch(`${API_BASE}/portfolio/kpis`, { headers: authHeaders() });
+}
+
+export async function getPortfolioBoardPack() {
+  return apiFetch(`${API_BASE}/portfolio/board-pack`, { headers: authHeaders() });
+}
+
 export async function markNotificationsRead(keys) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/notifications/read?home=${h(home)}`, {
@@ -483,8 +491,146 @@ export async function deleteRisk(homeSlug, id) {
   });
 }
 
+export async function getActionItems(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/action-items?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function createActionItem(homeSlug, data) {
+  return apiFetch(`${API_BASE}/action-items?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateActionItem(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/action-items/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function completeActionItem(homeSlug, id, data = {}) {
+  return apiFetch(`${API_BASE}/action-items/${encodeURIComponent(id)}/complete?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function verifyActionItem(homeSlug, id, data = {}) {
+  return apiFetch(`${API_BASE}/action-items/${encodeURIComponent(id)}/verify?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteActionItem(homeSlug, id) {
+  return apiFetch(`${API_BASE}/action-items/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
 // ── Policies ─────────────────────────────────────────────────────────────────
 
+// V1 operating-system APIs
+export async function getAuditTasks(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/audit-tasks?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function createAuditTask(homeSlug, data) {
+  return apiFetch(`${API_BASE}/audit-tasks?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function generateAuditTasks(homeSlug, data = {}) {
+  return apiFetch(`${API_BASE}/audit-tasks/generate?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateAuditTask(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/audit-tasks/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function completeAuditTask(homeSlug, id, data = {}) {
+  return apiFetch(`${API_BASE}/audit-tasks/${encodeURIComponent(id)}/complete?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteAuditTask(homeSlug, id) {
+  return apiFetch(`${API_BASE}/audit-tasks/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function getOutcomeDashboard(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/outcomes/dashboard?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function getOutcomeMetrics(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/outcomes/metrics?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function upsertOutcomeMetric(homeSlug, data) {
+  return apiFetch(`${API_BASE}/outcomes/metrics?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateOutcomeMetric(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/outcomes/metrics/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteOutcomeMetric(homeSlug, id) {
+  return apiFetch(`${API_BASE}/outcomes/metrics/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function getReflectivePractice(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/reflective-practice?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function createReflectivePractice(homeSlug, data) {
+  return apiFetch(`${API_BASE}/reflective-practice?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateReflectivePractice(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/reflective-practice/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteReflectivePractice(homeSlug, id) {
+  return apiFetch(`${API_BASE}/reflective-practice/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// Policies
 export async function getPolicies(homeSlug) {
   return apiFetch(`${API_BASE}/policies?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
@@ -813,6 +959,34 @@ export async function updateAgencyShift(homeSlug, id, shift) {
 }
 export async function getAgencyMetrics(homeSlug, weeks = 12) {
   return apiFetch(`${API_BASE}/payroll/agency/metrics?home=${h(homeSlug)}&weeks=${weeks}`, { headers: authHeaders() });
+}
+
+export async function getAgencyAttempts(homeSlug, params = {}) {
+  const query = new URLSearchParams({ home: h(homeSlug) });
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== '') query.set(key, value);
+  }
+  return apiFetch(`${API_BASE}/agency-attempts?${query.toString()}`, { headers: authHeaders() });
+}
+
+export async function createAgencyAttempt(homeSlug, attempt) {
+  return apiFetch(`${API_BASE}/agency-attempts?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(attempt),
+  });
+}
+
+export async function updateAgencyAttempt(homeSlug, id, attempt) {
+  return apiFetch(`${API_BASE}/agency-attempts/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(attempt),
+  });
+}
+
+export async function getInternalBankCandidates(homeSlug, params = {}) {
+  const query = new URLSearchParams({ home: h(homeSlug) });
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== '') query.set(key, value);
+  }
+  return apiFetch(`${API_BASE}/internal-bank/candidates?${query.toString()}`, { headers: authHeaders() });
 }
 
 // ── Phase 2: Tax Codes ────────────────────────────────────────────────────────
@@ -1903,6 +2077,7 @@ export function logReportDownload(reportType, dateRange) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
   }).catch(e => console.warn('Audit log failed:', e.message)); // fire-and-forget
 }
+
 
 // ── ROPA (Record of Processing Activities) ──────────────────────────────────
 

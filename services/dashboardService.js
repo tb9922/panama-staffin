@@ -162,7 +162,7 @@ const DEFAULTS = {
   incidents:       { open: 0, cqcOverdue: 0, riddorOverdue: 0, docOverdue: 0, overdueActions: 0 },
   complaints:      { open: 0, unacknowledged: 0, overdueResponse: 0 },
   maintenance:     { total: 0, overdue: 0, dueSoon: 0, expiredCerts: 0, compliancePct: 100 },
-  training:        { expired: 0, expiringSoon: 0, notStarted: 0 },
+  training:        { totalRequired: 0, compliant: 0, compliancePct: 100, expired: 0, expiringSoon: 0, notStarted: 0 },
   supervisions:    { overdue: 0, dueSoon: 0, noRecord: 0 },
   appraisals:      { overdue: 0, dueSoon: 0, noRecord: 0 },
   fireDrills:      { lastDate: null, drillsThisYear: 0, overdue: false },

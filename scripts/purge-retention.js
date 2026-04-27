@@ -33,6 +33,8 @@ const ALLOWED_TABLES = new Set([
   'staff', 'ssp_periods', 'training_records', 'onboarding', 'payroll_runs',
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
+  'action_items', 'reflective_practice', 'agency_approval_attempts',
+  'audit_tasks', 'outcome_metrics',
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',
   'hr_flexible_working', 'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
@@ -41,13 +43,18 @@ const ALLOWED_TABLES = new Set([
 // Tables without home_id
 const GLOBAL_TABLES = new Set(['audit_log', 'access_log']);
 
-// Tables that use 'ts' instead of 'created_at'
-const TS_TABLES = new Set(['access_log', 'audit_log']);
+// Date column overrides for tables that don't use 'created_at'
+const RETENTION_DATE_COLUMNS = Object.freeze({
+  access_log: 'ts',
+  audit_log: 'ts',
+  outcome_metrics: 'recorded_at',
+});
 
 // Tables with soft-delete — only purge records where deleted_at IS NOT NULL
 const SOFT_DELETE_TABLES = new Set([
   'staff', 'incidents', 'complaints', 'dols', 'risk_register',
-  'whistleblowing_concerns', 'maintenance',
+  'whistleblowing_concerns', 'maintenance', 'action_items', 'reflective_practice',
+  'agency_approval_attempts', 'audit_tasks', 'outcome_metrics',
 ]);
 
 async function run() {
@@ -64,7 +71,7 @@ async function run() {
 
     const table = rule.applies_to_table;
     const isGlobal = GLOBAL_TABLES.has(table);
-    const dateCol = TS_TABLES.has(table) ? 'ts' : 'created_at';
+    const dateCol = RETENTION_DATE_COLUMNS[table] || 'created_at';
     const hasSoftDelete = SOFT_DELETE_TABLES.has(table);
 
     // Build the WHERE clause

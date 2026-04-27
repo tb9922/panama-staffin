@@ -68,10 +68,18 @@ import assessmentRouter from './routes/assessment.js';
 import ropaRouter from './routes/ropa.js';
 import dpiaRouter from './routes/dpia.js';
 import importRouter from './routes/import.js';
+import actionItemsRouter from './routes/actionItems.js';
+import portfolioRouter from './routes/portfolio.js';
+import agencyAttemptsRouter from './routes/agencyAttempts.js';
+import internalBankRouter from './routes/internalBank.js';
+import auditTasksRouter from './routes/auditTasks.js';
+import outcomesRouter from './routes/outcomes.js';
+import reflectivePracticeRouter from './routes/reflectivePractice.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
 import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
+import { escalateOverdueActionItems } from './services/actionEscalationService.js';
 import {
   migrateAllLegacySecrets as migrateLegacyWebhookSecrets,
   purgeDeliveriesOlderThan as purgeWebhookDeliveries,
@@ -159,6 +167,13 @@ app.use('/api/assessment', assessmentRouter);
 app.use('/api/ropa', ropaRouter);
 app.use('/api/dpia', dpiaRouter);
 app.use('/api/import', importRouter);
+app.use('/api/action-items', actionItemsRouter);
+app.use('/api/portfolio', portfolioRouter);
+app.use('/api/agency-attempts', agencyAttemptsRouter);
+app.use('/api/internal-bank', internalBankRouter);
+app.use('/api/audit-tasks', auditTasksRouter);
+app.use('/api/outcomes', outcomesRouter);
+app.use('/api/reflective-practice', reflectivePracticeRouter);
 
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;
@@ -307,6 +322,11 @@ const server = shouldListen ? app.listen(config.port, config.host, async () => {
     // Purge audit entries past 7-year retention daily
     setInterval(
       () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
+      24 * 60 * 60 * 1000
+    ).unref();
+    // Escalate overdue V1 manager actions daily
+    setInterval(
+      () => escalateOverdueActionItems().catch(err => logger.warn({ err: err?.message }, 'action escalation failed')),
       24 * 60 * 60 * 1000
     ).unref();
     if (!config.enableWebhookRetryWorker) {

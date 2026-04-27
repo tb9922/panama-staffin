@@ -83,6 +83,7 @@ async function cleanup() {
     await pool.query(`DELETE FROM pay_rate_rules WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM payroll_ytd WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM agency_shifts WHERE home_id = $1`, [hid]).catch(() => {});
+    await pool.query(`DELETE FROM agency_approval_attempts WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM agency_providers WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM tax_codes WHERE home_id = $1`, [hid]).catch(() => {});
@@ -182,6 +183,9 @@ function adminGet(path) {
 }
 function adminPost(path, body) {
   return request(app).post(BASE + path).set('Authorization', `Bearer ${adminToken}`).send(body);
+}
+function adminPostApi(path, body) {
+  return request(app).post('/api' + path).set('Authorization', `Bearer ${adminToken}`).send(body);
 }
 function adminPut(path, body) {
   return request(app).put(BASE + path).set('Authorization', `Bearer ${adminToken}`).send(body);
@@ -885,20 +889,48 @@ describe('Agency — /agency', () => {
   });
 
   describe('Shifts', () => {
+    async function createNoInternalCoverAttempt({ date = '2099-06-01', shift_code = 'AG-E' } = {}) {
+      const res = await adminPostApi(`/agency-attempts?home=${homeASlug}`, {
+        gap_date: date,
+        shift_code,
+        role_needed: 'Carer',
+        reason: 'Short-notice cover required for test',
+        overtime_offered: true,
+        overtime_refused: true,
+        internal_bank_checked: true,
+        internal_bank_candidate_count: 0,
+        viable_internal_candidate_count: 0,
+      }).expect(201);
+      return res.body.id;
+    }
+
     it('POST creates agency shift', async () => {
+      const attemptId = await createNoInternalCoverAttempt();
       const res = await adminPost(`/agency/shifts?home=${homeASlug}`, {
         agency_id: providerId,
         date: '2099-06-01',
         shift_code: 'AG-E',
         hours: 8,
         hourly_rate: 22,
+        agency_attempt_id: attemptId,
       }).expect(201);
 
       expect(res.body).toHaveProperty('id');
+      expect(res.body.agency_attempt_id).toBe(attemptId);
       // Verify server-calculated total_cost
       expect(parseFloat(res.body.total_cost)).toBe(176); // 8 * 22
       shiftId = res.body.id;
       shiftVersion = res.body.version;
+    });
+
+    it('POST rejects agency shift without approval attempt', async () => {
+      await adminPost(`/agency/shifts?home=${homeASlug}`, {
+        agency_id: providerId,
+        date: '2099-06-02',
+        shift_code: 'AG-E',
+        hours: 8,
+        hourly_rate: 22,
+      }).expect(400);
     });
 
     it('POST rejects invalid shift_code', async () => {
@@ -933,12 +965,14 @@ describe('Agency — /agency', () => {
     });
 
     it('PUT updates shift', async () => {
+      const attemptId = await createNoInternalCoverAttempt({ shift_code: 'AG-L' });
       const res = await adminPut(`/agency/shifts/${shiftId}?home=${homeASlug}`, {
         agency_id: providerId,
         date: '2099-06-01',
         shift_code: 'AG-L',
         hours: 8,
         hourly_rate: 24,
+        agency_attempt_id: attemptId,
         _version: shiftVersion,
       }).expect(200);
       expect(parseFloat(res.body.total_cost)).toBe(192); // 8 * 24

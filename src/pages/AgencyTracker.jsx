@@ -9,7 +9,8 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
-  getAgencyMetrics, getCurrentHome, } from '../lib/api.js';
+  getAgencyMetrics, createAgencyAttempt, getInternalBankCandidates,
+  getCurrentHome, } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -21,7 +22,7 @@ const TABS = [
   { id: 'metrics', label: 'Weekly Trend' },
 ];
 
-const SHIFT_OPTIONS = ['E', 'L', 'EL', 'N', 'AG-E', 'AG-L', 'AG-N'];
+const SHIFT_OPTIONS = ['AG-E', 'AG-L', 'AG-N'];
 
 function fmt(n, prefix = '£') {
   if (n == null) return '—';
@@ -109,8 +110,21 @@ function ProviderModal({ existing, onSave, onClose }) {
 
 function ShiftModal({ providers, existing, onSave, onClose }) {
   const today  = todayLocalISO();
-  const blank  = { agency_id: providers[0]?.id || '', date: today, shift_code: 'E', hours: '', hourly_rate: '', worker_name: '', invoice_ref: '', role_covered: '', reconciled: false };
+  const blank  = { agency_id: providers[0]?.id || '', date: today, shift_code: 'AG-E', hours: '', hourly_rate: '', worker_name: '', invoice_ref: '', role_covered: '', reconciled: false };
   const [form, setForm]   = useState(existing || blank);
+  const [attempt, setAttempt] = useState({
+    reason: '',
+    overtime_offered: false,
+    overtime_accepted: false,
+    overtime_refused: false,
+    internal_bank_checked: false,
+    internal_bank_candidate_count: 0,
+    viable_internal_candidate_count: 0,
+    emergency_override: false,
+    emergency_override_reason: '',
+  });
+  const [candidatePreview, setCandidatePreview] = useState(null);
+  const [checkingBank, setCheckingBank] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState(null);
 
@@ -131,6 +145,37 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
     const isNight = code === 'N' || code === 'AG-N';
     const rate = isNight ? prov?.rate_night : prov?.rate_day;
     setForm(f => ({ ...f, shift_code: code, hourly_rate: rate != null ? String(rate) : f.hourly_rate }));
+  }
+
+  function setAttemptField(k, v) {
+    setAttempt(current => ({ ...current, [k]: v }));
+  }
+
+  async function checkInternalBank() {
+    if (!form.date) { setErr('Date is required before checking internal bank'); return; }
+    const hours = parseFloat(form.hours);
+    if (!hours || hours <= 0) { setErr('Enter valid hours before checking internal bank'); return; }
+    setCheckingBank(true);
+    setErr(null);
+    try {
+      const result = await getInternalBankCandidates(homeSlug, {
+        role: form.role_covered || '',
+        shift_date: form.date,
+        shift_code: form.shift_code,
+        hours,
+      });
+      setCandidatePreview(result);
+      setAttempt(current => ({
+        ...current,
+        internal_bank_checked: true,
+        internal_bank_candidate_count: result?.total || 0,
+        viable_internal_candidate_count: result?.viable_count || 0,
+      }));
+    } catch (e) {
+      setErr(e.message || 'Failed to check internal bank');
+    } finally {
+      setCheckingBank(false);
+    }
   }
 
   async function handleSave() {
@@ -160,7 +205,37 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
       if (existing) {
         await updateAgencyShift(homeSlug, existing.id, payload);
       } else {
-        await createAgencyShift(homeSlug, payload);
+        if (!attempt.reason.trim()) { setErr('Reason for agency use is required'); setSaving(false); return; }
+        if (!attempt.emergency_override && !attempt.internal_bank_checked) {
+          setErr('Check internal bank before logging non-emergency agency');
+          setSaving(false);
+          return;
+        }
+        if (!attempt.emergency_override && attempt.viable_internal_candidate_count > 0) {
+          setErr('Viable internal-bank candidates exist. Use internal cover or record an emergency override reason.');
+          setSaving(false);
+          return;
+        }
+        if (attempt.emergency_override && !attempt.emergency_override_reason.trim()) {
+          setErr('Emergency override reason is required');
+          setSaving(false);
+          return;
+        }
+        const createdAttempt = await createAgencyAttempt(homeSlug, {
+          gap_date: form.date,
+          shift_code: form.shift_code,
+          role_needed: form.role_covered || null,
+          reason: attempt.reason.trim(),
+          overtime_offered: attempt.overtime_offered,
+          overtime_accepted: attempt.overtime_accepted,
+          overtime_refused: attempt.overtime_refused,
+          internal_bank_checked: attempt.internal_bank_checked,
+          internal_bank_candidate_count: attempt.internal_bank_candidate_count,
+          viable_internal_candidate_count: attempt.viable_internal_candidate_count,
+          emergency_override: attempt.emergency_override,
+          emergency_override_reason: attempt.emergency_override ? attempt.emergency_override_reason.trim() : null,
+        });
+        await createAgencyShift(homeSlug, { ...payload, agency_attempt_id: createdAttempt.id });
       }
       onSave();
     } catch (e) {
@@ -214,6 +289,75 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
             <input className={INPUT.base} value={form.role_covered || ''} onChange={e => set('role_covered', e.target.value)} placeholder="e.g. Senior Carer" />
           </div>
         </div>
+        {!existing && (
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--ink)]">Agency approval evidence</h3>
+                <p className="text-xs text-[var(--ink-3)]">Internal cover must be checked unless this is an emergency override.</p>
+              </div>
+              <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={checkInternalBank} disabled={checkingBank}>
+                {checkingBank ? 'Checking...' : 'Check internal bank'}
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className={INPUT.label}>Reason agency is needed *</label>
+                <textarea
+                  className={INPUT.base}
+                  rows={2}
+                  value={attempt.reason}
+                  onChange={e => setAttemptField('reason', e.target.value)}
+                  placeholder="e.g. sickness at short notice, specialist cover unavailable internally"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-2 text-sm text-[var(--ink-2)]">
+                  <input type="checkbox" checked={attempt.overtime_offered} onChange={e => setAttemptField('overtime_offered', e.target.checked)} />
+                  Overtime offered
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[var(--ink-2)]">
+                  <input type="checkbox" checked={attempt.overtime_accepted} onChange={e => setAttemptField('overtime_accepted', e.target.checked)} />
+                  Overtime accepted
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[var(--ink-2)]">
+                  <input type="checkbox" checked={attempt.overtime_refused} onChange={e => setAttemptField('overtime_refused', e.target.checked)} />
+                  Overtime refused
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={INPUT.label}>Candidates checked</label>
+                  <input type="number" min="0" className={INPUT.base} value={attempt.internal_bank_candidate_count} onChange={e => setAttemptField('internal_bank_candidate_count', parseInt(e.target.value, 10) || 0)} />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Viable candidates</label>
+                  <input type="number" min="0" className={INPUT.base} value={attempt.viable_internal_candidate_count} onChange={e => setAttemptField('viable_internal_candidate_count', parseInt(e.target.value, 10) || 0)} />
+                </div>
+              </div>
+              {candidatePreview && (
+                <div className="rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink-2)]">
+                  Internal bank checked: {candidatePreview.viable_count || 0} viable of {candidatePreview.total || 0} candidate(s).
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-sm text-[var(--ink-2)]">
+                <input type="checkbox" checked={attempt.emergency_override} onChange={e => setAttemptField('emergency_override', e.target.checked)} />
+                Emergency override
+              </label>
+              {attempt.emergency_override && (
+                <div>
+                  <label className={INPUT.label}>Emergency override reason *</label>
+                  <textarea
+                    className={INPUT.base}
+                    rows={2}
+                    value={attempt.emergency_override_reason}
+                    onChange={e => setAttemptField('emergency_override_reason', e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={INPUT.label}>Invoice Ref (optional)</label>

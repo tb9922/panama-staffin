@@ -1363,3 +1363,319 @@ export function generateBoardPackPDF(data, dateRangeDays = 28, snapshot = null) 
 
   doc.save(`Board_Pack_${homeName.replace(/[^a-zA-Z0-9]+/g, '_')}_${today}.pdf`);
 }
+
+function fmtPortfolioNumber(value) {
+  if (value == null || Number.isNaN(Number(value))) return '-';
+  return Number(value).toLocaleString('en-GB');
+}
+
+function fmtPortfolioPct(value) {
+  if (value == null || Number.isNaN(Number(value))) return '-';
+  return `${Math.round(Number(value))}%`;
+}
+
+function fmtPortfolioDateTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function ragLabel(value) {
+  if (value === 'green') return 'Green';
+  if (value === 'amber') return 'Amber';
+  if (value === 'red') return 'Red';
+  return 'Unknown';
+}
+
+function ragColor(value) {
+  if (value === 'green') return { fillColor: [220, 252, 231], textColor: [22, 101, 52] };
+  if (value === 'amber') return { fillColor: [254, 249, 195], textColor: [133, 77, 14] };
+  if (value === 'red') return { fillColor: [254, 226, 226], textColor: [153, 27, 27] };
+  return { fillColor: [241, 245, 249], textColor: [71, 85, 105] };
+}
+
+function paintPortfolioRagCell(hookData) {
+  if (hookData.section !== 'body') return;
+  const raw = String(hookData.cell.raw || '').toLowerCase();
+  if (!['green', 'amber', 'red', 'unknown'].includes(raw)) return;
+  Object.assign(hookData.cell.styles, ragColor(raw));
+  hookData.cell.styles.fontStyle = 'bold';
+}
+
+function ragDrivers(home) {
+  return Object.entries(home.rag || {})
+    .filter(([key, value]) => key !== 'overall' && (value === 'red' || value === 'amber'))
+    .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`)
+    .join(', ') || 'No amber/red exceptions';
+}
+
+function addPortfolioFooter(doc) {
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFontSize(7);
+    doc.setTextColor(120);
+    doc.text(
+      `Panama portfolio board pack - page ${page} of ${pageCount}`,
+      14,
+      doc.internal.pageSize.height - 8,
+    );
+    doc.setTextColor(0);
+  }
+}
+
+const PORTFOLIO_TABLE_MARGIN = { left: 14, right: 14 };
+
+export function generatePortfolioBoardPackPDF(pack) {
+  const doc = new jsPDF('landscape', 'mm', 'a4');
+  const generatedAt = pack?.generated_at || new Date().toISOString();
+  const homes = Array.isArray(pack?.homes) ? pack.homes : [];
+  const summary = pack?.summary || {};
+  let y = addHeader(
+    doc,
+    'Portfolio Board Pack',
+    `Generated ${fmtPortfolioDateTime(generatedAt)} - ${fmtPortfolioNumber(homes.length)} homes`,
+    'Panama Staffing Portfolio',
+  );
+
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Portfolio signal', 'Value']],
+    body: [
+      ['Homes covered', fmtPortfolioNumber(summary.home_count ?? homes.length)],
+      ['Red homes', fmtPortfolioNumber(summary.red_homes || 0)],
+      ['Amber homes', fmtPortfolioNumber(summary.amber_homes || 0)],
+      ['Green homes', fmtPortfolioNumber(summary.green_homes || 0)],
+      ['Overdue manager actions', fmtPortfolioNumber(summary.overdue_actions || 0)],
+      ['L3/L4 escalated actions', fmtPortfolioNumber(summary.escalated_actions_l3_plus || 0)],
+      ['Homes above 20% emergency agency override', fmtPortfolioNumber(summary.emergency_override_pct_red_homes || 0)],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 80 }, 1: { cellWidth: 50 } },
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [[
+      'Home', 'Overall', 'Staffing', 'Agency', 'Training', 'Actions',
+      'Incidents', 'Complaints',
+    ]],
+    body: homes.map(home => [
+      home.home_name,
+      home.rag?.overall || 'unknown',
+      home.rag?.staffing || 'unknown',
+      home.rag?.agency || 'unknown',
+      home.rag?.training || 'unknown',
+      home.rag?.manager_actions || 'unknown',
+      home.rag?.incidents || 'unknown',
+      home.rag?.complaints || 'unknown',
+    ]),
+    styles: { fontSize: 7, cellPadding: 1.6, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    columnStyles: {
+      0: { cellWidth: 45, fontStyle: 'bold' },
+      1: { cellWidth: 23 },
+      2: { cellWidth: 23 },
+      3: { cellWidth: 23 },
+      4: { cellWidth: 23 },
+      5: { cellWidth: 23 },
+      6: { cellWidth: 23 },
+      7: { cellWidth: 23 },
+    },
+    didParseCell: paintPortfolioRagCell,
+  });
+
+  y = doc.lastAutoTable.finalY + 6;
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Home', 'Audits', 'Supervisions', 'CQC', 'Maintenance', 'Occupancy', 'Outcomes']],
+    body: homes.map(home => [
+      home.home_name,
+      home.rag?.audits || 'unknown',
+      home.rag?.supervisions || 'unknown',
+      home.rag?.cqc_evidence || 'unknown',
+      home.rag?.maintenance || 'unknown',
+      home.rag?.occupancy || 'unknown',
+      home.rag?.outcomes || 'unknown',
+    ]),
+    styles: { fontSize: 7, cellPadding: 1.6, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    columnStyles: {
+      0: { cellWidth: 45, fontStyle: 'bold' },
+      1: { cellWidth: 28 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 28 },
+      5: { cellWidth: 28 },
+      6: { cellWidth: 28 },
+    },
+    didParseCell: paintPortfolioRagCell,
+  });
+
+  doc.addPage();
+  y = addHeader(doc, 'Weakest Homes And Escalations', `Generated ${fmtPortfolioDateTime(generatedAt)}`, 'Panama Staffing Portfolio');
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Home', 'Overall', 'Red bands', 'Amber bands', 'Primary drivers']],
+    body: (pack?.weakest_homes || []).map(home => [
+      home.home_name,
+      home.rag?.overall || 'unknown',
+      fmtPortfolioNumber(home.red_count || 0),
+      fmtPortfolioNumber(home.amber_count || 0),
+      ragDrivers(home),
+    ]),
+    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: {
+      0: { cellWidth: 45, fontStyle: 'bold' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 25 },
+      4: { cellWidth: 95 },
+    },
+    didParseCell: paintPortfolioRagCell,
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Home', 'Action', 'Priority', 'Due', 'Escalation', 'Owner']],
+    body: (pack?.escalated_actions || []).slice(0, 18).map(action => [
+      action.home_name,
+      action.title,
+      action.priority,
+      action.due_date || '-',
+      `L${action.escalation_level || 0}`,
+      action.owner_name || action.owner_role || '-',
+    ]),
+    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: {
+      0: { cellWidth: 35 },
+      1: { cellWidth: 75, fontStyle: 'bold' },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 24 },
+      5: { cellWidth: 36 },
+    },
+  });
+
+  doc.addPage();
+  y = addHeader(doc, 'Agency, Training And CQC Exceptions', `Generated ${fmtPortfolioDateTime(generatedAt)}`, 'Panama Staffing Portfolio');
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Home', 'Agency shifts 28d', 'Emergency overrides 7d', 'Override %', 'RAG']],
+    body: (pack?.agency_pressure || []).slice(0, 12).map(row => [
+      row.home_name,
+      fmtPortfolioNumber(row.shifts_28d),
+      fmtPortfolioNumber(row.emergency_overrides_7d),
+      fmtPortfolioPct(row.emergency_override_pct),
+      row.rag || 'unknown',
+    ]),
+    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: {
+      0: { cellWidth: 60, fontStyle: 'bold' },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 44 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 22 },
+    },
+    didParseCell: paintPortfolioRagCell,
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Home', 'Training compliance', 'Expired', 'Expiring 30d', 'Not started', 'RAG']],
+    body: (pack?.training_gaps || []).slice(0, 10).map(row => [
+      row.home_name,
+      fmtPortfolioPct(row.compliance_pct),
+      fmtPortfolioNumber(row.expired),
+      fmtPortfolioNumber(row.expiring_30d),
+      fmtPortfolioNumber(row.not_started),
+      row.rag || 'unknown',
+    ]),
+    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: {
+      0: { cellWidth: 60, fontStyle: 'bold' },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 32 },
+      4: { cellWidth: 28 },
+      5: { cellWidth: 22 },
+    },
+    didParseCell: paintPortfolioRagCell,
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+  autoTable(doc, {
+    tableWidth: 'wrap',
+    margin: PORTFOLIO_TABLE_MARGIN,
+    startY: y,
+    head: [['Home', 'Open evidence gaps', 'Readiness', 'RAG']],
+    body: (pack?.cqc_evidence_gaps || []).slice(0, 10).map(row => [
+      row.home_name,
+      fmtPortfolioNumber(row.open_gaps),
+      row.overall || '-',
+      row.rag || 'unknown',
+    ]),
+    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: {
+      0: { cellWidth: 60, fontStyle: 'bold' },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 60 },
+      3: { cellWidth: 22 },
+    },
+    didParseCell: paintPortfolioRagCell,
+  });
+
+  for (const home of homes) {
+    doc.addPage();
+    y = addHeader(doc, `Home Summary - ${home.home_name}`, `Generated ${fmtPortfolioDateTime(generatedAt)}`, 'Panama Staffing Portfolio');
+    autoTable(doc, {
+      tableWidth: 'wrap',
+      margin: PORTFOLIO_TABLE_MARGIN,
+      startY: y,
+      head: [['Area', 'RAG', 'Current signal']],
+      body: [
+        ['Overall', home.rag?.overall || 'unknown', ragDrivers(home)],
+        ['Manager actions', home.rag?.manager_actions || 'unknown', `${fmtPortfolioNumber(home.manager_actions?.open)} open / ${fmtPortfolioNumber(home.manager_actions?.overdue)} overdue / ${fmtPortfolioNumber(home.manager_actions?.escalated_l3_plus)} L3+`],
+        ['Agency', home.rag?.agency || 'unknown', `${fmtPortfolioNumber(home.agency?.shifts_28d)} shifts in 28d / ${fmtPortfolioPct(home.agency?.emergency_override_pct)} emergency override`],
+        ['Training', home.rag?.training || 'unknown', `${fmtPortfolioPct(home.training?.compliance_pct)} compliant / ${fmtPortfolioNumber(home.training?.expired)} expired`],
+        ['Incidents', home.rag?.incidents || 'unknown', `${fmtPortfolioNumber(home.incidents?.open)} open / ${fmtPortfolioNumber(home.incidents?.cqc_notifiable_overdue)} CQC overdue / ${fmtPortfolioNumber(home.incidents?.riddor_overdue)} RIDDOR overdue`],
+        ['Complaints', home.rag?.complaints || 'unknown', `${fmtPortfolioNumber(home.complaints?.open)} open / ${fmtPortfolioNumber(home.complaints?.ack_overdue)} ack overdue / ${fmtPortfolioNumber(home.complaints?.response_overdue)} response overdue`],
+        ['CQC evidence', home.rag?.cqc_evidence || 'unknown', `${fmtPortfolioNumber(home.cqc_evidence?.open_gaps)} open gaps / ${home.cqc_evidence?.overall || '-'}`],
+        ['Maintenance', home.rag?.maintenance || 'unknown', `${fmtPortfolioNumber(home.maintenance?.overdue)} overdue / ${fmtPortfolioNumber(home.maintenance?.certs_expired)} expired certs`],
+        ['Occupancy', home.rag?.occupancy || 'unknown', `${fmtPortfolioPct(home.occupancy?.pct)} occupied / ${fmtPortfolioNumber(home.occupancy?.available)} available`],
+        ['Outcomes', home.rag?.outcomes || 'unknown', home.outcomes?.rag === 'unknown' ? 'No outcome RAG yet' : ragLabel(home.outcomes?.rag)],
+      ],
+      styles: { fontSize: 8, cellPadding: 2.3, overflow: 'linebreak' },
+      headStyles: { fillColor: [31, 41, 55] },
+      columnStyles: { 0: { cellWidth: 40, fontStyle: 'bold' }, 1: { cellWidth: 24 }, 2: { cellWidth: 150 } },
+      didParseCell: paintPortfolioRagCell,
+    });
+  }
+
+  addPortfolioFooter(doc);
+  doc.save(`Portfolio_Board_Pack_${formatDate(new Date())}.pdf`);
+}

@@ -1417,6 +1417,8 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'staff', 'sick_periods', 'training_records', 'onboarding', 'payroll_runs',
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
+  'action_items', 'reflective_practice', 'agency_approval_attempts',
+  'audit_tasks', 'outcome_metrics',
   'retention_schedule', 'cqc_statement_narratives',
   // HR module tables (6-year retention per Limitation Act 1980)
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
@@ -1430,11 +1432,14 @@ const RETENTION_ALLOWED_TABLES = new Set([
 // These lack meaningful per-home scoping — their counts reflect all homes combined.
 const GLOBAL_TABLES = new Set(['retention_schedule']);
 
-// Date column overrides for tables that don't use 'created_at'
-const TS_TABLES = new Set(['access_log', 'audit_log']);
-
-// Tables that use 'updated_at' instead of 'created_at'
-const UPDATED_AT_TABLES = new Set(['onboarding', 'pension_enrolments']);
+// Date column overrides for tables that don't use 'created_at'.
+const RETENTION_DATE_COLUMNS = Object.freeze({
+  access_log: 'ts',
+  audit_log: 'ts',
+  onboarding: 'updated_at',
+  pension_enrolments: 'updated_at',
+  outcome_metrics: 'recorded_at',
+});
 
 export async function scanRetention(homeId) {
   const schedule = await gdprRepo.getRetentionSchedule();
@@ -1452,7 +1457,7 @@ export async function scanRetention(homeId) {
     // Skip global tables from per-home retention scoring — their counts reflect
     // all homes combined, which distorts individual home compliance posture.
     if (GLOBAL_TABLES.has(table)) continue;
-    const dateCol = TS_TABLES.has(table) ? 'ts' : UPDATED_AT_TABLES.has(table) ? 'updated_at' : 'created_at';
+    const dateCol = RETENTION_DATE_COLUMNS[table] || 'created_at';
     let count = 0;
     let expiredCount = 0;
 

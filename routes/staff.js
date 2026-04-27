@@ -19,6 +19,7 @@ const STAFF_ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Nigh
 const STAFF_TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
 const STAFF_PREFS = ['E', 'L', 'EL', 'N', 'ANY'];
+const INTERNAL_BANK_STATUSES = ['available', 'limited', 'paused', 'not_interested'];
 const optDate = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional());
 const optNI   = z.preprocess(v => v === '' ? null : v, z.string().regex(/^[A-Z]{2}\d{6}[A-D]$/).nullable().optional());
 
@@ -39,6 +40,13 @@ const staffBodySchema = z.object({
   al_entitlement:  z.number().min(0).max(2000).nullable().optional(),
   al_carryover:    z.number().min(0).max(500).optional(),
   leaving_date:    optDate,
+  willing_extras:  z.boolean().optional(),
+  willing_other_homes: z.boolean().optional(),
+  max_weekly_hours_topup: z.number().min(0).max(80).nullable().optional(),
+  max_travel_radius_km: z.number().int().min(0).max(500).nullable().optional(),
+  home_postcode:   z.string().trim().max(20).nullable().optional(),
+  internal_bank_status: z.enum(INTERNAL_BANK_STATUSES).optional(),
+  internal_bank_notes: z.string().max(1000).nullable().optional(),
 });
 const staffUpdateSchema = staffBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),

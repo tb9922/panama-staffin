@@ -21,7 +21,7 @@ test.describe('Dashboard', () => {
 
   test('sidebar navigation is visible', async ({ page }) => {
     const sidebar = page.locator('aside[aria-label="Main navigation"]');
-    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 });
     // Check nav group buttons exist in sidebar
     await expect(sidebar.getByRole('button', { name: /^Scheduling(?:\s+\d+)?$/ })).toBeVisible();
     await expect(sidebar.getByRole('button', { name: /^Staff(?:\s+\d+)?$/ })).toBeVisible();

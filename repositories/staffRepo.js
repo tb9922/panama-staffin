@@ -6,6 +6,8 @@ const STAFF_COLS = `id, home_id, name, role, team, pref, skill, hourly_rate,
   active, wtr_opt_out, start_date, contract_hours,
   date_of_birth, ni_number, al_entitlement, al_carryover,
   leaving_date, phone, address, emergency_contact,
+  willing_extras, willing_other_homes, max_weekly_hours_topup,
+  max_travel_radius_km, home_postcode, internal_bank_status, internal_bank_notes,
   version, created_at, updated_at, deleted_at`;
 
 function shapeRow(row) {
@@ -29,6 +31,13 @@ function shapeRow(row) {
     phone: row.phone || null,
     address: row.address || null,
     emergency_contact: row.emergency_contact || null,
+    willing_extras: row.willing_extras === true,
+    willing_other_homes: row.willing_other_homes === true,
+    max_weekly_hours_topup: row.max_weekly_hours_topup != null ? parseFloat(row.max_weekly_hours_topup) : null,
+    max_travel_radius_km: row.max_travel_radius_km != null ? parseInt(row.max_travel_radius_km, 10) : null,
+    home_postcode: row.home_postcode || null,
+    internal_bank_status: row.internal_bank_status || 'available',
+    internal_bank_notes: row.internal_bank_notes || null,
     version: row.version != null ? parseInt(row.version, 10) : undefined,
   };
 }
@@ -120,8 +129,8 @@ export async function sync(homeId, staffArr, client) {
 
   const incomingIds = staffArr.map(s => s.id);
 
-  // Batch upsert — 19 per-row params, homeId shared as $1
-  const COLS_PER_ROW = 19;
+  // Batch upsert - 26 per-row params, homeId shared as $1
+  const COLS_PER_ROW = 26;
   const CHUNK = 50; // keep well within PG parameter limits
   for (let i = 0; i < staffArr.length; i += CHUNK) {
     const chunk = staffArr.slice(i, i + CHUNK);
@@ -130,7 +139,7 @@ export async function sync(homeId, staffArr, client) {
     chunk.forEach((s, j) => {
       const base = j * COLS_PER_ROW + 2; // $1 is homeId
       placeholders.push(
-        `($${base},$1,$${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15},$${base+16},$${base+17},$${base+18},NOW())`
+        `($${base},$1,$${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15},$${base+16},$${base+17},$${base+18},$${base+19},$${base+20},$${base+21},$${base+22},$${base+23},$${base+24},$${base+25},NOW())`
       );
       values.push(
         s.id, s.name, s.role, s.team, s.pref || null,
@@ -138,13 +147,20 @@ export async function sync(homeId, staffArr, client) {
         s.start_date || null, s.date_of_birth || null, s.ni_number || null,
         s.contract_hours ?? null, s.al_entitlement ?? null, s.al_carryover ?? 0, s.leaving_date || null,
         s.phone || null, s.address || null, s.emergency_contact || null,
+        s.willing_extras ?? false, s.willing_other_homes ?? false,
+        s.max_weekly_hours_topup ?? null, s.max_travel_radius_km ?? null,
+        s.home_postcode || null, s.internal_bank_status || 'available',
+        s.internal_bank_notes || null,
       );
     });
     await conn.query(
       `INSERT INTO staff
          (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
           start_date, date_of_birth, ni_number, contract_hours, al_entitlement, al_carryover, leaving_date,
-          phone, address, emergency_contact, updated_at)
+          phone, address, emergency_contact,
+          willing_extras, willing_other_homes, max_weekly_hours_topup,
+          max_travel_radius_km, home_postcode, internal_bank_status, internal_bank_notes,
+          updated_at)
        VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
          name           = EXCLUDED.name,
@@ -165,6 +181,13 @@ export async function sync(homeId, staffArr, client) {
          phone          = EXCLUDED.phone,
          address        = EXCLUDED.address,
          emergency_contact = EXCLUDED.emergency_contact,
+         willing_extras = EXCLUDED.willing_extras,
+         willing_other_homes = EXCLUDED.willing_other_homes,
+         max_weekly_hours_topup = EXCLUDED.max_weekly_hours_topup,
+         max_travel_radius_km = EXCLUDED.max_travel_radius_km,
+         home_postcode = EXCLUDED.home_postcode,
+         internal_bank_status = EXCLUDED.internal_bank_status,
+         internal_bank_notes = EXCLUDED.internal_bank_notes,
          updated_at     = NOW(),
          version        = staff.version + 1,
          deleted_at     = NULL`,
@@ -206,14 +229,19 @@ export async function upsertOne(homeId, staff, client) {
     `INSERT INTO staff
        (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
         start_date, leaving_date, date_of_birth, ni_number, contract_hours,
-        al_entitlement, al_carryover, phone, address, emergency_contact, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+        al_entitlement, al_carryover, phone, address, emergency_contact,
+        willing_extras, willing_other_homes, max_weekly_hours_topup,
+        max_travel_radius_km, home_postcode, internal_bank_status, internal_bank_notes,
+        updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW())
      ON CONFLICT (home_id, id) DO UPDATE SET
        name=$3, role=$4, team=$5, pref=$6, skill=$7, hourly_rate=$8,
        active=$9, wtr_opt_out=$10, start_date=$11, leaving_date=$12,
        date_of_birth=$13, ni_number=$14, contract_hours=$15,
        al_entitlement=$16, al_carryover=$17, phone=$18, address=$19,
-       emergency_contact=$20, updated_at=NOW(),
+       emergency_contact=$20, willing_extras=$21, willing_other_homes=$22,
+       max_weekly_hours_topup=$23, max_travel_radius_km=$24, home_postcode=$25,
+       internal_bank_status=$26, internal_bank_notes=$27, updated_at=NOW(),
        version = staff.version + 1,
        deleted_at=NULL
      RETURNING ${STAFF_COLS}`,
@@ -232,6 +260,13 @@ export async function upsertOne(homeId, staff, client) {
       staff.phone || null,
       staff.address || null,
       staff.emergency_contact || null,
+      staff.willing_extras === true,
+      staff.willing_other_homes === true,
+      staff.max_weekly_hours_topup != null ? staff.max_weekly_hours_topup : null,
+      staff.max_travel_radius_km != null ? staff.max_travel_radius_km : null,
+      staff.home_postcode || null,
+      staff.internal_bank_status || 'available',
+      staff.internal_bank_notes || null,
     ]
   );
   await ensureStaffIdCounterAtLeast(homeId, (parseSequentialStaffId(staff.id) || 0) + 1, conn);
@@ -245,8 +280,11 @@ export async function createOne(homeId, staff, client) {
       `INSERT INTO staff
          (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
           start_date, leaving_date, date_of_birth, ni_number, contract_hours,
-          al_entitlement, al_carryover, phone, address, emergency_contact, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+          al_entitlement, al_carryover, phone, address, emergency_contact,
+          willing_extras, willing_other_homes, max_weekly_hours_topup,
+          max_travel_radius_km, home_postcode, internal_bank_status, internal_bank_notes,
+          updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW())
        RETURNING ${STAFF_COLS}`,
       [
         staff.id, homeId, staff.name, staff.role || null, staff.team || null,
@@ -263,6 +301,13 @@ export async function createOne(homeId, staff, client) {
         staff.phone || null,
         staff.address || null,
         staff.emergency_contact || null,
+        staff.willing_extras === true,
+        staff.willing_other_homes === true,
+        staff.max_weekly_hours_topup != null ? staff.max_weekly_hours_topup : null,
+        staff.max_travel_radius_km != null ? staff.max_travel_radius_km : null,
+        staff.home_postcode || null,
+        staff.internal_bank_status || 'available',
+        staff.internal_bank_notes || null,
       ]
     );
     await ensureStaffIdCounterAtLeast(homeId, (parseSequentialStaffId(staff.id) || 0) + 1, conn);
@@ -299,6 +344,13 @@ export async function updateOne(homeId, staffId, fields, version, client) {
     contract_hours: 'contract_hours::numeric', al_entitlement: 'al_entitlement::numeric',
     al_carryover: 'al_carryover', leaving_date: 'leaving_date::date',
     phone: 'phone', address: 'address', emergency_contact: 'emergency_contact',
+    willing_extras: 'willing_extras',
+    willing_other_homes: 'willing_other_homes',
+    max_weekly_hours_topup: 'max_weekly_hours_topup::numeric',
+    max_travel_radius_km: 'max_travel_radius_km::int',
+    home_postcode: 'home_postcode',
+    internal_bank_status: 'internal_bank_status',
+    internal_bank_notes: 'internal_bank_notes',
   };
   for (const [key, cast] of Object.entries(settable)) {
     if (key in effectiveFields) {

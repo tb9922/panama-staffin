@@ -50,6 +50,7 @@ async function cleanup() {
 
   // Clean child tables (order matters for FK constraints)
   for (const table of [
+    'action_items',
     'incidents', 'complaints', 'complaint_surveys', 'maintenance',
     'ipc_audits', 'risk_register', 'policy_reviews', 'whistleblowing_concerns',
     'dols', 'mca_assessments', 'care_certificates', 'fire_drills',
@@ -128,6 +129,38 @@ describe('dashboardService', () => {
     expect(modules.ipc.activeOutbreaks).toBe(1);
 
     await pool.query(`DELETE FROM ipc_audits WHERE id = 'ipc-test-1'`);
+  });
+
+  it('uses action_items as the canonical source for overdue module actions', async () => {
+    await pool.query(
+      `DELETE FROM action_items WHERE home_id = $1 AND source_id LIKE 'dash-actions-%'`,
+      [homeId],
+    );
+    await pool.query(
+      `INSERT INTO action_items (
+         home_id, source_type, source_id, source_action_key, title,
+         category, priority, due_date, status
+       ) VALUES
+         ($1, 'incident', 'dash-actions-incident', 'legacy:1', 'Review incident learning', 'safeguarding', 'high', '2020-01-01', 'open'),
+         ($1, 'incident', 'dash-actions-incident-done', 'legacy:1', 'Completed incident action', 'safeguarding', 'high', '2020-01-01', 'completed'),
+         ($1, 'ipc_audit', 'dash-actions-ipc', 'legacy:1', 'IPC cleaning action', 'clinical', 'medium', '2020-01-01', 'open'),
+         ($1, 'risk', 'dash-actions-risk', 'legacy:1', 'Risk mitigation action', 'governance', 'high', '2020-01-01', 'open')`,
+      [homeId],
+    );
+
+    const { modules, alerts } = await dashboardService.getDashboardSummary(homeId);
+
+    expect(modules.incidents.overdueActions).toBe(1);
+    expect(modules.ipc.overdueActions).toBe(1);
+    expect(modules.risks.overdueActions).toBe(1);
+    expect(alerts.some(a => a.id === 'incidents.overdue_actions')).toBe(true);
+    expect(alerts.some(a => a.id === 'ipc.overdue_actions')).toBe(true);
+    expect(alerts.some(a => a.id === 'risks.overdue_actions')).toBe(true);
+
+    await pool.query(
+      `DELETE FROM action_items WHERE home_id = $1 AND source_id LIKE 'dash-actions-%'`,
+      [homeId],
+    );
   });
 
   it('picks up critical risks', async () => {

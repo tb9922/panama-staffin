@@ -55,14 +55,12 @@ export async function getIncidentCounts(homeId) {
     pool.query(
       `/* dashboardRepo – getIncidentCounts/actions */
        SELECT COUNT(*)::int AS count
-       FROM (SELECT corrective_actions FROM incidents
-             WHERE home_id = $1 AND deleted_at IS NULL
-               AND jsonb_typeof(corrective_actions) = 'array') AS i,
-            jsonb_array_elements(i.corrective_actions) AS elem
-       WHERE elem->>'status' IS DISTINCT FROM 'completed'
-         AND (elem->>'due_date') IS NOT NULL
-         AND (elem->>'due_date') ~ '^\\d{4}-\\d{2}-\\d{2}$'
-         AND (elem->>'due_date')::date < CURRENT_DATE`,
+         FROM action_items
+        WHERE home_id = $1
+          AND source_type = 'incident'
+          AND deleted_at IS NULL
+          AND status NOT IN ('completed', 'verified', 'cancelled')
+          AND due_date < CURRENT_DATE`,
       [homeId]
     ),
   ]);
@@ -172,6 +170,11 @@ export async function getTrainingCounts(homeId, today) {
        ORDER BY tr.staff_id, tr.training_type_id, tr.expiry DESC NULLS LAST, tr.completed DESC NULLS LAST
      )
      SELECT
+       COUNT(*)::int AS total_required,
+       COUNT(*) FILTER (
+         WHERE lr.completed IS NOT NULL
+           AND (lr.expiry IS NULL OR lr.expiry >= $2)
+       )::int AS compliant,
        COUNT(*) FILTER (
          WHERE lr.expiry < $2
            AND lr.completed IS NOT NULL
@@ -190,7 +193,12 @@ export async function getTrainingCounts(homeId, today) {
     [homeId, today]
   );
   const r = rows[0];
+  const totalRequired = int(r.total_required);
+  const compliant = int(r.compliant);
   return {
+    totalRequired,
+    compliant,
+    compliancePct: totalRequired > 0 ? Math.round(100.0 * compliant / totalRequired) : 100,
     expired: r.expired,
     expiringSoon: r.expiring_soon,
     notStarted: r.not_started,
@@ -313,14 +321,12 @@ export async function getIpcCounts(homeId) {
     pool.query(
       `/* dashboardRepo – getIpcCounts/actions */
        SELECT COUNT(*)::int AS count
-       FROM (SELECT corrective_actions FROM ipc_audits
-             WHERE home_id = $1 AND deleted_at IS NULL
-               AND jsonb_typeof(corrective_actions) = 'array') AS i,
-            jsonb_array_elements(i.corrective_actions) AS elem
-       WHERE elem->>'status' IS DISTINCT FROM 'completed'
-         AND (elem->>'due_date') IS NOT NULL
-         AND (elem->>'due_date') ~ '^\\d{4}-\\d{2}-\\d{2}$'
-         AND (elem->>'due_date')::date < CURRENT_DATE`,
+         FROM action_items
+        WHERE home_id = $1
+          AND source_type = 'ipc_audit'
+          AND deleted_at IS NULL
+          AND status NOT IN ('completed', 'verified', 'cancelled')
+          AND due_date < CURRENT_DATE`,
       [homeId]
     ),
   ]);
@@ -356,15 +362,12 @@ export async function getRiskCounts(homeId, today) {
     pool.query(
       `/* dashboardRepo – getRiskCounts/actions */
        SELECT COUNT(*)::int AS count
-       FROM (SELECT actions FROM risk_register
-             WHERE home_id = $1 AND deleted_at IS NULL
-               AND status IS DISTINCT FROM 'closed'
-               AND jsonb_typeof(actions) = 'array') AS r,
-            jsonb_array_elements(r.actions) AS elem
-       WHERE elem->>'status' IS DISTINCT FROM 'completed'
-         AND (elem->>'due_date') IS NOT NULL
-         AND (elem->>'due_date') ~ '^\\d{4}-\\d{2}-\\d{2}$'
-         AND (elem->>'due_date')::date < $2`,
+         FROM action_items
+        WHERE home_id = $1
+          AND source_type = 'risk'
+          AND deleted_at IS NULL
+          AND status NOT IN ('completed', 'verified', 'cancelled')
+          AND due_date < $2::date`,
       [homeId, today]
     ),
   ]);

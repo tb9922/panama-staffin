@@ -24,6 +24,7 @@ import * as timesheetRepo     from '../repositories/timesheetRepo.js';
 import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRepo.js';
 import * as payrollRunRepo    from '../repositories/payrollRunRepo.js';
 import * as agencyRepo        from '../repositories/agencyRepo.js';
+import * as agencyAttemptRepo from '../repositories/agencyAttemptRepo.js';
 import * as taxRepo           from '../repositories/taxRepo.js';
 import * as pensionRepo       from '../repositories/pensionRepo.js';
 import * as sspRepo           from '../repositories/sspRepo.js';
@@ -213,6 +214,7 @@ const agencyShiftBodySchema = z.object({
   invoice_ref:  z.string().max(100).nullable().optional(),
   reconciled:   z.boolean().optional().default(false),
   role_covered: z.string().max(100).nullable().optional(),
+  agency_attempt_id: z.coerce.number().int().positive().nullable().optional(),
   _version:     z.number().int().nonnegative().optional(),
 });
 
@@ -231,6 +233,29 @@ const hourAdjustmentBodySchema = z.object({
 
 function round2(n) {
   return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function agencyAttemptErrorForShift(attempt, shiftData, existingShiftId = null) {
+  if (!attempt) return 'Agency approval attempt is required before logging agency';
+  if (attempt.gap_date !== shiftData.date) return 'Agency attempt date must match the agency shift date';
+  if (attempt.shift_code !== shiftData.shift_code) return 'Agency attempt shift code must match the agency shift';
+  if (attempt.linked_agency_shift_id && Number(attempt.linked_agency_shift_id) !== Number(existingShiftId)) {
+    return 'Agency attempt is already linked to another agency shift';
+  }
+  if (attempt.emergency_override) {
+    if (!attempt.emergency_override_reason) return 'Emergency override reason is required';
+    return null;
+  }
+  if (!attempt.internal_bank_checked) {
+    return 'Internal bank check is required before non-emergency agency is logged';
+  }
+  if (attempt.overtime_accepted) {
+    return 'Overtime was accepted, so agency cannot be logged without an emergency override';
+  }
+  if ((attempt.viable_internal_candidate_count || 0) > 0) {
+    return 'Viable internal-bank candidates exist; use emergency override with a reason to proceed with agency';
+  }
+  return null;
 }
 
 async function getHourAdjustmentContext(home, staffId, date, client, payableHoursOverride = undefined) {
@@ -856,12 +881,43 @@ router.post('/agency/shifts', writeRateLimiter, requireAuth, requireHomeAccess, 
   try {
     const parsed = agencyShiftBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    // Calculate total_cost server-side
-    const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
-    const shift = await agencyRepo.createShift(req.home.id, data);
-    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: shift.id, entity: 'agency_shift' });
+    if (!parsed.data.agency_attempt_id) {
+      return res.status(400).json({ error: 'Agency approval attempt is required before logging agency' });
+    }
+    const shift = await withTransaction(async (client) => {
+      const attempt = await agencyAttemptRepo.findByIdForUpdate(parsed.data.agency_attempt_id, req.home.id, client);
+      const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
+      const attemptError = agencyAttemptErrorForShift(attempt, data);
+      if (attemptError) {
+        throw Object.assign(new Error(attemptError), { status: 400 });
+      }
+      const created = await agencyRepo.createShift(req.home.id, data, client);
+      const linked = await agencyAttemptRepo.linkAgencyShift(attempt.id, req.home.id, created.id, client);
+      if (!linked) {
+        throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });
+      }
+      return created;
+    });
+    await auditService.log('payroll_create', req.home.slug, req.user.username, {
+      id: shift.id,
+      entity: 'agency_shift',
+      agency_attempt_id: shift.agency_attempt_id,
+    });
+    if (parsed.data.agency_attempt_id) {
+      const attempt = await agencyAttemptRepo.findById(parsed.data.agency_attempt_id, req.home.id);
+      if (attempt?.emergency_override) {
+        await auditService.log('agency_shift_emergency_override', req.home.slug, req.user.username, {
+          agency_shift_id: shift.id,
+          agency_attempt_id: attempt.id,
+        });
+      }
+    }
     res.status(201).json(shift);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.status === 409) return res.status(409).json({ error: err.message });
+    next(err);
+  }
 });
 
 // PUT /api/payroll/agency/shifts/:id?home=X
@@ -875,12 +931,36 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
     if (_version == null) return res.status(400).json({ error: 'Version is required. Refresh and try again.' });
     const existing = await agencyRepo.findShiftById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Shift not found' });
-    const data = { ...payload, total_cost: Math.round(payload.hours * payload.hourly_rate * 100) / 100 };
-    const shift = await agencyRepo.updateShift(idP.data, req.home.id, data, null, _version);
+    const data = {
+      ...payload,
+      agency_attempt_id: payload.agency_attempt_id ?? existing.agency_attempt_id ?? null,
+      total_cost: Math.round(payload.hours * payload.hourly_rate * 100) / 100,
+    };
+    const shift = await withTransaction(async (client) => {
+      if (data.agency_attempt_id) {
+        const attempt = await agencyAttemptRepo.findByIdForUpdate(data.agency_attempt_id, req.home.id, client);
+        const attemptError = agencyAttemptErrorForShift(attempt, data, idP.data);
+        if (attemptError) {
+          throw Object.assign(new Error(attemptError), { status: 400 });
+        }
+      }
+      const updated = await agencyRepo.updateShift(idP.data, req.home.id, data, client, _version);
+      if (updated && data.agency_attempt_id) {
+        const linked = await agencyAttemptRepo.linkAgencyShift(data.agency_attempt_id, req.home.id, updated.id, client);
+        if (!linked) {
+          throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });
+        }
+      }
+      return updated;
+    });
     if (!shift) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'agency_shift' });
     res.json(shift);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.status === 409) return res.status(409).json({ error: err.message });
+    next(err);
+  }
 });
 
 // GET /api/payroll/agency/metrics?home=X&weeks=12

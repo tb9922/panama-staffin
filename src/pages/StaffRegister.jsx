@@ -43,6 +43,9 @@ const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,
   hourly_rate: DEFAULT_NLW_RATE, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
   contract_hours: null, al_entitlement: null, al_carryover: 0, date_of_birth: null,
+  willing_extras: false, willing_other_homes: false, max_weekly_hours_topup: null,
+  max_travel_radius_km: null, home_postcode: '', internal_bank_status: 'available',
+  internal_bank_notes: '',
 };
 
 const NEW_STAFF_FIELD_IDS = {
@@ -54,6 +57,13 @@ const NEW_STAFF_FIELD_IDS = {
   contractHours: 'staff-register-new-contract-hours',
   startDate: 'staff-register-new-start-date',
   dateOfBirth: 'staff-register-new-date-of-birth',
+  willingExtras: 'staff-register-new-willing-extras',
+  willingOtherHomes: 'staff-register-new-willing-other-homes',
+  maxTopup: 'staff-register-new-max-topup',
+  travelRadius: 'staff-register-new-travel-radius',
+  homePostcode: 'staff-register-new-postcode',
+  bankStatus: 'staff-register-new-bank-status',
+  bankNotes: 'staff-register-new-bank-notes',
   notes: 'staff-register-new-notes',
   alEntitlement: 'staff-register-new-al-entitlement',
   alCarryover: 'staff-register-new-al-carryover',
@@ -507,6 +517,59 @@ export default function StaffRegister() {
                   WTR Opt-Out
                 </label>
               </div>
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-3">
+                <h3 className="mb-3 text-sm font-semibold text-[var(--ink)]">Internal bank</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.willingExtras} className="flex items-center gap-2 text-sm">
+                    <input id={NEW_STAFF_FIELD_IDS.willingExtras} type="checkbox" checked={newStaff.willing_extras}
+                      onChange={e => setNewStaff({ ...newStaff, willing_extras: e.target.checked })} />
+                    Will work extras
+                  </label>
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.willingOtherHomes} className="flex items-center gap-2 text-sm">
+                    <input id={NEW_STAFF_FIELD_IDS.willingOtherHomes} type="checkbox" checked={newStaff.willing_other_homes}
+                      onChange={e => setNewStaff({ ...newStaff, willing_other_homes: e.target.checked })} />
+                    Sister homes
+                  </label>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor={NEW_STAFF_FIELD_IDS.maxTopup} className={INPUT.label}>Max top-up hrs/wk</label>
+                    <input id={NEW_STAFF_FIELD_IDS.maxTopup} type="number" min="0" max="80" step="0.5" value={newStaff.max_weekly_hours_topup ?? ''}
+                      onChange={e => setNewStaff({ ...newStaff, max_weekly_hours_topup: e.target.value ? parseFloat(e.target.value) : null })}
+                      className={INPUT.base} />
+                  </div>
+                  <div>
+                    <label htmlFor={NEW_STAFF_FIELD_IDS.travelRadius} className={INPUT.label}>Travel radius km</label>
+                    <input id={NEW_STAFF_FIELD_IDS.travelRadius} type="number" min="0" max="500" step="1" value={newStaff.max_travel_radius_km ?? ''}
+                      onChange={e => setNewStaff({ ...newStaff, max_travel_radius_km: e.target.value ? parseInt(e.target.value, 10) : null })}
+                      className={INPUT.base} />
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor={NEW_STAFF_FIELD_IDS.homePostcode} className={INPUT.label}>Postcode</label>
+                    <input id={NEW_STAFF_FIELD_IDS.homePostcode} type="text" value={newStaff.home_postcode || ''}
+                      onChange={e => setNewStaff({ ...newStaff, home_postcode: e.target.value })}
+                      className={INPUT.base} />
+                  </div>
+                  <div>
+                    <label htmlFor={NEW_STAFF_FIELD_IDS.bankStatus} className={INPUT.label}>Bank status</label>
+                    <select id={NEW_STAFF_FIELD_IDS.bankStatus} value={newStaff.internal_bank_status} onChange={e => setNewStaff({ ...newStaff, internal_bank_status: e.target.value })}
+                      className={INPUT.select}>
+                      <option value="available">Available</option>
+                      <option value="limited">Limited</option>
+                      <option value="paused">Paused</option>
+                      <option value="not_interested">Not interested</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.bankNotes} className={INPUT.label}>Bank notes</label>
+                  <input id={NEW_STAFF_FIELD_IDS.bankNotes} type="text" value={newStaff.internal_bank_notes || ''}
+                    onChange={e => setNewStaff({ ...newStaff, internal_bank_notes: e.target.value })}
+                    className={INPUT.base} />
+                </div>
+              </div>
               <div>
                 <label htmlFor={NEW_STAFF_FIELD_IDS.notes} className={INPUT.label}>Notes</label>
                 <input id={NEW_STAFF_FIELD_IDS.notes} type="text" value={newStaff.notes} onChange={e => setNewStaff({ ...newStaff, notes: e.target.value })}
@@ -589,6 +652,7 @@ export default function StaffRegister() {
               <th scope="col" className={TABLE.th}>Hrs/wk</th>
               <th scope="col" className={TABLE.th}>Start</th>
               <th scope="col" className={TABLE.th}>WTR</th>
+              <th scope="col" className={TABLE.th}>Bank</th>
               <th scope="col" className={TABLE.th}>Notes</th>
               <th scope="col" className={TABLE.th}>AL</th>
               <th scope="col" className={`${TABLE.th} text-center`}>Active</th>
@@ -724,7 +788,50 @@ export default function StaffRegister() {
                       )}
                     </td>
 
-                    {/* Notes — editable */}
+                    {/* Internal bank */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <div className="flex min-w-[12rem] flex-col gap-1">
+                          <label className="flex items-center gap-1 text-xs text-[var(--ink-2)]">
+                            <input type="checkbox" checked={!!r.willing_extras}
+                              onChange={e => updateEditingRow('willing_extras', e.target.checked)} />
+                            Extras
+                          </label>
+                          <label className="flex items-center gap-1 text-xs text-[var(--ink-2)]">
+                            <input type="checkbox" checked={!!r.willing_other_homes}
+                              onChange={e => updateEditingRow('willing_other_homes', e.target.checked)} />
+                            Other homes
+                          </label>
+                          <select value={r.internal_bank_status || 'available'} onChange={e => updateEditingRow('internal_bank_status', e.target.value)}
+                            className={INPUT.inlineSelect + ' w-32'}>
+                            <option value="available">Available</option>
+                            <option value="limited">Limited</option>
+                            <option value="paused">Paused</option>
+                            <option value="not_interested">Not interested</option>
+                          </select>
+                          <div className="flex gap-1">
+                            <input type="number" min="0" max="80" step="0.5" value={r.max_weekly_hours_topup ?? ''}
+                              title="Max top-up hours per week"
+                              onChange={e => updateEditingRow('max_weekly_hours_topup', e.target.value ? parseFloat(e.target.value) : null)}
+                              className={INPUT.inline + ' w-16'} />
+                            <input type="number" min="0" max="500" step="1" value={r.max_travel_radius_km ?? ''}
+                              title="Travel radius in km"
+                              onChange={e => updateEditingRow('max_travel_radius_km', e.target.value ? parseInt(e.target.value, 10) : null)}
+                              className={INPUT.inline + ' w-16'} />
+                          </div>
+                        </div>
+                      ) : canEdit ? (
+                        <button type="button" className="text-left text-xs transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>
+                          <span className={s.willing_extras ? BADGE.green : BADGE.gray}>{s.willing_extras ? 'Bank' : 'No'}</span>
+                          {s.willing_other_homes && <span className={`${BADGE.blue} ml-1`}>Cross-home</span>}
+                          {s.max_weekly_hours_topup != null && <span className="mt-1 block text-[var(--ink-3)]">{s.max_weekly_hours_topup}h cap</span>}
+                        </button>
+                      ) : (
+                        <span className={s.willing_extras ? BADGE.green : BADGE.gray}>{s.willing_extras ? 'Bank' : 'No'}</span>
+                      )}
+                    </td>
+
+                    {/* Notes */}
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <input type="text" value={r.notes || ''} onChange={e => updateEditingRow('notes', e.target.value)}
@@ -844,21 +951,21 @@ export default function StaffRegister() {
                   </tr>
                   {rErr && (
                     <tr key={`${s.id}-err`}>
-                      <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
+                      <td colSpan={canEdit ? 16 : 14} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
                         {rErr}
                       </td>
                     </tr>
                   )}
                   {revokeMessage?.id === s.id && (
                     <tr key={`${s.id}-revoke`}>
-                      <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs border-b border-emerald-100">
+                      <td colSpan={canEdit ? 16 : 14} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs border-b border-emerald-100">
                         {revokeMessage.msg}
                       </td>
                     </tr>
                   )}
                   {rWarn && (
                     <tr key={`${s.id}-warn`}>
-                      <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
+                      <td colSpan={canEdit ? 16 : 14} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
                         {rWarn.join(' | ')}
                       </td>
                     </tr>

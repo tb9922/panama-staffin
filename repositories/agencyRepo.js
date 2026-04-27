@@ -2,7 +2,7 @@ import { pool } from '../db.js';
 
 // ── Column lists ────────────────────────────────────────────────────────────
 const PROVIDER_COLS = 'id, home_id, name, contact, rate_day, rate_night, active, version, created_at';
-const SHIFT_COLS = 'id, home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, worker_name, invoice_ref, reconciled, role_covered, version, created_at';
+const SHIFT_COLS = 'id, home_id, agency_id, agency_attempt_id, date, shift_code, hours, hourly_rate, total_cost, worker_name, invoice_ref, reconciled, role_covered, version, created_at';
 
 // ── agency_providers ──────────────────────────────────────────────────────────
 
@@ -68,6 +68,7 @@ function shapeShift(row) {
     id: row.id,
     home_id: row.home_id,
     agency_id: row.agency_id,
+    agency_attempt_id: row.agency_attempt_id != null ? parseInt(row.agency_attempt_id, 10) : null,
     agency_name: row.agency_name, // joined from providers
     date: toDate(row.date),
     shift_code: row.shift_code,
@@ -85,7 +86,7 @@ function shapeShift(row) {
 
 export async function findShiftsByHomePeriod(homeId, start, end) {
   const { rows } = await pool.query(
-    `SELECT s.id, s.home_id, s.agency_id, s.date, s.shift_code, s.hours,
+    `SELECT s.id, s.home_id, s.agency_id, s.agency_attempt_id, s.date, s.shift_code, s.hours,
             s.hourly_rate, s.total_cost, s.worker_name, s.invoice_ref,
             s.reconciled, s.role_covered, s.created_at,
             s.version,
@@ -103,12 +104,12 @@ export async function createShift(homeId, shift, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO agency_shifts
-       (home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost,
+       (home_id, agency_id, agency_attempt_id, date, shift_code, hours, hourly_rate, total_cost,
         worker_name, invoice_ref, reconciled, role_covered)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING ${SHIFT_COLS}`,
     [
-      homeId, shift.agency_id, shift.date, shift.shift_code,
+      homeId, shift.agency_id, shift.agency_attempt_id || null, shift.date, shift.shift_code,
       shift.hours, shift.hourly_rate, shift.total_cost,
       shift.worker_name || null, shift.invoice_ref || null,
       shift.reconciled ?? false, shift.role_covered || null,
@@ -121,7 +122,7 @@ export async function createShift(homeId, shift, client) {
 export async function findShiftById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT s.id, s.home_id, s.agency_id, s.date, s.shift_code, s.hours,
+    `SELECT s.id, s.home_id, s.agency_id, s.agency_attempt_id, s.date, s.shift_code, s.hours,
             s.hourly_rate, s.total_cost, s.worker_name, s.invoice_ref,
             s.reconciled, s.role_covered, s.created_at,
             s.version,
@@ -138,20 +139,20 @@ export async function updateShift(id, homeId, updates, client, version = null) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE agency_shifts
-     SET agency_id = $1, date = $2, shift_code = $3, hours = $4, hourly_rate = $5,
-         total_cost = $6, worker_name = $7, invoice_ref = $8, reconciled = $9, role_covered = $10,
+     SET agency_id = $1, agency_attempt_id = $2, date = $3, shift_code = $4, hours = $5, hourly_rate = $6,
+         total_cost = $7, worker_name = $8, invoice_ref = $9, reconciled = $10, role_covered = $11,
          version = version + 1
-     WHERE id = $11 AND home_id = $12 AND ($13::INT IS NULL OR version = $13)
+     WHERE id = $12 AND home_id = $13 AND ($14::INT IS NULL OR version = $14)
      RETURNING id`,
     [
-      updates.agency_id, updates.date, updates.shift_code, updates.hours,
+      updates.agency_id, updates.agency_attempt_id || null, updates.date, updates.shift_code, updates.hours,
       updates.hourly_rate, updates.total_cost, updates.worker_name || null,
       updates.invoice_ref || null, updates.reconciled ?? false, updates.role_covered || null,
       id, homeId, version,
     ],
   );
   if (rows.length === 0) return null;
-  return findShiftById(id, homeId);
+  return findShiftById(id, homeId, conn);
 }
 
 /**

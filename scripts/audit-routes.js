@@ -43,6 +43,8 @@ const SELF_SERVICE_ROUTES = new Set([
 const CUSTOM_AUTHZ_ROUTES = new Map([
   ['GET /api/audit', 'custom scoped audit-log authorization'],
   ['GET /api/gdpr/access-log', 'custom scoped GDPR access-log authorization'],
+  ['GET /api/portfolio/kpis', 'custom per-home portfolio authorization'],
+  ['GET /api/portfolio/board-pack', 'custom per-home portfolio authorization'],
 ]);
 
 const AUTH_Z_PATTERNS = [
