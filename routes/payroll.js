@@ -259,12 +259,10 @@ function agencyAttemptErrorForShift(attempt, shiftData, existingShiftId = null) 
 }
 
 async function getHourAdjustmentContext(home, staffId, date, client, payableHoursOverride = undefined) {
-  const [staff, overrides, existingAdjustment, existingTimesheet] = await Promise.all([
-    staffRepo.findById(home.id, staffId, client),
-    overrideRepo.findByHome(home.id, date, date, client),
-    shiftHourAdjustmentRepo.findByStaffDate(home.id, staffId, date, client),
-    timesheetRepo.findByStaffDate(home.id, staffId, date, client),
-  ]);
+  const staff = await staffRepo.findById(home.id, staffId, client);
+  const overrides = await overrideRepo.findByHome(home.id, date, date, client);
+  const existingAdjustment = await shiftHourAdjustmentRepo.findByStaffDate(home.id, staffId, date, client);
+  const existingTimesheet = await timesheetRepo.findByStaffDate(home.id, staffId, date, client);
 
   if (!staff || staff.active === false) {
     throw new NotFoundError('Staff member not found');

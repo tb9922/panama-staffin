@@ -273,12 +273,10 @@ export async function search(home, roleId, filters = {}) {
       (grouped[row.sourceModule] ||= []).push(row);
     }
 
-    await Promise.all([
-      grouped.hr ? resolveHrRows(home, grouped.hr, client) : Promise.resolve(),
-      grouped.cqc_evidence ? resolveCqcRows(home, grouped.cqc_evidence, client) : Promise.resolve(),
-      grouped.onboarding ? resolveOnboardingRows(home, grouped.onboarding, client) : Promise.resolve(),
-      grouped.training ? resolveTrainingRows(home, grouped.training, client) : Promise.resolve(),
-    ]);
+    if (grouped.hr) await resolveHrRows(home, grouped.hr, client);
+    if (grouped.cqc_evidence) await resolveCqcRows(home, grouped.cqc_evidence, client);
+    if (grouped.onboarding) await resolveOnboardingRows(home, grouped.onboarding, client);
+    if (grouped.training) await resolveTrainingRows(home, grouped.training, client);
     if (grouped.record) resolveRecordRows(grouped.record);
 
     const rows = Object.values(grouped).flat().sort((a, b) => createdAtMs(b.createdAt) - createdAtMs(a.createdAt));
