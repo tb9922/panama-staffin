@@ -187,6 +187,9 @@ function adminPost(path, body) {
 function adminPostApi(path, body) {
   return request(app).post('/api' + path).set('Authorization', `Bearer ${adminToken}`).send(body);
 }
+function adminPutApi(path, body) {
+  return request(app).put('/api' + path).set('Authorization', `Bearer ${adminToken}`).send(body);
+}
 function adminPut(path, body) {
   return request(app).put(BASE + path).set('Authorization', `Bearer ${adminToken}`).send(body);
 }
@@ -889,6 +892,8 @@ describe('Agency — /agency', () => {
   });
 
   describe('Shifts', () => {
+    let shiftAttemptId;
+
     async function createNoInternalCoverAttempt({ date = '2099-06-01', shift_code = 'AG-E' } = {}) {
       const res = await adminPostApi(`/agency-attempts?home=${homeASlug}`, {
         gap_date: date,
@@ -917,10 +922,30 @@ describe('Agency — /agency', () => {
 
       expect(res.body).toHaveProperty('id');
       expect(res.body.agency_attempt_id).toBe(attemptId);
+      shiftAttemptId = attemptId;
       // Verify server-calculated total_cost
       expect(parseFloat(res.body.total_cost)).toBe(176); // 8 * 22
       shiftId = res.body.id;
       shiftVersion = res.body.version;
+    });
+
+    it('PUT preserves inferred outcome from the full agency attempt state', async () => {
+      const created = await adminPostApi(`/agency-attempts?home=${homeASlug}`, {
+        gap_date: '2099-06-04',
+        shift_code: 'AG-E',
+        role_needed: 'Carer',
+        reason: 'Emergency partial-update test',
+        emergency_override: true,
+        emergency_override_reason: 'No safe internal cover available at handover',
+      }).expect(201);
+
+      const updated = await adminPutApi(`/agency-attempts/${created.body.id}?home=${homeASlug}`, {
+        internal_bank_checked: true,
+        _version: created.body.version,
+      }).expect(200);
+
+      expect(updated.body.emergency_override).toBe(true);
+      expect(updated.body.outcome).toBe('emergency_agency');
     });
 
     it('POST rejects agency shift without approval attempt', async () => {
@@ -976,6 +1001,17 @@ describe('Agency — /agency', () => {
         _version: shiftVersion,
       }).expect(200);
       expect(parseFloat(res.body.total_cost)).toBe(192); // 8 * 24
+      const { rows: [oldAttempt] } = await pool.query(
+        `SELECT linked_agency_shift_id FROM agency_approval_attempts WHERE id = $1`,
+        [shiftAttemptId]
+      );
+      const { rows: [newAttempt] } = await pool.query(
+        `SELECT linked_agency_shift_id FROM agency_approval_attempts WHERE id = $1`,
+        [attemptId]
+      );
+      expect(oldAttempt.linked_agency_shift_id).toBeNull();
+      expect(newAttempt.linked_agency_shift_id).toBe(shiftId);
+      shiftAttemptId = attemptId;
       shiftVersion = res.body.version;
     });
 

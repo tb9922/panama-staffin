@@ -946,6 +946,9 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
       }
       const updated = await agencyRepo.updateShift(idP.data, req.home.id, data, client, _version);
       if (updated && data.agency_attempt_id) {
+        if (existing.agency_attempt_id && existing.agency_attempt_id !== data.agency_attempt_id) {
+          await agencyAttemptRepo.unlinkAgencyShift(existing.agency_attempt_id, req.home.id, updated.id, client);
+        }
         const linked = await agencyAttemptRepo.linkAgencyShift(data.agency_attempt_id, req.home.id, updated.id, client);
         if (!linked) {
           throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });

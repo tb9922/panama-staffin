@@ -10,7 +10,9 @@ WITH expected AS (
            ca.action->>'status'
          )) AS source_action_key
     FROM incidents i
-    CROSS JOIN LATERAL jsonb_array_elements(i.corrective_actions) WITH ORDINALITY AS ca(action, ordinality)
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(i.corrective_actions) = 'array' THEN i.corrective_actions ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS ca(action, ordinality)
    WHERE i.deleted_at IS NULL
      AND jsonb_typeof(i.corrective_actions) = 'array'
      AND nullif(ca.action->>'description', '') IS NOT NULL
@@ -24,7 +26,9 @@ WITH expected AS (
            ca.action->>'status'
          ))
     FROM ipc_audits a
-    CROSS JOIN LATERAL jsonb_array_elements(a.corrective_actions) WITH ORDINALITY AS ca(action, ordinality)
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(a.corrective_actions) = 'array' THEN a.corrective_actions ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS ca(action, ordinality)
    WHERE a.deleted_at IS NULL
      AND jsonb_typeof(a.corrective_actions) = 'array'
      AND nullif(ca.action->>'description', '') IS NOT NULL
@@ -38,7 +42,9 @@ WITH expected AS (
            ra.action->>'status'
          ))
     FROM risk_register r
-    CROSS JOIN LATERAL jsonb_array_elements(r.actions) WITH ORDINALITY AS ra(action, ordinality)
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(r.actions) = 'array' THEN r.actions ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS ra(action, ordinality)
    WHERE r.deleted_at IS NULL
      AND jsonb_typeof(r.actions) = 'array'
      AND nullif(ra.action->>'description', '') IS NOT NULL
@@ -126,7 +132,9 @@ WITH expected AS (
          left(ca.action->>'description', 120) AS title
     FROM incidents i
     JOIN homes h ON h.id = i.home_id
-    CROSS JOIN LATERAL jsonb_array_elements(i.corrective_actions) WITH ORDINALITY AS ca(action, ordinality)
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(i.corrective_actions) = 'array' THEN i.corrective_actions ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS ca(action, ordinality)
    WHERE i.deleted_at IS NULL AND jsonb_typeof(i.corrective_actions) = 'array' AND nullif(ca.action->>'description', '') IS NOT NULL
 )
 SELECT e.*

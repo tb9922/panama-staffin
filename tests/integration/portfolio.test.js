@@ -84,19 +84,33 @@ beforeAll(async () => {
     `INSERT INTO agency_providers (home_id, name, active) VALUES ($1, 'Portfolio Agency', true) RETURNING id`,
     [homeAId]
   );
-  await pool.query(
+  const { rows: [shift] } = await pool.query(
     `INSERT INTO agency_shifts (home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, role_covered)
-     VALUES ($1, $2, CURRENT_DATE, 'AG-E', 8, 22, 176, 'Care Assistant')`,
+     VALUES ($1, $2, CURRENT_DATE, 'AG-E', 8, 22, 176, 'Care Assistant')
+     RETURNING id`,
     [homeAId, provider.id]
   );
+  const { rows: [linkedAttempt] } = await pool.query(
+    `INSERT INTO agency_approval_attempts (
+       home_id, gap_date, shift_code, role_needed, reason, internal_bank_checked,
+       internal_bank_candidate_count, viable_internal_candidate_count, emergency_override,
+       emergency_override_reason, outcome, linked_agency_shift_id
+     ) VALUES (
+       $1, CURRENT_DATE, 'AG-E', 'Care Assistant', 'Emergency portfolio test',
+       true, 1, 1, true, 'No safe internal cover at handover', 'emergency_agency', $2
+     )
+     RETURNING id`,
+    [homeAId, shift.id]
+  );
+  await pool.query(`UPDATE agency_shifts SET agency_attempt_id = $1 WHERE id = $2`, [linkedAttempt.id, shift.id]);
   await pool.query(
     `INSERT INTO agency_approval_attempts (
        home_id, gap_date, shift_code, role_needed, reason, internal_bank_checked,
        internal_bank_candidate_count, viable_internal_candidate_count, emergency_override,
        emergency_override_reason, outcome
      ) VALUES (
-       $1, CURRENT_DATE, 'AG-E', 'Care Assistant', 'Emergency portfolio test',
-       true, 1, 1, true, 'No safe internal cover at handover', 'emergency_agency'
+       $1, CURRENT_DATE, 'AG-L', 'Care Assistant', 'Pending emergency test',
+       true, 1, 1, true, 'Pending manager escalation before booking', 'emergency_agency'
      )`,
     [homeAId]
   );

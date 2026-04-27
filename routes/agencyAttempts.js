@@ -57,6 +57,13 @@ function validateAttemptPayload(data, res) {
   return true;
 }
 
+function keepProvidedFields(parsedData, rawBody) {
+  const rawKeys = new Set(Object.keys(rawBody && typeof rawBody === 'object' ? rawBody : {}));
+  return Object.fromEntries(
+    Object.entries(parsedData).filter(([key]) => key === '_version' || rawKeys.has(key))
+  );
+}
+
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
     const parsed = listSchema.safeParse(req.query);
@@ -103,9 +110,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const existing = await agencyAttemptRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Agency approval attempt not found' });
     if (!parsed.success) return zodError(res, parsed);
-    if (!validateAttemptPayload({ ...existing, ...parsed.data }, res)) return;
-    const { version } = splitVersion(parsed.data);
-    const updates = definedWithoutVersion(parsed.data);
+    const provided = keepProvidedFields(parsed.data, req.body);
+    if (!validateAttemptPayload({ ...existing, ...provided }, res)) return;
+    const { version } = splitVersion(provided);
+    const updates = definedWithoutVersion(provided);
     const attempt = await agencyAttemptRepo.update(idParsed.data, req.home.id, updates, version);
     if (attempt === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

@@ -160,9 +160,10 @@ export async function update(id, homeId, data, version = null, client = pool) {
     || Object.prototype.hasOwnProperty.call(data, 'viable_internal_candidate_count')
     || Object.prototype.hasOwnProperty.call(data, 'internal_bank_checked')
   );
+  const existing = shouldInferOutcome ? await findById(id, homeId, client) : null;
   const updateData = {
     ...data,
-    ...(shouldInferOutcome ? { outcome: inferOutcome(data) } : {}),
+    ...(shouldInferOutcome ? { outcome: inferOutcome({ ...existing, ...data }) } : {}),
   };
   const fields = Object.entries(updateData).filter(([key, value]) => (
     value !== undefined && allowed.has(key)
@@ -205,19 +206,45 @@ export async function linkAgencyShift(id, homeId, shiftId, client = pool) {
   return shapeRow(rows[0]);
 }
 
+export async function unlinkAgencyShift(id, homeId, shiftId, client = pool) {
+  const { rows } = await client.query(
+    `UPDATE agency_approval_attempts
+        SET linked_agency_shift_id = NULL,
+            outcome = CASE
+              WHEN emergency_override THEN 'emergency_agency'
+              WHEN overtime_accepted THEN 'internal_cover_found'
+              WHEN COALESCE(viable_internal_candidate_count, 0) > 0 THEN 'internal_cover_found'
+              WHEN internal_bank_checked THEN 'no_viable_internal'
+              ELSE 'pending'
+            END,
+            updated_at = NOW(),
+            version = version + 1
+      WHERE id = $1
+        AND home_id = $2
+        AND linked_agency_shift_id = $3
+        AND deleted_at IS NULL
+      RETURNING ${COLS}`,
+    [id, homeId, shiftId],
+  );
+  return shapeRow(rows[0]);
+}
+
 export async function countEmergencyOverridesByHome(homeIds, client = pool) {
   if (!Array.isArray(homeIds) || homeIds.length === 0) return [];
   const { rows } = await client.query(
-    `SELECT home_id,
-            COUNT(*) FILTER (WHERE gap_date >= CURRENT_DATE - INTERVAL '7 days')::int AS attempts_7d,
-            COUNT(*) FILTER (
-              WHERE emergency_override = true
-                AND gap_date >= CURRENT_DATE - INTERVAL '7 days'
-            )::int AS emergency_overrides_7d
-       FROM agency_approval_attempts
-      WHERE home_id = ANY($1::int[])
-        AND deleted_at IS NULL
-      GROUP BY home_id`,
+    `SELECT a.home_id,
+            COUNT(*) FILTER (WHERE a.gap_date >= CURRENT_DATE - INTERVAL '7 days')::int AS attempts_7d,
+            (COUNT(DISTINCT s.id) FILTER (
+              WHERE a.emergency_override = true
+                AND s.date >= CURRENT_DATE - INTERVAL '7 days'
+            ))::int AS emergency_overrides_7d
+       FROM agency_approval_attempts a
+       LEFT JOIN agency_shifts s
+         ON s.id = a.linked_agency_shift_id
+        AND s.home_id = a.home_id
+      WHERE a.home_id = ANY($1::int[])
+        AND a.deleted_at IS NULL
+      GROUP BY a.home_id`,
     [homeIds],
   );
   return rows;
