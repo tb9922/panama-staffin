@@ -190,10 +190,8 @@ export async function search(homeId, filters = {}, client = pool) {
   const clampedLimit = Math.min(Math.max(limit, 1), 200);
   const clampedOffset = Math.max(offset, 0);
 
-  const [listResult, countResult] = await Promise.all([
-    client.query(listSql, [...baseParams, clampedLimit, clampedOffset]),
-    client.query(countSql, baseParams),
-  ]);
+  const listResult = await client.query(listSql, [...baseParams, clampedLimit, clampedOffset]);
+  const countResult = await client.query(countSql, baseParams);
 
   return {
     rows: listResult.rows.map(shapeRow),

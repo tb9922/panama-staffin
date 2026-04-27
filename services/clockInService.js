@@ -142,10 +142,8 @@ async function feedTimesheet(home, staffId, clockOutRecord, client) {
 
 export async function recordClockIn({ homeId, staffId, payload }) {
   return withTransaction(async (client) => {
-    const [home, staff] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      staffRepo.findById(homeId, staffId, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
 
@@ -227,10 +225,8 @@ export async function getOwnClockState({ homeId, staffId }) {
 
 export async function manualClockIn({ homeId, staffId, clockType, shiftDate, note, clientTime, actor }) {
   return withTransaction(async (client) => {
-    const [home, staff] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      staffRepo.findById(homeId, staffId, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
     const record = await clockInRepo.create({

@@ -12,10 +12,8 @@ import { getALDeductionHours, getLeaveYear } from '../shared/rotation.js';
 
 export async function submitALRequest({ homeId, staffId, date, reason }) {
   return withTransaction(async (client) => {
-    const [home, staff] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      staffRepo.findById(homeId, staffId, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
 
@@ -81,10 +79,8 @@ export async function decideRequest({ homeId, id, status, decidedBy, decisionNot
   }
 
   return withTransaction(async (client) => {
-    const [home, existing] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      overrideRequestRepo.findById(homeId, id, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const existing = await overrideRequestRepo.findById(homeId, id, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!existing) throw new AppError('Request not found', 404, 'REQUEST_NOT_FOUND');
     if (existing.status !== 'pending') {

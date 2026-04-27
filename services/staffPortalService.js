@@ -170,10 +170,8 @@ export async function getStaffTrainingStatus({ homeId, staffId }) {
 
 export async function acknowledgeTrainingByStaff({ homeId, staffId, typeId }) {
   return withTransaction(async (client) => {
-    const [home, staff] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      staffRepo.findById(homeId, staffId, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
     const ok = await trainingRepo.acknowledgeByStaff(homeId, staffId, typeId, client);
@@ -194,10 +192,8 @@ export async function getOwnProfile({ homeId, staffId }) {
 
 export async function updateOwnProfile({ homeId, staffId, patch, actorUsername }) {
   return withTransaction(async (client) => {
-    const [home, existing] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      staffRepo.findById(homeId, staffId, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const existing = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!existing || existing.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
     const safePatch = Object.fromEntries(
@@ -217,10 +213,8 @@ export async function updateOwnProfile({ homeId, staffId, patch, actorUsername }
 
 export async function reportSick({ homeId, staffId, date, reason, actorUsername }) {
   return withTransaction(async (client) => {
-    const [home, staff] = await Promise.all([
-      homeRepo.findById(homeId, client),
-      staffRepo.findById(homeId, staffId, client),
-    ]);
+    const home = await homeRepo.findById(homeId, client);
+    const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
 

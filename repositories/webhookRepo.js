@@ -301,10 +301,14 @@ export async function claimPendingRetries(limit = 20) {
       [ids]
     );
 
-    return Promise.all(rows.map(async (row) => ({
-      ...row,
-      secret: (await toRowWithSecret(row, client)).secret,
-    })));
+    const claimed = [];
+    for (const row of rows) {
+      claimed.push({
+        ...row,
+        secret: (await toRowWithSecret(row, client)).secret,
+      });
+    }
+    return claimed;
   });
 }
 
