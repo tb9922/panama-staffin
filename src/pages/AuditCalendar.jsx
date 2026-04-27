@@ -348,7 +348,7 @@ export default function AuditCalendar() {
         onSave={saveTask}
         onDelete={removeTask}
       />
-      <ConfirmDialog />
+      {ConfirmDialog}
     </div>
   );
 }

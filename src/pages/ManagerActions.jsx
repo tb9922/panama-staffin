@@ -411,7 +411,7 @@ export default function ManagerActions() {
         onDelete={handleDelete}
         canEdit={canEdit}
       />
-      <ConfirmDialog />
+      {ConfirmDialog}
     </div>
   );
 }

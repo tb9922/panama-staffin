@@ -258,7 +258,7 @@ export default function ReflectivePractice() {
         onSave={saveEntry}
         onDelete={removeEntry}
       />
-      <ConfirmDialog />
+      {ConfirmDialog}
     </div>
   );
 }

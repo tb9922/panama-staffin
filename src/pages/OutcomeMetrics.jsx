@@ -365,7 +365,7 @@ export default function OutcomeMetrics() {
         onSave={saveMetric}
         onDelete={removeMetric}
       />
-      <ConfirmDialog />
+      {ConfirmDialog}
     </div>
   );
 }
