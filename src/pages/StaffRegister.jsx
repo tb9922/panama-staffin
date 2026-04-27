@@ -639,7 +639,7 @@ export default function StaffRegister() {
 
       {/* Table */}
       <StickyTable className={CARD.flush}>
-        <table className={TABLE.table + ' min-w-[1100px]'}>
+        <table className={TABLE.table + ' min-w-[1500px]'}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>ID</th>
@@ -658,7 +658,7 @@ export default function StaffRegister() {
               <th scope="col" className={`${TABLE.th} text-center`}>Active</th>
               <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Hrs</th>
               {canEdit && <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>}
-              <th scope="col" className={`${TABLE.th} print:hidden`}></th>
+              <th scope="col" className={`${TABLE.th} min-w-44 print:hidden`}></th>
             </tr>
           </thead>
           <tbody>
@@ -913,7 +913,7 @@ export default function StaffRegister() {
                     {/* Actions (admin only) */}
                     <td className={`${TABLE.td} print:hidden`}>
                       {canEdit && (
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex min-w-44 flex-wrap justify-end gap-x-2 gap-y-1">
                         {isEd(s.id) ? (
                           <>
                             <button onClick={commitEdit} disabled={saving}

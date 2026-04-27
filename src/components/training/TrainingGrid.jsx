@@ -76,6 +76,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, filterTeam, search, filterCompliance, matrix]);
+  const matrixMinWidth = Math.max(900, 190 + filteredTypes.length * 78);
 
   function staffCompliancePct(staffId) {
     const staffMap = matrix.get(staffId);
@@ -337,7 +338,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       {view === 'matrix' && (
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
-            <table className="w-full min-w-[900px] text-[11px] text-[var(--ink)]">
+            <table className="w-full text-[11px] text-[var(--ink)]" style={{ minWidth: `${matrixMinWidth}px` }}>
               <thead>
                 <tr className="border-b border-[var(--line)]">
                   <th scope="col" className="sticky left-0 z-10 min-w-[140px] bg-[var(--paper)] px-2 py-2 text-left font-semibold text-[var(--ink-3)]">Staff</th>

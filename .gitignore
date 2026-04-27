@@ -46,8 +46,11 @@ playwright-report/
 *.sw?
 
 # Scratch / debug artefacts
+.tmp/
+.review/
 .tmp-*
 CQC_Evidence_Pack_*.pdf
+Portfolio_Board_Pack_*.pdf
 temp/
 nul
 _gen.py
