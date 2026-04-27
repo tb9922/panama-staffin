@@ -4,15 +4,17 @@
 set -euo pipefail
 
 COMPOSE_FILE="docker-compose.test.yml"
+COMPOSE_ENV_FILE="docker-compose.test.env"
+COMPOSE=(docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE")
 
 cleanup() {
   echo "Stopping test database..."
-  docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+  "${COMPOSE[@]}" down -v 2>/dev/null || true
 }
 trap cleanup EXIT
 
 echo "Starting test database on port 5433..."
-docker compose -f "$COMPOSE_FILE" up -d --wait
+"${COMPOSE[@]}" up -d --wait
 
 export DB_HOST=localhost
 export DB_PORT=5433
