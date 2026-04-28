@@ -34,8 +34,8 @@ describe('portfolio RAG thresholds', () => {
       staffing: { gaps_per_100_planned_shifts: null },
       agency: { emergency_override_pct: 21 },
       training: { compliance_pct: 94 },
-      incidents: { open: 0, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
-      complaints: { open: 1, ack_overdue: 0, response_overdue: 0 },
+      incidents: { open: 40, rate_per_resident_month: 0.04, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
+      complaints: { open: 20, rate_per_resident_month: 0.01, ack_overdue: 0, response_overdue: 0 },
       audits: { overdue: 0 },
       supervisions: { overdue: 3 },
       cqc_evidence: { open_gaps: 5 },
@@ -47,9 +47,42 @@ describe('portfolio RAG thresholds', () => {
 
     expect(rag.agency).toBe(RAG.RED);
     expect(rag.training).toBe(RAG.AMBER);
+    expect(rag.incidents).toBe(RAG.GREEN);
+    expect(rag.complaints).toBe(RAG.GREEN);
     expect(rag.supervisions).toBe(RAG.RED);
     expect(rag.cqc_evidence).toBe(RAG.RED);
     expect(rag.maintenance).toBe(RAG.GREEN);
     expect(rag.overall).toBe(RAG.RED);
+  });
+
+  it('uses rate-based incident and complaint bands with absolute overdue gates', () => {
+    const rag = buildPortfolioRag({
+      staffing: { gaps_per_100_planned_shifts: 0 },
+      agency: { emergency_override_pct: 0 },
+      training: { compliance_pct: 100 },
+      incidents: {
+        open: 1,
+        rate_per_resident_month: 0.2,
+        cqc_notifiable_overdue: 0,
+        riddor_overdue: 0,
+        duty_of_candour_overdue: 0,
+      },
+      complaints: {
+        open: 1,
+        rate_per_resident_month: 0.01,
+        ack_overdue: 3,
+        response_overdue: 0,
+      },
+      audits: { overdue: 0 },
+      supervisions: { overdue: 0 },
+      cqc_evidence: { open_gaps: 0 },
+      maintenance: { overdue: 0, certs_expired: 0 },
+      manager_actions: { overdue: 0, escalated_l3_plus: 0 },
+      occupancy: { pct: 100 },
+      outcomes: { rag: RAG.GREEN },
+    });
+
+    expect(rag.incidents).toBe(RAG.RED);
+    expect(rag.complaints).toBe(RAG.RED);
   });
 });

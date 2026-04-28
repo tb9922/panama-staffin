@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "audit:routes": "node scripts/audit-routes.js",
     "verify:action-backfill": "node scripts/verify-action-backfill.js",
+    "verify:v1-operational": "node scripts/verify-v1-operational-gates.js",
     "invite:staff": "node scripts/invite-staff.js",
     "test": "npm run test:ci",
     "test:ci": "vitest run tests/unit src/contexts src/lib src/hooks",

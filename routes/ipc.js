@@ -10,6 +10,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateIpcOutbreakStatusChange } from '../lib/statusTransitions.js';
+import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -79,6 +80,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = ipcBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'ipc_audits')) return;
     const audit = await ipcRepo.upsert(req.home.id, parsed.data);
     await auditService.log('ipc_create', req.home.slug, req.user.username, { id: audit?.id });
     res.status(201).json(audit);
@@ -94,6 +96,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = definedWithoutVersion(parsed.data);
+    if (rejectLegacyActionWriteIfFrozen(res, updates, ['corrective_actions'], 'ipc_audits')) return;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await ipcRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });

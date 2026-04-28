@@ -315,7 +315,7 @@ export default function ManagerActions() {
         {canEdit && <button type="button" className={BTN.primary} onClick={openAdd}>New Action</button>}
       </div>
 
-      {notice && <InlineNotice variant={notice.variant || 'success'} onDismiss={clearNotice} className="mb-4">{notice.message}</InlineNotice>}
+      {notice && <InlineNotice variant={notice.variant || 'success'} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
       {error && <ErrorState message={error} onRetry={load} className="mb-4" />}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

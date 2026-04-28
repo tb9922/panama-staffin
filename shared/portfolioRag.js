@@ -12,6 +12,8 @@ export const PORTFOLIO_RAG_THRESHOLDS = Object.freeze({
   escalatedActionsL3Plus: { greenAtMost: 0, amberAtMost: 0 },
   incidentOpen: { greenAtMost: 0, amberAtMost: 3 },
   complaintOpen: { greenAtMost: 0, amberAtMost: 2 },
+  incidentRatePerResidentMonth: { greenAtMost: 0.05, amberAtMost: 0.15 },
+  complaintRatePerResidentMonth: { greenAtMost: 0.02, amberAtMost: 0.08 },
   overdueCounts: { greenAtMost: 0, amberAtMost: 2 },
   expiredCertificates: { greenAtMost: 0, amberAtMost: 0 },
   cqcEvidenceGaps: { greenAtMost: 0, amberAtMost: 4 },
@@ -55,14 +57,22 @@ export function buildPortfolioRag(kpis) {
       ? RAG.UNKNOWN
       : ragAtMost(kpis.agency.emergency_override_pct, thresholds.agencyEmergencyOverridePct),
     training: ragAtLeast(kpis?.training?.compliance_pct, thresholds.trainingCompliancePct),
-    incidents: ragAtMost(
-      (kpis?.incidents?.open || 0) + (kpis?.incidents?.cqc_notifiable_overdue || 0) + (kpis?.incidents?.riddor_overdue || 0),
-      thresholds.incidentOpen,
-    ),
-    complaints: ragAtMost(
-      (kpis?.complaints?.open || 0) + (kpis?.complaints?.ack_overdue || 0) + (kpis?.complaints?.response_overdue || 0),
-      thresholds.complaintOpen,
-    ),
+    incidents: overallRag({
+      rate: ragAtMost(kpis?.incidents?.rate_per_resident_month, thresholds.incidentRatePerResidentMonth),
+      overdue: ragAtMost(
+        (kpis?.incidents?.cqc_notifiable_overdue || 0)
+        + (kpis?.incidents?.riddor_overdue || 0)
+        + (kpis?.incidents?.duty_of_candour_overdue || 0),
+        thresholds.overdueCounts,
+      ),
+    }),
+    complaints: overallRag({
+      rate: ragAtMost(kpis?.complaints?.rate_per_resident_month, thresholds.complaintRatePerResidentMonth),
+      overdue: ragAtMost(
+        (kpis?.complaints?.ack_overdue || 0) + (kpis?.complaints?.response_overdue || 0),
+        thresholds.overdueCounts,
+      ),
+    }),
     audits: ragAtMost(kpis?.audits?.overdue, thresholds.overdueCounts),
     supervisions: ragAtMost(kpis?.supervisions?.overdue, thresholds.overdueCounts),
     cqc_evidence: ragAtMost(kpis?.cqc_evidence?.open_gaps, thresholds.cqcEvidenceGaps),

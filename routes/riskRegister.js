@@ -10,6 +10,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { validateRiskStatusChange } from '../lib/statusTransitions.js';
+import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -57,6 +58,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = riskBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'risk_register')) return;
     parsed.data.inherent_risk = (parsed.data.likelihood ?? 0) * (parsed.data.impact ?? 0);
     parsed.data.residual_risk = (parsed.data.residual_likelihood ?? 0) * (parsed.data.residual_impact ?? 0);
     const risk = await riskRepo.upsert(req.home.id, parsed.data);
@@ -77,6 +79,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const statusError = validateRiskStatusChange(existing, parsed.data);
     if (statusError) return res.status(400).json({ error: statusError });
     const { version, payload } = splitVersion(parsed.data);
+    if (rejectLegacyActionWriteIfFrozen(res, payload, ['actions'], 'risk_register')) return;
     const likelihood = payload.likelihood ?? existing.likelihood ?? 0;
     const impact = payload.impact ?? existing.impact ?? 0;
     const residualLikelihood = payload.residual_likelihood ?? existing.residual_likelihood ?? 0;

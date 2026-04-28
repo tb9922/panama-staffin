@@ -11,6 +11,7 @@ Use this before each weekly merge from `v1-os` to `main`.
 - `npm run test:e2e`
 - `npm run audit:routes`
 - `npm run verify:action-backfill`
+- `npm run verify:v1-operational`
 - `npm audit --omit=dev`
 
 ## Operational Gates
@@ -33,3 +34,16 @@ Before freezing legacy corrective-action fields:
 2. Spot-check at least 10 random legacy action rows against `action_items`.
 3. Confirm new/edit workflows write through `action_items`.
 4. Turn on service-layer legacy write guards only after the checks above are clean.
+5. Set `V1_LEGACY_ACTION_FREEZE=1` in the target environment and re-run the affected legacy action routes against empty/no-action payloads.
+
+## External Quality Review Evidence
+
+Before V1 close, store the signed review notes or email reference against the release record:
+
+- Reviewer name, role, and organisation.
+- Date reviewed.
+- Board-pack period reviewed.
+- Homes covered.
+- Findings that must be fixed before go-live.
+- Findings accepted for a later iteration.
+- Teddy sign-off that the board pack answers the operational question: "is each home under control, or hiding chaos?"

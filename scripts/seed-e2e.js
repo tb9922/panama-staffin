@@ -62,6 +62,156 @@ const CONFIG = {
   bank_holidays: [],
 };
 
+const PORTFOLIO_HOMES = [
+  {
+    slug: 'e2e-portfolio-amber',
+    name: 'E2E Portfolio Amber',
+    config: { ...CONFIG, home_name: 'E2E Portfolio Amber', registered_beds: 30 },
+  },
+  {
+    slug: 'e2e-portfolio-red',
+    name: 'E2E Portfolio Red',
+    config: { ...CONFIG, home_name: 'E2E Portfolio Red', registered_beds: 60 },
+  },
+];
+
+async function upsertHome(client, slug, name, config) {
+  const { rows: [home] } = await client.query(
+    `INSERT INTO homes (slug, name, config)
+     VALUES ($1, $2, $3::jsonb)
+     ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE
+       SET name = EXCLUDED.name,
+           config = EXCLUDED.config
+     RETURNING id`,
+    [slug, name, JSON.stringify(config)],
+  );
+  return home.id;
+}
+
+async function resetPortfolioSeedData(client, primaryHomeId, portfolioHomeIds) {
+  const allHomeIds = [primaryHomeId, ...portfolioHomeIds];
+  await client.query(`DELETE FROM action_items WHERE home_id = $1 AND source_id = 'e2e-v1'`, [primaryHomeId]);
+  await client.query(`DELETE FROM outcome_metrics WHERE home_id = $1 AND metric_key LIKE 'e2e_%'`, [primaryHomeId]);
+  await client.query(`DELETE FROM audit_tasks WHERE home_id = $1 AND template_key LIKE 'e2e_%'`, [primaryHomeId]);
+  await client.query(`DELETE FROM reflective_practice WHERE home_id = $1 AND topic LIKE 'E2E V1 %'`, [primaryHomeId]);
+
+  await client.query(`DELETE FROM action_items WHERE home_id = ANY($1::int[])`, [portfolioHomeIds]);
+  await client.query(`DELETE FROM outcome_metrics WHERE home_id = ANY($1::int[])`, [portfolioHomeIds]);
+  await client.query(`DELETE FROM audit_tasks WHERE home_id = ANY($1::int[])`, [portfolioHomeIds]);
+  await client.query(`DELETE FROM reflective_practice WHERE home_id = ANY($1::int[])`, [portfolioHomeIds]);
+  await client.query(`DELETE FROM agency_approval_attempts WHERE home_id = ANY($1::int[])`, [allHomeIds]);
+  await client.query(`DELETE FROM agency_shifts WHERE home_id = ANY($1::int[])`, [allHomeIds]);
+  await client.query(`DELETE FROM agency_providers WHERE home_id = ANY($1::int[])`, [allHomeIds]);
+  await client.query(`DELETE FROM incidents WHERE home_id = ANY($1::int[]) AND id LIKE 'e2e-v1-%'`, [allHomeIds]);
+  await client.query(`DELETE FROM complaints WHERE home_id = ANY($1::int[]) AND id LIKE 'e2e-v1-%'`, [allHomeIds]);
+}
+
+async function seedPortfolioSignals(client, homeIdsBySlug) {
+  const primaryId = homeIdsBySlug.get('e2e-test-home');
+  const amberId = homeIdsBySlug.get('e2e-portfolio-amber');
+  const redId = homeIdsBySlug.get('e2e-portfolio-red');
+
+  await client.query(
+    `INSERT INTO agency_providers (home_id, name, rate_day, rate_night)
+     VALUES ($1, 'E2E V1 Primary Agency', 25, 30)`,
+    [primaryId],
+  );
+
+  await client.query(
+    `INSERT INTO staff (
+       id, home_id, name, role, team, pref, skill, hourly_rate,
+       active, start_date, contract_hours, willing_extras,
+       willing_other_homes, max_weekly_hours_topup, max_travel_radius_km,
+       home_postcode, internal_bank_status
+     )
+     VALUES
+       ('P001', $1, 'Portfolio Amber Carer', 'Carer', 'Day A', 'E', 2, 12.50, true, '2025-01-01', 37.5, true, true, 8, 25, 'AB1 1AA', 'available'),
+       ('P001', $2, 'Portfolio Red Carer', 'Carer', 'Day A', 'E', 2, 12.50, true, '2025-01-01', 37.5, true, true, 8, 25, 'AB1 1AA', 'available')
+     ON CONFLICT (home_id, id) DO UPDATE
+       SET name = EXCLUDED.name,
+           role = EXCLUDED.role,
+           active = EXCLUDED.active,
+           willing_extras = EXCLUDED.willing_extras,
+           willing_other_homes = EXCLUDED.willing_other_homes,
+           max_weekly_hours_topup = EXCLUDED.max_weekly_hours_topup,
+           max_travel_radius_km = EXCLUDED.max_travel_radius_km,
+           home_postcode = EXCLUDED.home_postcode,
+           internal_bank_status = EXCLUDED.internal_bank_status`,
+    [amberId, redId],
+  );
+
+  await client.query(
+    `INSERT INTO action_items (
+       home_id, source_type, source_id, source_action_key, title,
+       category, priority, due_date, status, escalation_level
+     )
+     VALUES
+       ($1, 'standalone', 'e2e-v1', 'amber-action', 'E2E V1 amber action', 'governance', 'medium', CURRENT_DATE - INTERVAL '1 day', 'open', 1),
+       ($2, 'standalone', 'e2e-v1', 'red-critical-action', 'E2E V1 critical overdue action', 'safeguarding', 'critical', CURRENT_DATE - INTERVAL '8 days', 'open', 4)
+     ON CONFLICT (home_id, source_type, source_id, source_action_key)
+       WHERE deleted_at IS NULL AND source_id IS NOT NULL AND source_action_key IS NOT NULL
+     DO UPDATE SET
+       title = EXCLUDED.title,
+       category = EXCLUDED.category,
+       priority = EXCLUDED.priority,
+       due_date = EXCLUDED.due_date,
+       status = EXCLUDED.status,
+       escalation_level = EXCLUDED.escalation_level,
+       updated_at = NOW()`,
+    [amberId, redId],
+  );
+
+  const { rows: [provider] } = await client.query(
+    `INSERT INTO agency_providers (home_id, name, rate_day, rate_night)
+     VALUES ($1, 'E2E V1 Agency', 25, 30)
+     RETURNING id`,
+    [redId],
+  );
+  const { rows: [shift] } = await client.query(
+    `INSERT INTO agency_shifts (home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, role_covered)
+     VALUES ($1, $2, CURRENT_DATE, 'AG-E', 8, 25, 200, 'Carer')
+     RETURNING id`,
+    [redId, provider.id],
+  );
+  const { rows: [attempt] } = await client.query(
+    `INSERT INTO agency_approval_attempts (
+       home_id, gap_date, shift_code, role_needed, reason, internal_bank_checked,
+       internal_bank_candidate_count, viable_internal_candidate_count,
+       emergency_override, emergency_override_reason, outcome, linked_agency_shift_id
+     )
+     VALUES (
+       $1, CURRENT_DATE, 'AG-E', 'Carer', 'E2E V1 emergency cover',
+       true, 1, 1, true, 'No safe internal cover for handover', 'emergency_agency', $2
+     )
+     RETURNING id`,
+    [redId, shift.id],
+  );
+  await client.query(`UPDATE agency_shifts SET agency_attempt_id = $1 WHERE id = $2`, [attempt.id, shift.id]);
+
+  await client.query(
+    `INSERT INTO incidents (
+       id, home_id, date, time, location, type, severity, person_affected_name,
+       investigation_status, investigation_review_date, root_cause
+     )
+     VALUES
+       ('e2e-v1-fall-1', $1, CURRENT_DATE - INTERVAL '2 days', '08:00', 'Lounge', 'Fall', 'moderate', 'Resident A', 'open', CURRENT_DATE - INTERVAL '1 day', 'Environment'),
+       ('e2e-v1-fall-2', $2, CURRENT_DATE - INTERVAL '3 days', '09:00', 'Bedroom', 'Fall', 'moderate', 'Resident B', 'open', CURRENT_DATE - INTERVAL '1 day', 'Observation')
+     ON CONFLICT (home_id, id) DO NOTHING`,
+    [amberId, redId],
+  );
+
+  await client.query(
+    `INSERT INTO complaints (
+       id, home_id, date, raised_by, raised_by_name, category, title,
+       acknowledged_date, response_deadline, status, root_cause
+     )
+     VALUES
+       ('e2e-v1-complaint-1', $1, CURRENT_DATE - INTERVAL '5 days', 'relative', 'Family', 'communication', 'E2E V1 delayed response', NULL, CURRENT_DATE - INTERVAL '1 day', 'open', 'Communication')
+     ON CONFLICT (home_id, id) DO NOTHING`,
+    [redId],
+  );
+}
+
 async function seed() {
   const client = await pool.connect();
   try {
@@ -134,15 +284,15 @@ async function seed() {
       })))]
     );
 
-    const { rows } = await client.query(
-      `INSERT INTO homes (slug, name, config)
-       VALUES ('e2e-test-home', 'E2E Test Home', $1::jsonb)
-       ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE
-         SET config = $1::jsonb
-       RETURNING id`,
-      [JSON.stringify(CONFIG)]
-    );
-    const homeId = rows[0].id;
+    const homeId = await upsertHome(client, 'e2e-test-home', 'E2E Test Home', CONFIG);
+    const portfolioHomeIds = [];
+    const homeIdsBySlug = new Map([['e2e-test-home', homeId]]);
+    for (const home of PORTFOLIO_HOMES) {
+      const id = await upsertHome(client, home.slug, home.name, home.config);
+      portfolioHomeIds.push(id);
+      homeIdsBySlug.set(home.slug, id);
+    }
+    await resetPortfolioSeedData(client, homeId, portfolioHomeIds);
 
     await client.query(
       `INSERT INTO staff (
@@ -164,6 +314,18 @@ async function seed() {
              contract_hours = EXCLUDED.contract_hours,
              al_carryover = EXCLUDED.al_carryover`,
       [homeId]
+    );
+
+    await client.query(
+      `UPDATE staff
+          SET willing_extras = true,
+              willing_other_homes = true,
+              max_weekly_hours_topup = 8,
+              max_travel_radius_km = 25,
+              home_postcode = 'AB1 1AA',
+              internal_bank_status = 'available'
+        WHERE home_id = $1 AND id = 'S001'`,
+      [homeId],
     );
 
     const { rows: [insertedRun] } = await client.query(
@@ -228,6 +390,8 @@ async function seed() {
         JSON.stringify(userRows.map(user => ({ username: user.username, role_id: user.homeRole }))),
       ]
     );
+
+    await seedPortfolioSignals(client, homeIdsBySlug);
 
     await client.query(
       `INSERT INTO finance_residents (home_id, resident_name, room_number, care_type, weekly_fee, funding_type, status, created_by)

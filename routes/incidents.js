@@ -13,6 +13,7 @@ import { dispatchEvent } from '../services/webhookService.js';
 import { nullableDateInput, timeStr } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateIncidentStatusChange } from '../lib/statusTransitions.js';
+import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 import { getCqcNotificationDeadline } from '../shared/incidents.js';
 
 const router = Router();
@@ -196,6 +197,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveC
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'incidents')) return;
     if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
     const { id: _id, ...incidentBody } = parsed.data;
@@ -221,6 +223,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiv
     if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = definedWithoutVersion(parsed.data);
+    if (rejectLegacyActionWriteIfFrozen(res, updates, ['corrective_actions'], 'incidents')) return;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     if (!await validateResidentId(req.home.id, updates.resident_id, res)) return;
     const existing = await incidentRepo.findById(idParsed.data, req.home.id);

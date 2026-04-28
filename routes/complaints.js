@@ -11,6 +11,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateComplaintStatusChange } from '../lib/statusTransitions.js';
+import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const sensitiveComplianceWrite = [
@@ -91,6 +92,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveC
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['improvements'], 'complaints')) return;
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
     const { id: _id, ...complaintBody } = parsed.data;
     const complaint = await complaintRepo.upsert(req.home.id, { ...complaintBody, reported_by: req.user.username });
@@ -108,6 +110,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiv
     if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = definedWithoutVersion(parsed.data);
+    if (rejectLegacyActionWriteIfFrozen(res, updates, ['improvements'], 'complaints')) return;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await complaintRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -143,6 +146,7 @@ router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, ...sen
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'complaint_surveys')) return;
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
     const { id: _id, ...surveyBody } = parsed.data;
     const survey = await complaintSurveyRepo.upsert(req.home.id, surveyBody);
@@ -159,6 +163,7 @@ router.put('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...
     const parsed = surveyUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const updates = definedWithoutVersion(parsed.data);
+    if (rejectLegacyActionWriteIfFrozen(res, updates, ['actions'], 'complaint_surveys')) return;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await complaintSurveyRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });

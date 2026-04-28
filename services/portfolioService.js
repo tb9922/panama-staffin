@@ -111,7 +111,27 @@ function withDefaultActions(map, homeId) {
   };
 }
 
-function buildOutcomeKpis(outcomes) {
+function inclusiveDays(start, end) {
+  const startDate = start ? new Date(`${String(start).slice(0, 10)}T00:00:00Z`) : null;
+  const endDate = end ? new Date(`${String(end).slice(0, 10)}T00:00:00Z`) : null;
+  if (!startDate || !endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 28;
+  return Math.max(1, Math.round((endDate - startDate) / 86400000) + 1);
+}
+
+function residentMonthsForPeriod(home, outcomes) {
+  const registeredBeds = Number(home?.config?.registered_beds || home?.config?.beds || 0);
+  if (!Number.isFinite(registeredBeds) || registeredBeds <= 0) return null;
+  const days = inclusiveDays(outcomes?.period_start, outcomes?.period_end);
+  return registeredBeds * (days / 30.4375);
+}
+
+function ratePerResidentMonth(count, home, outcomes) {
+  const residentMonths = residentMonthsForPeriod(home, outcomes);
+  if (!residentMonths) return null;
+  return Math.round((Number(count || 0) / residentMonths) * 1000) / 1000;
+}
+
+function buildOutcomeKpis(outcomes, home) {
   const incidents = outcomes?.incidents || {};
   const thresholds = PORTFOLIO_RAG_THRESHOLDS;
   const rag = overallRag({
@@ -125,6 +145,8 @@ function buildOutcomeKpis(outcomes) {
     infections_28d: incidents.infections ?? null,
     pressure_sores_new_28d: incidents.pressure_sores ?? null,
     complaints_28d: outcomes?.complaints?.complaints_total ?? null,
+    incidents_per_resident_month: ratePerResidentMonth(incidents.incidents_total, home, outcomes),
+    complaints_per_resident_month: ratePerResidentMonth(outcomes?.complaints?.complaints_total, home, outcomes),
   };
 }
 
@@ -192,6 +214,7 @@ export async function getStaffingPressure(home, days = 7) {
 
 function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes, staffing) {
   const m = summary.modules || {};
+  const outcomeKpis = buildOutcomeKpis(outcomes, home);
   const kpis = {
     home_id: home.id,
     home_slug: home.slug,
@@ -212,12 +235,14 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
     },
     incidents: {
       open: m.incidents?.open || 0,
+      rate_per_resident_month: outcomeKpis.incidents_per_resident_month,
       cqc_notifiable_overdue: m.incidents?.cqcOverdue || 0,
       riddor_overdue: m.incidents?.riddorOverdue || 0,
       duty_of_candour_overdue: m.incidents?.docOverdue || 0,
     },
     complaints: {
       open: m.complaints?.open || 0,
+      rate_per_resident_month: outcomeKpis.complaints_per_resident_month,
       ack_overdue: m.complaints?.unacknowledged || 0,
       response_overdue: m.complaints?.overdueResponse || 0,
     },
@@ -241,7 +266,7 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
       available: m.beds?.available || 0,
       hospital_hold: m.beds?.hospitalHold || 0,
     },
-    outcomes: buildOutcomeKpis(outcomes),
+    outcomes: outcomeKpis,
   };
   return {
     ...kpis,

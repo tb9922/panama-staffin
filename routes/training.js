@@ -23,6 +23,7 @@ import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
+import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
@@ -209,6 +210,7 @@ router.post('/supervisions', writeRateLimiter, requireAuth, requireHomeAccess, r
   try {
     const parsed = supervisionCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'supervisions')) return;
     const record = { ...parsed.data, id: `sup-${randomUUID()}` };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
@@ -223,6 +225,7 @@ router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAccess
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = supervisionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'supervisions')) return;
     const record = { ...parsed.data, id: idParsed.data };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -247,6 +250,7 @@ router.post('/appraisals', writeRateLimiter, requireAuth, requireHomeAccess, req
   try {
     const parsed = appraisalCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['training_needs', 'development_plan'], 'appraisals')) return;
     const record = { ...parsed.data, id: `apr-${randomUUID()}` };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
@@ -261,6 +265,7 @@ router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = appraisalUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['training_needs', 'development_plan'], 'appraisals')) return;
     const record = { ...parsed.data, id: idParsed.data };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -285,6 +290,7 @@ router.post('/fire-drills', writeRateLimiter, requireAuth, requireHomeAccess, re
   try {
     const parsed = fireDrillCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'fire_drills')) return;
     const record = { ...parsed.data, id: `fd-${randomUUID()}` };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_create', req.home.slug, req.user.username, { id: record.id });
@@ -299,6 +305,7 @@ router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAccess,
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = fireDrillUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'fire_drills')) return;
     const record = { ...parsed.data, id: idParsed.data };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_update', req.home.slug, req.user.username, { id: idParsed.data });
