@@ -3,6 +3,10 @@ import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import { hasModuleAccess } from '../shared/roles.js';
 import {
+  evaluateInternalBankTrainingEligibility,
+  INTERNAL_BANK_BLOCKING_TRAINING_TYPE_IDS,
+} from '../lib/trainingEligibility.js';
+import {
   checkWTRImpact,
   getActualShift,
   isWorkingShift,
@@ -112,6 +116,31 @@ function onboardingBlockers(staff, onboardingByHome) {
   return blockers;
 }
 
+async function getTrainingRecordsByStaff(staffRows, client = pool) {
+  if (!staffRows.length) return new Map();
+  const homeIds = [...new Set(staffRows.map(staff => staff.home_id))];
+  const staffIds = [...new Set(staffRows.map(staff => staff.id))];
+  const { rows } = await client.query(
+    `SELECT home_id, staff_id, training_type_id,
+            MAX(CASE WHEN expiry IS NULL THEN '9999-12-31' ELSE expiry::text END) AS latest_expiry
+       FROM training_records
+      WHERE home_id = ANY($1::int[])
+        AND staff_id = ANY($2::text[])
+        AND training_type_id = ANY($3::text[])
+        AND completed IS NOT NULL
+        AND deleted_at IS NULL
+      GROUP BY home_id, staff_id, training_type_id`,
+    [homeIds, staffIds, INTERNAL_BANK_BLOCKING_TRAINING_TYPE_IDS],
+  );
+  const byStaff = new Map();
+  for (const row of rows) {
+    const staffKey = `${row.home_id}:${row.staff_id}`;
+    if (!byStaff.has(staffKey)) byStaff.set(staffKey, new Map());
+    byStaff.get(staffKey).set(row.training_type_id, row.latest_expiry);
+  }
+  return byStaff;
+}
+
 function rankCandidate(candidate, targetHomeId) {
   let score = 0;
   if (candidate.home_id === targetHomeId) score += 100;
@@ -165,6 +194,7 @@ export async function findCandidates({
   ]));
   const overridesByHome = new Map(overrideEntries);
   const onboardingByHome = new Map(onboardingEntries);
+  const trainingByStaff = await getTrainingRecordsByStaff(staffRows);
 
   const proposedShift = proposedShiftFromAgencyCode(shiftCode);
   const targetDate = parseDate(shiftDate);
@@ -188,6 +218,12 @@ export async function findCandidates({
     const wtr = checkWTRImpact(staff, shiftDate, overrides, staff.home_config, proposedShift);
     if (wtr.ok === false) blockers.push(wtr.message || 'Working Time Regulations limit exceeded');
     blockers.push(...onboardingBlockers(staff, onboardingByHome));
+    const training = evaluateInternalBankTrainingEligibility({
+      staff,
+      recordsByType: trainingByStaff.get(`${staff.home_id}:${staff.id}`) || new Map(),
+      effectiveDate: shiftDate,
+    });
+    blockers.push(...training.blockers);
 
     const sameHome = staff.home_id === targetHomeId;
     const candidate = {
@@ -196,7 +232,7 @@ export async function findCandidates({
       scheduled_shift: actual.shift,
       same_home: sameHome,
       distance_status: sameHome ? 'same_home' : 'unknown',
-      training_status: 'not_checked',
+      training_status: training.status,
       fatigue_status: wtr.ok === false ? 'blocked' : (wtr.warn ? 'warning' : 'ok'),
       projected_hours: wtr.projectedHours,
       blockers,

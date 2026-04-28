@@ -104,57 +104,82 @@ export function decryptExtraction(intakeItem) {
   }
 }
 
-function moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId, recordId }) {
+function rememberMovedFile(movedFiles, sourcePath, destinationPath) {
+  if (Array.isArray(movedFiles)) movedFiles.push({ sourcePath, destinationPath });
+}
+
+async function rollbackMovedFiles(movedFiles) {
+  for (const move of [...movedFiles].reverse()) {
+    await rename(move.destinationPath, move.sourcePath).catch(() => {});
+  }
+}
+
+function moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId, recordId, movedFiles }) {
   const ext = extnameSafe(intakeItem.original_name);
   const storedName = `${randomUUID()}${ext}`;
   const destinationDir = path.join(config.upload.dir, String(homeId), moduleId, String(recordId));
   ensureDir(destinationDir);
   const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
   const destinationPath = path.join(destinationDir, storedName);
-  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+  return rename(sourcePath, destinationPath).then(() => {
+    rememberMovedFile(movedFiles, sourcePath, destinationPath);
+    return { stored_name: storedName };
+  });
 }
 
-function moveIntoOnboardingStore({ homeId, intakeItem, staffId, section }) {
+function moveIntoOnboardingStore({ homeId, intakeItem, staffId, section, movedFiles }) {
   const ext = extnameSafe(intakeItem.original_name);
   const storedName = `${randomUUID()}${ext}`;
   const destinationDir = path.join(config.upload.dir, String(homeId), 'onboarding', String(staffId), String(section));
   ensureDir(destinationDir);
   const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
   const destinationPath = path.join(destinationDir, storedName);
-  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+  return rename(sourcePath, destinationPath).then(() => {
+    rememberMovedFile(movedFiles, sourcePath, destinationPath);
+    return { stored_name: storedName };
+  });
 }
 
-function moveIntoCqcStore({ homeId, intakeItem, evidenceId }) {
+function moveIntoCqcStore({ homeId, intakeItem, evidenceId, movedFiles }) {
   const ext = extnameSafe(intakeItem.original_name);
   const storedName = `${randomUUID()}${ext}`;
   const destinationDir = path.join(config.upload.dir, String(homeId), 'cqc_evidence', String(evidenceId));
   ensureDir(destinationDir);
   const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
   const destinationPath = path.join(destinationDir, storedName);
-  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+  return rename(sourcePath, destinationPath).then(() => {
+    rememberMovedFile(movedFiles, sourcePath, destinationPath);
+    return { stored_name: storedName };
+  });
 }
 
-function moveIntoHrStore({ homeId, intakeItem, caseType, caseId }) {
+function moveIntoHrStore({ homeId, intakeItem, caseType, caseId, movedFiles }) {
   const ext = extnameSafe(intakeItem.original_name);
   const storedName = `${randomUUID()}${ext}`;
   const destinationDir = path.join(config.upload.dir, String(homeId), String(caseType), String(caseId));
   ensureDir(destinationDir);
   const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
   const destinationPath = path.join(destinationDir, storedName);
-  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+  return rename(sourcePath, destinationPath).then(() => {
+    rememberMovedFile(movedFiles, sourcePath, destinationPath);
+    return { stored_name: storedName };
+  });
 }
 
-function moveIntoTrainingStore({ homeId, intakeItem, staffId, typeId }) {
+function moveIntoTrainingStore({ homeId, intakeItem, staffId, typeId, movedFiles }) {
   const ext = extnameSafe(intakeItem.original_name);
   const storedName = `${randomUUID()}${ext}`;
   const destinationDir = path.join(config.upload.dir, String(homeId), 'training', String(staffId), String(typeId));
   ensureDir(destinationDir);
   const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
   const destinationPath = path.join(destinationDir, storedName);
-  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+  return rename(sourcePath, destinationPath).then(() => {
+    rememberMovedFile(movedFiles, sourcePath, destinationPath);
+    return { stored_name: storedName };
+  });
 }
 
-async function confirmMaintenance(client, homeId, intakeItem, body, username) {
+async function confirmMaintenance(client, homeId, intakeItem, body, username, movedFiles) {
   let check = null;
   if (body.target_type === 'create_check') {
     check = await maintenanceRepo.upsert(homeId, body.create_check || {}, client);
@@ -162,7 +187,7 @@ async function confirmMaintenance(client, homeId, intakeItem, body, username) {
     check = await maintenanceRepo.findById(body.record_id, homeId, client);
   }
   if (!check) throw Object.assign(new Error('Maintenance check not found'), { statusCode: 404 });
-  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'maintenance', recordId: check.id });
+  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'maintenance', recordId: check.id, movedFiles });
   const attachment = await recordAttachmentsRepo.create(homeId, 'maintenance', String(check.id), {
     original_name: intakeItem.original_name,
     stored_name: moved.stored_name,
@@ -181,11 +206,11 @@ async function confirmMaintenance(client, homeId, intakeItem, body, username) {
   return result;
 }
 
-async function confirmFinance(client, homeId, intakeItem, body, username) {
+async function confirmFinance(client, homeId, intakeItem, body, username, movedFiles) {
   if (body.target_type === 'expense') {
     const expense = await financeRepo.findExpenseById(body.record_id, homeId, client);
     if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
-    const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'finance_expense', recordId: body.record_id });
+    const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'finance_expense', recordId: body.record_id, movedFiles });
     const attachment = await recordAttachmentsRepo.create(homeId, 'finance_expense', String(body.record_id), {
       original_name: intakeItem.original_name,
       stored_name: moved.stored_name,
@@ -205,7 +230,7 @@ async function confirmFinance(client, homeId, intakeItem, body, username) {
   if (body.target_type === 'payment_schedule') {
     const schedule = await financeRepo.findPaymentScheduleById(body.record_id, homeId, client);
     if (!schedule) throw Object.assign(new Error('Payment schedule not found'), { statusCode: 404 });
-    const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'finance_payment_schedule', recordId: body.record_id });
+    const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'finance_payment_schedule', recordId: body.record_id, movedFiles });
     const attachment = await recordAttachmentsRepo.create(homeId, 'finance_payment_schedule', String(body.record_id), {
       original_name: intakeItem.original_name,
       stored_name: moved.stored_name,
@@ -244,7 +269,7 @@ async function confirmFinance(client, homeId, intakeItem, body, username) {
     notes: body.expense?.notes || null,
     created_by: username,
   }, client);
-  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'finance_expense', recordId: expense.id });
+  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'finance_expense', recordId: expense.id, movedFiles });
   const attachment = await recordAttachmentsRepo.create(homeId, 'finance_expense', String(expense.id), {
     original_name: intakeItem.original_name,
     stored_name: moved.stored_name,
@@ -262,10 +287,10 @@ async function confirmFinance(client, homeId, intakeItem, body, username) {
   };
 }
 
-async function confirmOnboarding(client, homeId, intakeItem, body, username) {
+async function confirmOnboarding(client, homeId, intakeItem, body, username, movedFiles) {
   const staff = await staffRepo.findById(homeId, body.staff_id, client);
   if (!staff) throw Object.assign(new Error('Staff member not found'), { statusCode: 404 });
-  const moved = await moveIntoOnboardingStore({ homeId, intakeItem, staffId: body.staff_id, section: body.section });
+  const moved = await moveIntoOnboardingStore({ homeId, intakeItem, staffId: body.staff_id, section: body.section, movedFiles });
   const attachment = await onboardingAttachmentsRepo.create(homeId, body.staff_id, body.section, {
     original_name: intakeItem.original_name,
     stored_name: moved.stored_name,
@@ -282,7 +307,7 @@ async function confirmOnboarding(client, homeId, intakeItem, body, username) {
   };
 }
 
-async function confirmCqc(client, homeId, intakeItem, body, username) {
+async function confirmCqc(client, homeId, intakeItem, body, username, movedFiles) {
   let evidenceId = body.evidence_id;
   if (!evidenceId) {
     const created = await cqcEvidenceRepo.upsert(homeId, {
@@ -302,7 +327,7 @@ async function confirmCqc(client, homeId, intakeItem, body, username) {
     const existing = await cqcEvidenceRepo.findById(evidenceId, homeId);
     if (!existing) throw Object.assign(new Error('CQC evidence item not found'), { statusCode: 404 });
   }
-  const moved = await moveIntoCqcStore({ homeId, intakeItem, evidenceId });
+  const moved = await moveIntoCqcStore({ homeId, intakeItem, evidenceId, movedFiles });
   const attachment = await cqcEvidenceFileRepo.create(homeId, evidenceId, {
     original_name: intakeItem.original_name,
     stored_name: moved.stored_name,
@@ -319,7 +344,7 @@ async function confirmCqc(client, homeId, intakeItem, body, username) {
   };
 }
 
-async function confirmRecordAttachment(client, homeId, intakeItem, body, username) {
+async function confirmRecordAttachment(client, homeId, intakeItem, body, username, movedFiles) {
   const exists = await recordAttachmentsRepo.parentExists(homeId, body.module, body.record_id, client);
   if (!exists) throw Object.assign(new Error('Attachment parent record not found'), { statusCode: 404 });
   const moved = await moveIntoRecordAttachmentStore({
@@ -327,6 +352,7 @@ async function confirmRecordAttachment(client, homeId, intakeItem, body, usernam
     intakeItem,
     moduleId: body.module,
     recordId: body.record_id,
+    movedFiles,
   });
   const attachment = await recordAttachmentsRepo.create(homeId, body.module, String(body.record_id), {
     original_name: intakeItem.original_name,
@@ -344,12 +370,13 @@ async function confirmRecordAttachment(client, homeId, intakeItem, body, usernam
   };
 }
 
-async function confirmHrAttachment(client, homeId, intakeItem, body, username) {
+async function confirmHrAttachment(client, homeId, intakeItem, body, username, movedFiles) {
   const moved = await moveIntoHrStore({
     homeId,
     intakeItem,
     caseType: body.case_type,
     caseId: body.case_id,
+    movedFiles,
   });
   const attachment = await hrRepo.createAttachment(homeId, body.case_type, body.case_id, {
     original_name: intakeItem.original_name,
@@ -367,7 +394,7 @@ async function confirmHrAttachment(client, homeId, intakeItem, body, username) {
   };
 }
 
-async function confirmTraining(client, homeId, intakeItem, body, username) {
+async function confirmTraining(client, homeId, intakeItem, body, username, movedFiles) {
   const staff = await staffRepo.findById(homeId, body.staff_id, client);
   if (!staff) throw Object.assign(new Error('Staff member not found'), { statusCode: 404 });
   const moved = await moveIntoTrainingStore({
@@ -375,6 +402,7 @@ async function confirmTraining(client, homeId, intakeItem, body, username) {
     intakeItem,
     staffId: body.staff_id,
     typeId: body.type_id,
+    movedFiles,
   });
   const attachment = await trainingAttachmentsRepo.create(homeId, body.staff_id, body.type_id, {
     original_name: intakeItem.original_name,
@@ -392,7 +420,7 @@ async function confirmTraining(client, homeId, intakeItem, body, username) {
   };
 }
 
-async function confirmHandover(client, homeId, intakeItem, body, username) {
+async function confirmHandover(client, homeId, intakeItem, body, username, movedFiles) {
   const entry = await handoverRepo.createEntry(homeId, {
     entry_date: body.entry_date,
     shift: body.shift,
@@ -406,6 +434,7 @@ async function confirmHandover(client, homeId, intakeItem, body, username) {
     intakeItem,
     moduleId: 'handover_entry',
     recordId: entry.id,
+    movedFiles,
   });
   const attachment = await recordAttachmentsRepo.create(homeId, 'handover_entry', String(entry.id), {
     original_name: intakeItem.original_name,
@@ -425,43 +454,49 @@ async function confirmHandover(client, homeId, intakeItem, body, username) {
 }
 
 export async function confirmScanIntake(homeId, intakeId, body, username) {
-  return withTransaction(async (client) => {
-    const intakeItem = await documentIntakeRepo.findById(intakeId, homeId, client, { forUpdate: true });
-    if (!intakeItem) throw Object.assign(new Error('Scan item not found'), { statusCode: 404 });
-    if (intakeItem.status === 'confirmed') {
-      throw Object.assign(new Error('This scan has already been filed'), { statusCode: 409 });
-    }
+  const movedFiles = [];
+  try {
+    return await withTransaction(async (client) => {
+      const intakeItem = await documentIntakeRepo.findById(intakeId, homeId, client, { forUpdate: true });
+      if (!intakeItem) throw Object.assign(new Error('Scan item not found'), { statusCode: 404 });
+      if (intakeItem.status === 'confirmed') {
+        throw Object.assign(new Error('This scan has already been filed'), { statusCode: 409 });
+      }
 
-    let result;
-    if (body.target === 'record_attachment') {
-      result = await confirmRecordAttachment(client, homeId, intakeItem, body.record_attachment, username);
-    } else if (body.target === 'maintenance') {
-      result = await confirmMaintenance(client, homeId, intakeItem, body.maintenance, username);
-    } else if (body.target === 'finance_ap') {
-      result = await confirmFinance(client, homeId, intakeItem, body.finance_ap, username);
-    } else if (body.target === 'hr_attachment') {
-      result = await confirmHrAttachment(client, homeId, intakeItem, body.hr_attachment, username);
-    } else if (body.target === 'onboarding') {
-      result = await confirmOnboarding(client, homeId, intakeItem, body.onboarding, username);
-    } else if (body.target === 'training') {
-      result = await confirmTraining(client, homeId, intakeItem, body.training, username);
-    } else if (body.target === 'cqc') {
-      result = await confirmCqc(client, homeId, intakeItem, body.cqc, username);
-    } else if (body.target === 'handover') {
-      result = await confirmHandover(client, homeId, intakeItem, body.handover, username);
-    } else {
-      throw Object.assign(new Error('Unsupported target'), { statusCode: 400 });
-    }
+      let result;
+      if (body.target === 'record_attachment') {
+        result = await confirmRecordAttachment(client, homeId, intakeItem, body.record_attachment, username, movedFiles);
+      } else if (body.target === 'maintenance') {
+        result = await confirmMaintenance(client, homeId, intakeItem, body.maintenance, username, movedFiles);
+      } else if (body.target === 'finance_ap') {
+        result = await confirmFinance(client, homeId, intakeItem, body.finance_ap, username, movedFiles);
+      } else if (body.target === 'hr_attachment') {
+        result = await confirmHrAttachment(client, homeId, intakeItem, body.hr_attachment, username, movedFiles);
+      } else if (body.target === 'onboarding') {
+        result = await confirmOnboarding(client, homeId, intakeItem, body.onboarding, username, movedFiles);
+      } else if (body.target === 'training') {
+        result = await confirmTraining(client, homeId, intakeItem, body.training, username, movedFiles);
+      } else if (body.target === 'cqc') {
+        result = await confirmCqc(client, homeId, intakeItem, body.cqc, username, movedFiles);
+      } else if (body.target === 'handover') {
+        result = await confirmHandover(client, homeId, intakeItem, body.handover, username, movedFiles);
+      } else {
+        throw Object.assign(new Error('Unsupported target'), { statusCode: 400 });
+      }
 
-    const saved = await documentIntakeRepo.update(intakeId, homeId, {
-      status: 'confirmed',
-      classification_target: body.target,
-      reviewed_by: username,
-      reviewed_at: new Date().toISOString(),
-      routed_module: result.routed_module,
-      routed_record_id: result.routed_record_id,
-      routed_attachment_id: result.routed_attachment_id,
-    }, client);
-    return { intake: saved, ...result };
-  });
+      const saved = await documentIntakeRepo.update(intakeId, homeId, {
+        status: 'confirmed',
+        classification_target: body.target,
+        reviewed_by: username,
+        reviewed_at: new Date().toISOString(),
+        routed_module: result.routed_module,
+        routed_record_id: result.routed_record_id,
+        routed_attachment_id: result.routed_attachment_id,
+      }, client);
+      return { intake: saved, ...result };
+    });
+  } catch (err) {
+    await rollbackMovedFiles(movedFiles);
+    throw err;
+  }
 }

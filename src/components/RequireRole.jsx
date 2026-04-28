@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { isOwnDataOnly, ROLES } from '../../shared/roles.js';
+import { hasModuleAccess, isOwnDataOnly, ROLES } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 
 export function RequireModule({ module, allowOwn = false, children }) {
@@ -9,6 +9,15 @@ export function RequireModule({ module, allowOwn = false, children }) {
   const { canRead, homeRole } = useData();
   if (!canRead(module)) return <Navigate to="/" replace />;
   if (!isPlatformAdmin && !allowOwn && isOwnDataOnly(homeRole, module)) return <Navigate to="/" replace />;
+  return children;
+}
+
+export function RequireAnyModule({ modules = [], children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { homeRole } = useData();
+  if (isPlatformAdmin) return children;
+  const allowed = modules.some(moduleId => hasModuleAccess(homeRole, moduleId, 'read', { includeOwn: false }));
+  if (!allowed) return <Navigate to="/" replace />;
   return children;
 }
 

@@ -13,6 +13,7 @@ import { hasModuleAccess } from '../shared/roles.js';
 import { SCAN_INTAKE_ACCESS_MODULES, SCAN_INTAKE_TARGET_IDS, getScanTarget } from '../shared/scanIntake.js';
 import { SCAN_INTAKE_UPLOAD_POLICY } from '../shared/uploadPolicies.js';
 import { validateDeclaredUploadType, validateDetectedUploadType } from '../lib/uploadValidation.js';
+import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
 import { RECORD_ATTACHMENT_MODULE_IDS, RECORD_ATTACHMENT_PERMISSION_BY_MODULE } from '../shared/recordAttachmentModules.js';
 import * as documentIntakeRepo from '../repositories/documentIntakeRepo.js';
 import * as scanIntakeService from '../services/scanIntakeService.js';
@@ -141,7 +142,7 @@ function requireScanInboxAccess(level = 'read') {
   return (req, res, next) => {
     if (req.user?.is_platform_admin && req.homeRole != null) return next();
     const allowed = SCAN_INTAKE_ACCESS_MODULES.some((moduleId) =>
-      hasModuleAccess(req.homeRole, moduleId, level)
+      hasModuleAccess(req.homeRole, moduleId, level, { includeOwn: false })
     );
     if (!allowed) return res.status(403).json({ error: 'Scan inbox access denied' });
     next();
@@ -273,6 +274,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireScanIn
         await unlink(req.file.path).catch(() => {});
         return res.status(400).json({ error: verified.error });
       }
+      await assertFilePassedMalwareScan(req.file.path);
 
       const item = await scanIntakeService.createScanIntake(req.home.id, {
         file: req.file,
@@ -284,6 +286,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireScanIn
       });
       res.status(201).json({ ...item, extraction: scanIntakeService.decryptExtraction(item) });
     } catch (uploadErr) {
+      await unlink(req.file.path).catch(() => {});
       next(uploadErr);
     }
   });

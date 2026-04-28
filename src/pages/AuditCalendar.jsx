@@ -16,6 +16,7 @@ import {
   generateAuditTasks,
   getAuditTasks,
   updateAuditTask,
+  verifyAuditTask,
 } from '../lib/api.js';
 
 const EMPTY_TASK = {
@@ -180,6 +181,7 @@ export default function AuditCalendar() {
       open: tasks.filter(task => task.status === 'open').length,
       overdue: tasks.filter(task => task.status === 'open' && task.due_date < today).length,
       completed: tasks.filter(task => task.status === 'completed' || task.status === 'verified').length,
+      qaSigned: tasks.filter(task => task.status === 'verified').length,
     };
   }, [tasks]);
 
@@ -243,6 +245,16 @@ export default function AuditCalendar() {
     }
   }
 
+  async function verifyTask(task) {
+    try {
+      await verifyAuditTask(activeHome, task.id, { _version: task.version });
+      showNotice('Audit task QA signed off.');
+      await load();
+    } catch (e) {
+      setError(e.message || 'Unable to QA sign off audit task');
+    }
+  }
+
   async function generateRecurringTasks() {
     try {
       setGenerating(true);
@@ -273,10 +285,11 @@ export default function AuditCalendar() {
       {notice && <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
       {error && <ErrorState title="Audit calendar unavailable" message={error} onRetry={load} className="mb-4" />}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">Open</p><p className="mt-2 text-2xl font-semibold text-[var(--ink)]">{stats.open}</p></div>
         <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">Overdue</p><p className="mt-2 text-2xl font-semibold text-[var(--alert)]">{stats.overdue}</p></div>
         <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">Completed</p><p className="mt-2 text-2xl font-semibold text-[var(--ok)]">{stats.completed}</p></div>
+        <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">QA signed off</p><p className="mt-2 text-2xl font-semibold text-[var(--info)]">{stats.qaSigned}</p></div>
       </div>
 
       <div className={`${CARD.padded} mb-4`}>
@@ -312,6 +325,7 @@ export default function AuditCalendar() {
                     <th className={TABLE.th}>Due</th>
                     <th className={TABLE.th}>Status</th>
                     <th className={TABLE.th}>Evidence</th>
+                    <th className={TABLE.th}>Sign-off</th>
                     <th className={TABLE.th}>Actions</th>
                   </tr>
                 </thead>
@@ -324,8 +338,17 @@ export default function AuditCalendar() {
                       <td className={TABLE.td}>{task.due_date}</td>
                       <td className={TABLE.td}><span className={statusBadge(task.status)}>{titleCase(task.status)}</span></td>
                       <td className={TABLE.td}>{task.evidence_required ? 'Required' : 'Optional'}</td>
+                      <td className={TABLE.td}>
+                        <div className="text-xs text-[var(--ink-2)]">
+                          Manager: {task.manager_signed_off_at ? 'Signed' : '-'}
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--ink-2)]">
+                          QA: {task.qa_signed_off_at ? 'Signed' : '-'}
+                        </div>
+                      </td>
                       <td className={`${TABLE.td} whitespace-nowrap`}>
                         {canEdit && task.status === 'open' && <button type="button" className={`${BTN.success} ${BTN.xs} mr-2`} onClick={() => completeTask(task)}>Complete</button>}
+                        {canEdit && task.status === 'completed' && <button type="button" className={`${BTN.success} ${BTN.xs} mr-2`} onClick={() => verifyTask(task)}>QA Sign-off</button>}
                         <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(task)}>Open</button>
                       </td>
                     </tr>

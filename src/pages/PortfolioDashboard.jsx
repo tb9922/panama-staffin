@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BADGE, BTN, CARD, PAGE, TABLE } from '../lib/design.js';
+import { BADGE, BTN, CARD, ESC_COLORS, PAGE } from '../lib/design.js';
 import EmptyState from '../components/EmptyState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import LoadingState from '../components/LoadingState.jsx';
@@ -14,6 +14,13 @@ const RAG_LABELS = {
   unknown: 'Unknown',
 };
 
+const RAG_RANK = {
+  red: 0,
+  amber: 1,
+  unknown: 2,
+  green: 3,
+};
+
 function ragBadge(rag) {
   if (rag === 'green') return BADGE.green;
   if (rag === 'amber') return BADGE.amber;
@@ -21,9 +28,16 @@ function ragBadge(rag) {
   return BADGE.gray;
 }
 
+function ragAccent(rag) {
+  if (rag === 'red') return ESC_COLORS.red;
+  if (rag === 'amber') return ESC_COLORS.amber;
+  if (rag === 'green') return ESC_COLORS.green;
+  return { card: 'border-[var(--line)] bg-[var(--paper)]', text: 'text-[var(--ink-3)]', bar: 'bg-[var(--line-2)]' };
+}
+
 function formatNumber(value) {
   if (value == null || Number.isNaN(Number(value))) return '-';
-  return Number(value).toLocaleString();
+  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
 function formatPct(value) {
@@ -31,35 +45,160 @@ function formatPct(value) {
   return `${Math.round(Number(value))}%`;
 }
 
-function RagPill({ value }) {
-  return <span className={ragBadge(value)}>{RAG_LABELS[value] || 'Unknown'}</span>;
+function RagPill({ value, className = '' }) {
+  return <span className={`${ragBadge(value)} whitespace-nowrap ${className}`.trim()}>{RAG_LABELS[value] || 'Unknown'}</span>;
 }
 
-function StatCard({ label, value, rag }) {
+function SummaryCard({ label, value, rag, helper }) {
+  const accent = ragAccent(rag);
   return (
-    <div className={CARD.padded}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-[var(--ink-3)]">{label}</p>
-        <RagPill value={rag} />
+    <div className={`${CARD.base} overflow-hidden`}>
+      <div className={`h-1 ${accent.bar}`} />
+      <div className="p-4">
+        <div className="flex min-h-6 items-start justify-between gap-3">
+          <p className="text-sm font-medium text-[var(--ink-2)]">{label}</p>
+          <RagPill value={rag} />
+        </div>
+        <p className={`mt-3 text-3xl font-semibold ${accent.text}`}>{value}</p>
+        {helper && <p className="mt-1 text-xs text-[var(--ink-3)]">{helper}</p>}
       </div>
-      <p className="mt-2 text-2xl font-semibold text-[var(--ink)]">{value}</p>
     </div>
   );
 }
 
-function metricParts(home) {
-  return {
-    staffing: `${formatNumber(home.staffing?.gaps_7d)} gaps / ${formatNumber(home.staffing?.gaps_per_100_planned_shifts)} per 100`,
-    training: `${formatPct(home.training?.compliance_pct)} compliant`,
-    actions: `${formatNumber(home.manager_actions?.open)} open / ${formatNumber(home.manager_actions?.overdue)} overdue`,
-    incidents: `${formatNumber(home.incidents?.open)} open`,
-    complaints: `${formatNumber(home.complaints?.open)} open`,
-    cqc: `${formatNumber(home.cqc_evidence?.open_gaps)} gaps`,
-    maintenance: `${formatNumber(home.maintenance?.overdue)} overdue`,
-    agency: `${formatNumber(home.agency?.shifts_28d)} shifts`,
-    occupancy: formatPct(home.occupancy?.pct),
-    outcomes: `Falls ${formatNumber(home.outcomes?.falls_28d)} / infections ${formatNumber(home.outcomes?.infections_28d)}`,
-  };
+function buildMetricCards(home) {
+  return [
+    {
+      key: 'staffing',
+      label: 'Staffing',
+      rag: home.rag?.staffing,
+      value: `${formatNumber(home.staffing?.gaps_7d)} gaps`,
+      detail: `${formatNumber(home.staffing?.gaps_per_100_planned_shifts)} per 100 shifts`,
+    },
+    {
+      key: 'training',
+      label: 'Training',
+      rag: home.rag?.training,
+      value: formatPct(home.training?.compliance_pct),
+      detail: `${formatNumber(home.training?.expired)} expired`,
+    },
+    {
+      key: 'manager_actions',
+      label: 'Actions',
+      rag: home.rag?.manager_actions,
+      value: `${formatNumber(home.manager_actions?.open)} open`,
+      detail: `${formatNumber(home.manager_actions?.overdue)} overdue`,
+    },
+    {
+      key: 'incidents',
+      label: 'Incidents',
+      rag: home.rag?.incidents,
+      value: `${formatNumber(home.incidents?.open)} open`,
+      detail: `${formatNumber(home.incidents?.rate_per_resident_month)} per resident-month`,
+    },
+    {
+      key: 'complaints',
+      label: 'Complaints',
+      rag: home.rag?.complaints,
+      value: `${formatNumber(home.complaints?.open)} open`,
+      detail: `${formatNumber(home.complaints?.rate_per_resident_month)} per resident-month`,
+    },
+    {
+      key: 'cqc_evidence',
+      label: 'CQC',
+      rag: home.rag?.cqc_evidence,
+      value: `${formatNumber(home.cqc_evidence?.open_gaps)} gaps`,
+      detail: `${formatNumber(home.cqc_evidence?.domains_with_gaps)} domains`,
+    },
+    {
+      key: 'maintenance',
+      label: 'Maintenance',
+      rag: home.rag?.maintenance,
+      value: `${formatNumber(home.maintenance?.overdue)} overdue`,
+      detail: `${formatNumber(home.maintenance?.certs_expiring_30d)} certs expiring`,
+    },
+    {
+      key: 'agency',
+      label: 'Agency',
+      rag: home.rag?.agency,
+      value: `${formatNumber(home.agency?.shifts_28d)} shifts`,
+      detail: `${formatPct(home.agency?.emergency_override_pct)} emergency`,
+    },
+    {
+      key: 'occupancy',
+      label: 'Occupancy',
+      rag: home.rag?.occupancy,
+      value: formatPct(home.occupancy?.pct),
+      detail: `${formatNumber(home.occupancy?.occupied_beds)} occupied beds`,
+    },
+    {
+      key: 'outcomes',
+      label: 'Outcomes',
+      rag: home.rag?.outcomes,
+      value: `${formatNumber(home.outcomes?.falls_28d)} falls`,
+      detail: `${formatNumber(home.outcomes?.infections_28d)} infections`,
+    },
+  ];
+}
+
+function MetricTile({ metric }) {
+  const accent = ragAccent(metric.rag);
+  return (
+    <div className="min-h-24 border-t border-[var(--line)] py-3 sm:border-l sm:border-t-0 sm:px-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase text-[var(--ink-3)]">{metric.label}</p>
+        <RagPill value={metric.rag} />
+      </div>
+      <p className={`text-base font-semibold ${accent.text}`}>{metric.value}</p>
+      <p className="mt-1 text-xs text-[var(--ink-3)]">{metric.detail}</p>
+    </div>
+  );
+}
+
+function ExceptionStrip({ metrics }) {
+  const exceptions = metrics.filter(metric => metric.rag === 'red' || metric.rag === 'amber');
+  if (exceptions.length === 0) {
+    return <p className="text-sm text-[var(--ink-3)]">No current red or amber exception signals.</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {exceptions.slice(0, 6).map(metric => (
+        <span key={metric.key} className={`${ragBadge(metric.rag)} gap-1`}>
+          {metric.label}: {metric.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function HomePanel({ home, onOpen }) {
+  const metrics = buildMetricCards(home);
+  const overall = home.rag?.overall || 'unknown';
+  const accent = ragAccent(overall);
+  return (
+    <section className={`${CARD.base} overflow-hidden`}>
+      <div className={`h-1.5 ${accent.bar}`} />
+      <div className="p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-[var(--ink)]">{home.home_name}</h2>
+              <RagPill value={overall} />
+            </div>
+            <div className="mt-3">
+              <ExceptionStrip metrics={metrics} />
+            </div>
+          </div>
+          <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => onOpen(home)}>
+            Drilldown
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 border-t border-[var(--line)] px-4 sm:grid-cols-2 lg:grid-cols-5">
+        {metrics.map(metric => <MetricTile key={metric.key} metric={metric} />)}
+      </div>
+    </section>
+  );
 }
 
 export default function PortfolioDashboard() {
@@ -87,6 +226,14 @@ export default function PortfolioDashboard() {
   useEffect(() => { load(); }, [load]);
 
   const homes = useMemo(() => (Array.isArray(payload?.homes) ? payload.homes : []), [payload]);
+  const sortedHomes = useMemo(() => (
+    [...homes].sort((a, b) => {
+      const aRank = RAG_RANK[a.rag?.overall || 'unknown'] ?? RAG_RANK.unknown;
+      const bRank = RAG_RANK[b.rag?.overall || 'unknown'] ?? RAG_RANK.unknown;
+      return aRank - bRank || String(a.home_name || '').localeCompare(String(b.home_name || ''));
+    })
+  ), [homes]);
+
   const summary = useMemo(() => {
     const counts = { green: 0, amber: 0, red: 0, unknown: 0 };
     for (const home of homes) {
@@ -133,70 +280,22 @@ export default function PortfolioDashboard() {
       {error && <ErrorState message={error} onRetry={load} className="mb-4" />}
       {packError && <ErrorState message={packError} onRetry={generateBoardPack} className="mb-4" />}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Red homes" value={summary.red} rag={summary.red > 0 ? 'red' : 'green'} />
-        <StatCard label="Amber homes" value={summary.amber} rag={summary.amber > 0 ? 'amber' : 'green'} />
-        <StatCard label="Green homes" value={summary.green} rag="green" />
-        <StatCard label="Unknown" value={summary.unknown} rag={summary.unknown > 0 ? 'unknown' : 'green'} />
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard label="Red homes" value={summary.red} rag={summary.red > 0 ? 'red' : 'green'} helper="Immediate exception load" />
+        <SummaryCard label="Amber homes" value={summary.amber} rag={summary.amber > 0 ? 'amber' : 'green'} helper="Watchlist pressure" />
+        <SummaryCard label="Green homes" value={summary.green} rag="green" helper="No red/amber overall" />
+        <SummaryCard label="Unknown" value={summary.unknown} rag={summary.unknown > 0 ? 'unknown' : 'green'} helper="Missing KPI coverage" />
       </div>
 
-      <div className={CARD.flush}>
-        {loading ? <LoadingState message="Loading portfolio KPIs..." /> : (
-          homes.length === 0 ? (
-            <EmptyState title="No homes available" description="No report-visible homes are assigned to this user." />
-          ) : (
-            <div className={TABLE.wrapper}>
-              <table className={TABLE.table}>
-                <thead className={TABLE.thead}>
-                  <tr>
-                    <th className={TABLE.th}>Home</th>
-                    <th className={TABLE.th}>Overall</th>
-                    <th className={TABLE.th}>Staffing</th>
-                    <th className={TABLE.th}>Training</th>
-                    <th className={TABLE.th}>Actions</th>
-                    <th className={TABLE.th}>Incidents</th>
-                    <th className={TABLE.th}>Complaints</th>
-                    <th className={TABLE.th}>CQC</th>
-                    <th className={TABLE.th}>Maintenance</th>
-                    <th className={TABLE.th}>Agency</th>
-                    <th className={TABLE.th}>Occupancy</th>
-                    <th className={TABLE.th}>Outcomes</th>
-                    <th className={TABLE.th}>Open</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {homes.map(home => {
-                    const parts = metricParts(home);
-                    return (
-                      <tr key={home.home_id} className={TABLE.tr}>
-                        <td className={TABLE.td}>
-                          <button type="button" className="text-left font-medium text-[var(--ink)] hover:text-[var(--accent)]" onClick={() => drillIntoHome(home)}>
-                            {home.home_name}
-                          </button>
-                        </td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.overall} /></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.staffing} /> <span className="ml-2 text-[var(--ink-3)]">{parts.staffing}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.training} /> <span className="ml-2 text-[var(--ink-3)]">{parts.training}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.manager_actions} /> <span className="ml-2 text-[var(--ink-3)]">{parts.actions}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.incidents} /> <span className="ml-2 text-[var(--ink-3)]">{parts.incidents}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.complaints} /> <span className="ml-2 text-[var(--ink-3)]">{parts.complaints}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.cqc_evidence} /> <span className="ml-2 text-[var(--ink-3)]">{parts.cqc}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.maintenance} /> <span className="ml-2 text-[var(--ink-3)]">{parts.maintenance}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.agency} /> <span className="ml-2 text-[var(--ink-3)]">{parts.agency}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.occupancy} /> <span className="ml-2 text-[var(--ink-3)]">{parts.occupancy}</span></td>
-                        <td className={TABLE.td}><RagPill value={home.rag?.outcomes} /> <span className="ml-2 text-[var(--ink-3)]">{parts.outcomes}</span></td>
-                        <td className={TABLE.td}>
-                          <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => drillIntoHome(home)}>Drilldown</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
-      </div>
+      {loading ? (
+        <div className={CARD.flush}><LoadingState message="Loading portfolio KPIs..." /></div>
+      ) : homes.length === 0 ? (
+        <div className={CARD.flush}><EmptyState title="No homes available" description="No report-visible homes are assigned to this user." /></div>
+      ) : (
+        <div className="space-y-4">
+          {sortedHomes.map(home => <HomePanel key={home.home_id} home={home} onOpen={drillIntoHome} />)}
+        </div>
+      )}
     </div>
   );
 }

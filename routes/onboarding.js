@@ -11,6 +11,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
+import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
 import { config } from '../config.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachments.js';
@@ -192,6 +193,7 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
           await unlink(req.file.path).catch(() => {});
           return res.status(400).json({ error: 'File content does not match declared type' });
         }
+        await assertFilePassedMalwareScan(req.file.path);
         const description = z.string().max(500).optional().safeParse(req.body.description);
         const attachment = await onboardingAttachmentsRepo.create(req.home.id, staffIdParsed.data, sectionParsed.data, {
           original_name: req.file.originalname,

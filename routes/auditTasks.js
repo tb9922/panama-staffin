@@ -136,6 +136,23 @@ router.post('/:id/complete', writeRateLimiter, requireAuth, requireHomeAccess, r
   } catch (err) { next(err); }
 });
 
+router.post('/:id/verify', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.id);
+    if (!idParsed.success) return res.status(400).json({ error: 'Invalid task ID' });
+    const parsed = completeSchema.safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed);
+    const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Audit task not found' });
+    if (existing.status !== 'completed') return res.status(400).json({ error: 'Complete the audit task before QA sign-off' });
+    const { version } = splitVersion(parsed.data);
+    const task = await auditTaskRepo.verify(idParsed.data, req.home.id, actorId(req), version);
+    if (task === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    await auditService.log('audit_task_verify', req.home.slug, req.user.username, { id: task.id });
+    res.json(task);
+  } catch (err) { next(err); }
+});
+
 router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);

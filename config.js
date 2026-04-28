@@ -130,6 +130,12 @@ export const config = {
   upload: {
     dir: path.join(__dirname, 'uploads'),
     maxFileSize: 20 * 1024 * 1024,
+    scanCommand: process.env.UPLOAD_SCAN_COMMAND || null,
+    scanArgs: (process.env.UPLOAD_SCAN_ARGS || '--no-summary')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean),
+    scanTimeoutMs: parseIntEnv(process.env.UPLOAD_SCAN_TIMEOUT_MS, 30000),
     allowedMimeTypes: [
       'application/pdf',
       'application/msword',

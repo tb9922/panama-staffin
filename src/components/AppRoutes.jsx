@@ -1,7 +1,8 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
-import { RequireEvidenceHub, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
+import { RequireAnyModule, RequireEvidenceHub, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
+import { SCAN_INTAKE_ACCESS_MODULES } from '../../shared/scanIntake.js';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('../pages/DailyStatus.jsx'));
@@ -70,6 +71,12 @@ const AuditLog = lazy(() => import('../pages/AuditLog.jsx'));
 const BedManager = lazy(() => import('../pages/BedManager.jsx'));
 const Residents = lazy(() => import('../pages/Residents.jsx'));
 const PlatformHomes = lazy(() => import('../pages/PlatformHomes.jsx'));
+const ScanInbox = lazy(() => import('../pages/ScanInbox.jsx'));
+const SuppliersManager = lazy(() => import('../pages/SuppliersManager.jsx'));
+const CqcDocsTracker = lazy(() => import('../pages/CqcDocsTracker.jsx'));
+const FinanceDocsTracker = lazy(() => import('../pages/FinanceDocsTracker.jsx'));
+const MaintenanceDocsTracker = lazy(() => import('../pages/MaintenanceDocsTracker.jsx'));
+const OnboardingDocsTracker = lazy(() => import('../pages/OnboardingDocsTracker.jsx'));
 const NotFound = lazy(() => import('../pages/NotFound.jsx'));
 
 export default function AppRoutes() {
@@ -88,6 +95,7 @@ export default function AppRoutes() {
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
       <Route path="/internal-bank" element={<RouteErrorBoundary><RequireModule module="staff"><InternalBank /></RequireModule></RouteErrorBoundary>} />
       <Route path="/onboarding" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/onboarding/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingDocsTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/training" element={<RouteErrorBoundary><RequireModule module="compliance"><TrainingMatrix /></RequireModule></RouteErrorBoundary>} />
       <Route path="/sick-trends" element={<RouteErrorBoundary><RequireModule module="staff"><SickTrends /></RequireModule></RouteErrorBoundary>} />
       <Route path="/fatigue" element={<RouteErrorBoundary><RequireModule module="staff"><FatigueTracker /></RequireModule></RouteErrorBoundary>} />
@@ -95,6 +103,7 @@ export default function AppRoutes() {
 
       {/* Compliance */}
       <Route path="/cqc" element={<RouteErrorBoundary><RequireModule module="compliance"><CQCEvidence /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/cqc/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><CqcDocsTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/incidents" element={<RouteErrorBoundary><RequireModule module="compliance"><IncidentTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/complaints" element={<RouteErrorBoundary><RequireModule module="compliance"><ComplaintsTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/dols" element={<RouteErrorBoundary><RequireModule module="compliance"><DolsTracker /></RequireModule></RouteErrorBoundary>} />
@@ -107,6 +116,7 @@ export default function AppRoutes() {
       <Route path="/policies" element={<RouteErrorBoundary><RequireModule module="governance"><PolicyReviewTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/speak-up" element={<RouteErrorBoundary><RequireModule module="governance"><WhistleblowingTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/maintenance" element={<RouteErrorBoundary><RequireModule module="compliance"><MaintenanceTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/maintenance/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><MaintenanceDocsTracker /></RequireModule></RouteErrorBoundary>} />
 
       {/* HR */}
       <Route path="/hr"                element={<RouteErrorBoundary><RequireModule module="hr"><HrDashboard /></RequireModule></RouteErrorBoundary>} />
@@ -128,8 +138,10 @@ export default function AppRoutes() {
       <Route path="/finance"             element={<RouteErrorBoundary><RequireModule module="finance"><FinanceDashboard /></RequireModule></RouteErrorBoundary>} />
       <Route path="/finance/income"      element={<RouteErrorBoundary><RequireModule module="finance"><IncomeTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/finance/expenses"    element={<RouteErrorBoundary><RequireModule module="finance"><ExpenseTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/finance/docs"        element={<RouteErrorBoundary><RequireModule module="finance"><FinanceDocsTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/finance/receivables" element={<RouteErrorBoundary><RequireModule module="finance"><ReceivablesManager /></RequireModule></RouteErrorBoundary>} />
       <Route path="/finance/payables"    element={<RouteErrorBoundary><RequireModule module="finance"><PayablesManager /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/suppliers"           element={<RouteErrorBoundary><RequireModule module="finance"><SuppliersManager /></RequireModule></RouteErrorBoundary>} />
       <Route path="/costs" element={<RouteErrorBoundary><RequireModule module="finance"><CostTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/budget" element={<RouteErrorBoundary><RequireModule module="finance"><BudgetTracker /></RequireModule></RouteErrorBoundary>} />
 
@@ -159,6 +171,7 @@ export default function AppRoutes() {
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><RequireUserManagement><UserManagement /></RequireUserManagement></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/scan-inbox" element={<RouteErrorBoundary><RequireAnyModule modules={SCAN_INTAKE_ACCESS_MODULES}><ScanInbox /></RequireAnyModule></RouteErrorBoundary>} />
 
       {/* Platform admin only */}
       <Route path="/platform/homes" element={<RouteErrorBoundary><RequirePlatformAdmin><PlatformHomes /></RequirePlatformAdmin></RouteErrorBoundary>} />

@@ -16,6 +16,12 @@ function statusBadge(candidate) {
   return BADGE.amber;
 }
 
+function trainingBadge(status) {
+  if (status === 'ok') return BADGE.green;
+  if (status === 'blocked') return BADGE.red;
+  return BADGE.gray;
+}
+
 export default function InternalBank() {
   const ids = {
     role: useId(),
@@ -109,6 +115,7 @@ export default function InternalBank() {
                   <th className={TABLE.th}>Home</th>
                   <th className={TABLE.th}>Role</th>
                   <th className={TABLE.th}>Availability</th>
+                  <th className={TABLE.th}>Training</th>
                   <th className={TABLE.th}>Fatigue</th>
                   <th className={TABLE.th}>Warnings</th>
                 </tr>
@@ -126,6 +133,7 @@ export default function InternalBank() {
                       <span className={statusBadge(candidate)}>{candidate.viable ? 'Viable' : candidate.availability}</span>
                       <div className="mt-1 text-xs text-[var(--ink-3)]">Rostered: {candidate.scheduled_shift}</div>
                     </td>
+                    <td className={TABLE.td}><span className={trainingBadge(candidate.training_status)}>{candidate.training_status || 'unknown'}</span></td>
                     <td className={TABLE.td}>{candidate.fatigue_status}</td>
                     <td className={TABLE.td}>
                       {[...(candidate.blockers || []), ...(candidate.warnings || [])].length === 0

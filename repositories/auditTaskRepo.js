@@ -205,6 +205,28 @@ export async function complete(id, homeId, actorId, evidenceNotes, version = nul
   return shapeRow(rows[0]);
 }
 
+export async function verify(id, homeId, actorId, version = null, client = pool) {
+  const params = [id, homeId, actorId || null];
+  let sql = `
+    UPDATE audit_tasks
+       SET status = 'verified',
+           qa_signed_off_at = COALESCE(qa_signed_off_at, NOW()),
+           qa_signed_off_by = COALESCE(qa_signed_off_by, $3),
+           updated_by = $3,
+           updated_at = NOW(),
+           version = version + 1
+     WHERE id = $1 AND home_id = $2 AND status = 'completed' AND deleted_at IS NULL
+  `;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  sql += ` RETURNING ${COLS}`;
+  const { rows, rowCount } = await client.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return shapeRow(rows[0]);
+}
+
 export async function softDelete(id, homeId, actorId = null, client = pool) {
   const { rowCount } = await client.query(
     `UPDATE audit_tasks

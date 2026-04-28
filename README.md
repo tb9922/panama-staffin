@@ -62,7 +62,7 @@ npm run dev
 # UI:  http://localhost:5173
 ```
 
-Default logins: `admin / admin123` (edit), `viewer / view123` (read-only).
+Local logins are DB-backed. On a fresh environment, seed users with `ADMIN_PASSWORD_HASH` / `VIEWER_PASSWORD_HASH` in `.env`, then manage users from the app.
 
 ## Available Scripts
 

@@ -51,7 +51,7 @@ function pickField(fields, ...keys) {
 export default function ScanInbox() {
   const home = getCurrentHome();
   const { showToast } = useToast();
-  const { scanIntakeEnabled = false } = useData();
+  const { scanIntakeEnabled = false, scanIntakeTargets = [], canRead } = useData();
   const [searchParams] = useSearchParams();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +132,14 @@ export default function ScanInbox() {
   const launchContext = useMemo(() => parseScanLaunchParams(searchParams), [searchParams]);
 
   const loadList = useCallback(async () => {
+    if (!scanIntakeEnabled) {
+      setList([]);
+      setSelectedId(null);
+      setSelected(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -145,7 +153,7 @@ export default function ScanInbox() {
     } finally {
       setLoading(false);
     }
-  }, [home, selectedId]);
+  }, [home, scanIntakeEnabled, selectedId]);
 
   const loadSelected = useCallback(async () => {
     if (!selectedId) return;
@@ -231,37 +239,67 @@ export default function ScanInbox() {
   }, [home, launchContext, selectedId]);
 
   const loadReferenceData = useCallback(async () => {
-    try {
-      const [maintenance, expenseData, scheduleData, supplierData, onboarding, cqc] = await Promise.all([
-        getMaintenance(home),
-        getFinanceExpenses(home, { limit: 200 }),
-        getPaymentSchedules(home, { limit: 200 }),
-        getSuppliers(home, { activeOnly: true }),
-        getOnboardingData(home),
-        getCqcEvidence(home, { limit: 200 }),
-      ]);
-      setMaintenanceChecks(maintenance.checks || []);
-      setMaintenanceCategories(maintenance.maintenanceCategories || []);
-      setExpenses(expenseData.rows || []);
-      setSchedules(scheduleData.rows || []);
-      setSuppliers(supplierData || []);
-      setOnboardingData(onboarding || { onboarding: {}, staff: [] });
-      setCqcEvidence(cqc.evidence || cqc.rows || []);
-    } catch {
-      // keep page usable even if some reference data fails
+    if (!scanIntakeEnabled) {
+      setMaintenanceChecks([]);
+      setMaintenanceCategories([]);
+      setExpenses([]);
+      setSchedules([]);
+      setSuppliers([]);
+      setOnboardingData({ onboarding: {}, staff: [] });
+      setCqcEvidence([]);
+      return;
     }
-  }, [home]);
+
+    setMaintenanceChecks([]);
+    setMaintenanceCategories([]);
+    setExpenses([]);
+    setSchedules([]);
+    setSuppliers([]);
+    setOnboardingData({ onboarding: {}, staff: [] });
+    setCqcEvidence([]);
+
+    const targetEnabled = (targetId) => scanIntakeTargets.includes(targetId);
+    const tasks = [];
+
+    if (targetEnabled('maintenance') && canRead('compliance')) {
+      tasks.push(getMaintenance(home).then((maintenance) => {
+        setMaintenanceChecks(maintenance.checks || []);
+        setMaintenanceCategories(maintenance.maintenanceCategories || []);
+      }));
+    }
+    if (targetEnabled('finance_ap') && canRead('finance')) {
+      tasks.push(getFinanceExpenses(home, { limit: 200 }).then((expenseData) => setExpenses(expenseData.rows || [])));
+      tasks.push(getPaymentSchedules(home, { limit: 200 }).then((scheduleData) => setSchedules(scheduleData.rows || [])));
+      tasks.push(getSuppliers(home, { activeOnly: true }).then((supplierData) => setSuppliers(supplierData || [])));
+    }
+    if (targetEnabled('onboarding') && canRead('compliance')) {
+      tasks.push(getOnboardingData(home).then((onboarding) => setOnboardingData(onboarding || { onboarding: {}, staff: [] })));
+    }
+    if (targetEnabled('cqc') && canRead('compliance')) {
+      tasks.push(getCqcEvidence(home, { limit: 200 }).then((cqc) => setCqcEvidence(cqc.evidence || cqc.rows || [])));
+    }
+
+    await Promise.allSettled(tasks);
+  }, [canRead, home, scanIntakeEnabled, scanIntakeTargets]);
 
   useEffect(() => { loadList(); loadReferenceData(); }, [loadList, loadReferenceData]);
   useEffect(() => { loadSelected(); }, [loadSelected]);
 
   const availableTargets = useMemo(() => (
     SCAN_INTAKE_TARGETS.filter((entry) =>
-      !entry.contextualOnly ||
-      launchContext?.target === entry.id ||
-      selected?.classification_target === entry.id
+      scanIntakeTargets.includes(entry.id) && (
+        !entry.contextualOnly ||
+        launchContext?.target === entry.id ||
+        selected?.classification_target === entry.id
+      )
     )
-  ), [launchContext, selected]);
+  ), [launchContext, scanIntakeTargets, selected]);
+  useEffect(() => {
+    if (!availableTargets.length) return;
+    if (!availableTargets.some((entry) => entry.id === target)) {
+      setTarget(availableTargets[0].id);
+    }
+  }, [availableTargets, target]);
 
   const selectedFields = selected?.summary_fields?.fields || {};
   const selectedConfidences = selected?.summary_fields?.confidences || {};

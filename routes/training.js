@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
+import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
 import { config } from '../config.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as trainingAttachmentsRepo from '../repositories/trainingAttachments.js';
@@ -365,6 +366,7 @@ router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHom
           await unlink(filePath).catch(() => {});
           return res.status(400).json({ error: 'File content does not match declared type' });
         }
+        await assertFilePassedMalwareScan(filePath);
         const attachment = await trainingAttachmentsRepo.create(req.home.id, staffParsed.data, typeParsed.data, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,

@@ -9,6 +9,7 @@ import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import { config } from '../../config.js';
 import { sendStoredDownload } from '../../lib/sendDownload.js';
+import { assertFilePassedMalwareScan } from '../../lib/malwareScan.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { caseTypeSchema } from './schemas.js';
@@ -102,6 +103,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
           await unlink(filePath).catch(() => {});
           return res.status(400).json({ error: 'File content does not match declared type' });
         }
+        await assertFilePassedMalwareScan(filePath);
         const descParsed = z.string().max(500).optional().safeParse(req.body.description);
         const description = descParsed.success ? (descParsed.data || null) : null;
         const attachment = await hrRepo.createAttachment(req.home.id, caseTypeParsed.data, caseId, {
@@ -114,7 +116,10 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
         });
         await auditService.log('hr_attachment_upload', req.home.slug, req.user.username, { id: attachment.id });
         res.status(201).json(attachment);
-      } catch (e) { next(e); }
+      } catch (e) {
+        await unlink(req.file.path).catch(() => {});
+        next(e);
+      }
     });
   } catch (err) { next(err); }
 });

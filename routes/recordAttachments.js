@@ -9,6 +9,7 @@ import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
+import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
 import { config } from '../config.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
 import * as recordAttachmentsRepo from '../repositories/recordAttachments.js';
@@ -148,6 +149,7 @@ router.post('/:module/:recordId', writeRateLimiter, requireAuth, requireHomeAcce
           await unlink(filePath).catch(() => {});
           return res.status(400).json({ error: 'File content does not match declared type' });
         }
+        await assertFilePassedMalwareScan(filePath);
         const attachment = await recordAttachmentsRepo.create(req.home.id, parsed.moduleId, parsed.recordId, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,

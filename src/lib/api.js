@@ -213,6 +213,102 @@ export async function getPortfolioBoardPack() {
   return apiFetch(`${API_BASE}/portfolio/board-pack`, { headers: authHeaders() });
 }
 
+// Scan intake and document centres
+export async function listScanIntake(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/scan-intake?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function getScanIntakeItem(homeSlug, id) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createScanIntake(homeSlug, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return uploadFormData(`${API_BASE}/scan-intake?home=${h(homeSlug)}`, formData, 'Scan upload failed');
+}
+
+export async function confirmScanIntake(homeSlug, id, payload) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}/confirm?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function rejectScanIntake(homeSlug, id) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}/reject?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
+
+export async function retryScanIntake(homeSlug, id) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}/retry?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
+
+export async function getSuppliers(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return apiFetch(`${API_BASE}/suppliers?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function createSupplier(homeSlug, payload) {
+  return apiFetch(`${API_BASE}/suppliers?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateSupplier(homeSlug, id, payload) {
+  return apiFetch(`${API_BASE}/suppliers/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function mergeSuppliers(homeSlug, sourceId, targetId) {
+  return apiFetch(`${API_BASE}/suppliers/merge?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ sourceId, targetId }),
+  });
+}
+
+export async function deactivateSupplier(homeSlug, id) {
+  return apiFetch(`${API_BASE}/suppliers/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function getCqcDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/docs/cqc?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getFinanceDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/docs/finance?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getMaintenanceDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/docs/maintenance?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getOnboardingDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/docs/onboarding?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
 export async function markNotificationsRead(keys) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/notifications/read?home=${h(home)}`, {
@@ -560,6 +656,12 @@ export async function updateAuditTask(homeSlug, id, data) {
 
 export async function completeAuditTask(homeSlug, id, data = {}) {
   return apiFetch(`${API_BASE}/audit-tasks/${encodeURIComponent(id)}/complete?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function verifyAuditTask(homeSlug, id, data = {}) {
+  return apiFetch(`${API_BASE}/audit-tasks/${encodeURIComponent(id)}/verify?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }

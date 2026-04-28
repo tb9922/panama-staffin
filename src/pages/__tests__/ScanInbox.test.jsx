@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 import ScanInbox from '../ScanInbox.jsx';
 
 vi.mock('../../lib/api.js', async () => {
@@ -85,5 +86,25 @@ describe('ScanInbox contextual launch', () => {
     await waitFor(() => expect(screen.getAllByText('incident-note.pdf').length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getByLabelText('Destination')).toHaveValue('cqc'));
     expect(screen.getByDisplayValue('S4')).toBeInTheDocument();
+  });
+
+  it('does not call scan APIs when scan intake is disabled for the home', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'home_manager',
+      staffId: null,
+      scanIntakeEnabled: false,
+      scanIntakeTargets: [],
+      isScanTargetEnabled: () => false,
+    });
+
+    renderWithProviders(<ScanInbox />, { route: '/scan-inbox', path: '/scan-inbox' });
+
+    expect(screen.getByText('Scan intake is disabled')).toBeInTheDocument();
+    await waitFor(() => expect(api.listScanIntake).not.toHaveBeenCalled());
+    expect(api.getMaintenance).not.toHaveBeenCalled();
+    expect(api.getFinanceExpenses).not.toHaveBeenCalled();
+    expect(api.getCqcEvidence).not.toHaveBeenCalled();
   });
 });

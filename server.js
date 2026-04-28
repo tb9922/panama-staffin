@@ -75,6 +75,12 @@ import internalBankRouter from './routes/internalBank.js';
 import auditTasksRouter from './routes/auditTasks.js';
 import outcomesRouter from './routes/outcomes.js';
 import reflectivePracticeRouter from './routes/reflectivePractice.js';
+import scanIntakeRouter from './routes/scanIntake.js';
+import suppliersRouter from './routes/suppliers.js';
+import cqcDocsRouter from './routes/cqcDocs.js';
+import financeDocsRouter from './routes/financeDocs.js';
+import maintenanceDocsRouter from './routes/maintenanceDocs.js';
+import onboardingDocsRouter from './routes/onboardingDocs.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
@@ -174,6 +180,12 @@ app.use('/api/internal-bank', internalBankRouter);
 app.use('/api/audit-tasks', auditTasksRouter);
 app.use('/api/outcomes', outcomesRouter);
 app.use('/api/reflective-practice', reflectivePracticeRouter);
+app.use('/api/scan-intake', scanIntakeRouter);
+app.use('/api/suppliers', suppliersRouter);
+app.use('/api/docs/cqc', cqcDocsRouter);
+app.use('/api/docs/finance', financeDocsRouter);
+app.use('/api/docs/maintenance', maintenanceDocsRouter);
+app.use('/api/docs/onboarding', onboardingDocsRouter);
 
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;
@@ -324,7 +336,8 @@ const server = shouldListen ? app.listen(config.port, config.host, async () => {
       () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
       24 * 60 * 60 * 1000
     ).unref();
-    // Escalate overdue V1 manager actions daily
+    // Escalate overdue V1 manager actions immediately on worker start, then daily.
+    escalateOverdueActionItems().catch(err => logger.warn({ err: err?.message }, 'action escalation failed'));
     setInterval(
       () => escalateOverdueActionItems().catch(err => logger.warn({ err: err?.message }, 'action escalation failed')),
       24 * 60 * 60 * 1000

@@ -18,6 +18,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
+import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
 import { config } from '../config.js';
@@ -237,6 +238,7 @@ router.post('/:id/files', writeRateLimiter, requireAuth, requireHomeAccess, requ
           await unlink(req.file.path).catch(() => {});
           return res.status(400).json({ error: 'File content does not match declared type' });
         }
+        await assertFilePassedMalwareScan(req.file.path);
         const description = z.string().max(500).optional().safeParse(req.body.description);
         const attachment = await cqcEvidenceFileRepo.create(req.home.id, idParsed.data, {
           original_name: req.file.originalname,
