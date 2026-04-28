@@ -19,6 +19,7 @@
     "test:ci": "vitest run tests/unit src/contexts src/lib src/hooks",
     "test:watch": "vitest",
     "test:integration": "node scripts/run-bash-script.mjs scripts/test-integration.sh",
+    "test:ui-stress": "node scripts/run-bash-script.mjs scripts/test-ui-stress.sh",
     "test:frontend": "vitest run --config vitest.config.frontend.js",
     "test:frontend:watch": "vitest --config vitest.config.frontend.js",
     "test:e2e": "node scripts/run-bash-script.mjs scripts/test-e2e.sh",

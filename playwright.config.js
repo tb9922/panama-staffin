@@ -4,6 +4,7 @@ const apiPort = Number(process.env.E2E_API_PORT || 3137);
 const uiPort = Number(process.env.E2E_UI_PORT || 5173);
 const apiBaseURL = process.env.E2E_API_BASE || `http://localhost:${apiPort}`;
 const uiBaseURL = process.env.E2E_BASE_URL || `http://localhost:${uiPort}`;
+const stressIgnore = process.env.PANAMA_INCLUDE_STRESS === '1' ? [] : ['**/stress/**', '**\\stress\\**'];
 
 process.env.E2E_API_BASE = apiBaseURL;
 process.env.E2E_BASE_URL = uiBaseURL;
@@ -11,6 +12,7 @@ process.env.E2E_BASE_URL = uiBaseURL;
 export default defineConfig({
   globalSetup: './scripts/seed-e2e.js',
   testDir: 'tests/e2e',
+  testIgnore: stressIgnore,
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
   workers: 1, // sequential — tests share DB state
@@ -32,7 +34,7 @@ export default defineConfig({
         storageState: '.playwright/admin-state.json',
       },
       dependencies: ['setup'],
-      testIgnore: ['auth.setup.js', 'viewer.spec.js', 'auth.spec.js'],
+      testIgnore: ['auth.setup.js', 'viewer.spec.js', 'auth.spec.js', ...stressIgnore],
     },
     {
       name: 'viewer',

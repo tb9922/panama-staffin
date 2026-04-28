@@ -543,7 +543,8 @@ export default function DolsTracker() {
       )}
 
       {/* ── DoLS/LPS Modal ────────────────────────────────────────────────── */}
-      <Modal isOpen={showModal && viewMode === 'dols'} onClose={() => setShowModal(false)} title={editingId ? 'Edit DoLS/LPS' : 'New DoLS/LPS Application'} size="lg">
+      {showModal && viewMode === 'dols' && (
+        <Modal isOpen onClose={() => setShowModal(false)} title={editingId ? 'Edit DoLS/LPS' : 'New DoLS/LPS Application'} size="lg">
 
             <div className="space-y-3">
               {/* Resident Info */}
@@ -693,10 +694,12 @@ export default function DolsTracker() {
                 </button>
               )}
             </div>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ── MCA Modal ─────────────────────────────────────────────────────── */}
-      <Modal isOpen={showModal && viewMode === 'mca'} onClose={() => setShowModal(false)} title={editingId ? 'Edit MCA Assessment' : 'New MCA Assessment'} size="lg">
+      {showModal && viewMode === 'mca' && (
+        <Modal isOpen onClose={() => setShowModal(false)} title={editingId ? 'Edit MCA Assessment' : 'New MCA Assessment'} size="lg">
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -772,7 +775,8 @@ export default function DolsTracker() {
                 </button>
               )}
             </div>
-      </Modal>
+        </Modal>
+      )}
       {ConfirmDialog}
     </div>
   );
