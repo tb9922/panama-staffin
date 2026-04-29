@@ -147,6 +147,11 @@ describe('portfolio KPI API', () => {
     expect(homeA.agency.emergency_override_pct).toBe(100);
     expect(homeA.rag.manager_actions).toBe('amber');
     expect(homeA.rag).toHaveProperty('overall');
+
+    const homeB = res.body.homes.find(home => home.home_slug === HOME_B);
+    expect(homeB.staffing.planned_shift_slots_7d).toBe(0);
+    expect(homeB.staffing.gaps_per_100_planned_shifts).toBe(null);
+    expect(homeB.rag.staffing).toBe('unknown');
   });
 
   it('generates an audited portfolio board-pack payload for visible homes', async () => {

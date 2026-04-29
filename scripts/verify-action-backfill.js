@@ -1,5 +1,13 @@
 import { pool } from '../db.js';
 
+async function tableExists(tableName) {
+  const { rows: [row] } = await pool.query(
+    `SELECT to_regclass($1) IS NOT NULL AS exists`,
+    [`public.${tableName}`],
+  );
+  return row?.exists === true;
+}
+
 const EXPECTED_CTE = `
 WITH expected AS (
   SELECT i.home_id, h.slug AS home_slug, 'incident' AS source_type, i.id::text AS source_id,
@@ -213,6 +221,14 @@ SELECT source_type, COUNT(*)::int AS non_array_count
 `;
 
 async function main() {
+  if (!(await tableExists('action_items'))) {
+    console.log('\nAction item backfill verification\n');
+    console.log('FAIL V1 migrations applied - missing table: action_items');
+    console.log('\nRun migrations before verifying action backfill: node scripts/migrate.js\n');
+    process.exitCode = 1;
+    return;
+  }
+
   const [{ rows }, { rows: anomalies }] = await Promise.all([
     pool.query(SUMMARY_SQL),
     pool.query(JSON_ANOMALY_SQL),

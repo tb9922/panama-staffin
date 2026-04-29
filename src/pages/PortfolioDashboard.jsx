@@ -67,13 +67,16 @@ function SummaryCard({ label, value, rag, helper }) {
 }
 
 function buildMetricCards(home) {
+  const plannedSlots = Number(home.staffing?.planned_shift_slots_7d || 0);
   return [
     {
       key: 'staffing',
       label: 'Staffing',
       rag: home.rag?.staffing,
-      value: `${formatNumber(home.staffing?.gaps_7d)} gaps`,
-      detail: `${formatNumber(home.staffing?.gaps_per_100_planned_shifts)} per 100 shifts`,
+      value: plannedSlots > 0 ? `${formatNumber(home.staffing?.gaps_7d)} gaps` : 'No baseline',
+      detail: plannedSlots > 0
+        ? `${formatNumber(home.staffing?.gaps_per_100_planned_shifts)} per 100 shifts`
+        : 'Set minimum staffing rules',
     },
     {
       key: 'training',
@@ -108,14 +111,14 @@ function buildMetricCards(home) {
       label: 'CQC',
       rag: home.rag?.cqc_evidence,
       value: `${formatNumber(home.cqc_evidence?.open_gaps)} gaps`,
-      detail: `${formatNumber(home.cqc_evidence?.domains_with_gaps)} domains`,
+      detail: home.cqc_evidence?.overall ? `${home.cqc_evidence.overall} readiness` : 'Readiness pending',
     },
     {
       key: 'maintenance',
       label: 'Maintenance',
       rag: home.rag?.maintenance,
       value: `${formatNumber(home.maintenance?.overdue)} overdue`,
-      detail: `${formatNumber(home.maintenance?.certs_expiring_30d)} certs expiring`,
+      detail: `${formatNumber(home.maintenance?.due_30d)} due in 30 days`,
     },
     {
       key: 'agency',
@@ -129,7 +132,7 @@ function buildMetricCards(home) {
       label: 'Occupancy',
       rag: home.rag?.occupancy,
       value: formatPct(home.occupancy?.pct),
-      detail: `${formatNumber(home.occupancy?.occupied_beds)} occupied beds`,
+      detail: `${formatNumber(home.occupancy?.available)} available / ${formatNumber(home.occupancy?.hospital_hold)} held`,
     },
     {
       key: 'outcomes',

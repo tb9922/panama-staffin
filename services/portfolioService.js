@@ -207,7 +207,7 @@ export async function getStaffingPressure(home, days = 7) {
     gaps_7d: gapSlots,
     planned_shift_slots_7d: plannedSlots,
     shortfall_periods_7d: shortfallPeriods,
-    gaps_per_100_planned_shifts: plannedSlots > 0 ? Math.round((gapSlots / plannedSlots) * 1000) / 10 : 0,
+    gaps_per_100_planned_shifts: plannedSlots > 0 ? Math.round((gapSlots / plannedSlots) * 1000) / 10 : null,
     fatigue_breaches: null,
   };
 }

@@ -18,6 +18,8 @@ Use this before each weekly merge from `v1-os` to `main`.
 
 - Migrations run cleanly on a disposable database.
 - Portfolio dashboard is checked with at least three homes of seed/live-like data.
+- `npm run verify:v1-operational` is run against the target environment and any unknown KPI coverage is either fixed or explicitly accepted.
+- Production upload malware scanning is configured with `UPLOAD_SCAN_COMMAND` and the command is available on the server.
 - Escalation cron is tested with simulated overdue dates.
 - Action-item backfill has `expected = matched` for every legacy source.
 - Portfolio board pack PDF is generated for a full week and reviewed.
