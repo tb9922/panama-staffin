@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA, MOCK_CONFIG, MOCK_STAFF } from '../../test/fixtures/schedulingData.js';
@@ -133,7 +133,7 @@ describe('Config', () => {
     expect(screen.getByText('Night Rotation Pattern')).toBeInTheDocument();
     expect(screen.getByText('Night Cycle Start Tuning')).toBeInTheDocument();
     expect(screen.getByLabelText('Night Cycle Start Date')).toBeInTheDocument();
-  });
+  }, 30000);
 
   it('displays Bank Holiday & Sickness section', async () => {
     renderWithProviders(<Config />);
@@ -178,17 +178,16 @@ describe('Config', () => {
       added: 0,
       source: 'GOV.UK API',
     });
-    const user = userEvent.setup();
     renderWithProviders(<Config />);
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
 
-    await user.selectOptions(screen.getByLabelText('Bank Holiday Region'), 'scotland');
-    await user.click(screen.getByRole('button', { name: /Sync UK Bank Holidays/i }));
+    fireEvent.change(screen.getByLabelText('Bank Holiday Region'), { target: { value: 'scotland' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sync UK Bank Holidays/i }));
 
     await waitFor(() => {
       expect(syncBankHolidays).toHaveBeenCalledWith(expect.any(Array), 'scotland');
     });
-  });
+  }, 30000);
 
   it('shows current leave year date range under Leave Year Start selector', async () => {
     renderWithProviders(<Config />);

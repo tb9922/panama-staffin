@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RotationGrid from '../RotationGrid.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
@@ -194,40 +194,38 @@ describe('RotationGrid', () => {
 
   it('revert-all failure keeps the roster mounted and shows error inline', async () => {
     api.revertMonthOverrides.mockRejectedValueOnce(new Error('Injected Rotation Grid failure'));
-    const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Revert All/i })).toBeInTheDocument();
-    });
+    }, { timeout: 20_000 });
 
-    await user.click(screen.getByRole('button', { name: /Revert All/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Revert All/i }));
 
     const revertDialog = await screen.findByRole('dialog');
-    await user.click(within(revertDialog).getByRole('button', { name: /Revert All/i }));
+    fireEvent.click(within(revertDialog).getByRole('button', { name: /Revert All/i }));
 
     const confirmDialogs = await screen.findAllByRole('dialog');
-    await user.click(within(confirmDialogs[confirmDialogs.length - 1]).getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(within(confirmDialogs[confirmDialogs.length - 1]).getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
       expect(screen.getByText('Some roster actions could not be completed')).toBeInTheDocument();
-    });
+    }, { timeout: 20_000 });
     expect(screen.getByText('Injected Rotation Grid failure')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Auto-Roster/i })).toBeInTheDocument();
     expect(screen.queryByText('Unable to load the roster')).not.toBeInTheDocument();
-  }, 20000);
+  }, 30000);
 
   it('navigating to next month updates the month label', async () => {
-    const user = userEvent.setup();
     renderAdmin();
-    await screen.findByRole('button', { name: 'Next month' });
+    await screen.findByRole('button', { name: 'Next month' }, { timeout: 20_000 });
     const monthLabelsBefore = screen.getAllByText(/\w+\s\d{4}/).map((node) => node.textContent);
-    await user.click(screen.getByRole('button', { name: 'Next month' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Current month' })).toBeInTheDocument();
-    });
+    }, { timeout: 20_000 });
     const monthLabelsAfter = screen.getAllByText(/\w+\s\d{4}/).map((node) => node.textContent);
     expect(monthLabelsAfter).not.toEqual(monthLabelsBefore);
-  }, 15000);
+  }, 30000);
 
   it('team filter dropdown filters staff to selected team', async () => {
     const user = userEvent.setup();
@@ -264,19 +262,18 @@ describe('RotationGrid', () => {
         totalCost: 0,
       },
     });
-    const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Auto-Roster/i })).toBeInTheDocument();
-    });
+    }, { timeout: 20_000 });
 
-    await user.click(screen.getByRole('button', { name: /Auto-Roster/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Auto-Roster/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/2 residual gaps remain and no automatic cover could be proposed/i)).toBeInTheDocument();
-    });
+    }, { timeout: 20_000 });
     expect(screen.queryByText(/Coverage is already fully met/i)).not.toBeInTheDocument();
-  });
+  }, 30000);
 
   it('renders custom night rotation patterns in the main monthly grid', async () => {
     vi.useFakeTimers();

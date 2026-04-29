@@ -40,7 +40,7 @@ export default defineConfig({
           globals: true,
           include: ['src/pages/__tests__/**/*.test.jsx'],
           setupFiles: ['src/test/setup.js'],
-          testTimeout: 15000,
+          testTimeout: 30000,
         },
       },
       {

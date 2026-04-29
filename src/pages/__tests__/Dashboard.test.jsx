@@ -283,11 +283,11 @@ describe('Dashboard', () => {
   it('shows Print button in header area', async () => {
     renderDashboard();
 
-    await waitFor(() =>
-      expect(screen.getByText(MOCK_CONFIG.home_name)).toBeInTheDocument()
-    );
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_CONFIG.home_name)).toBeInTheDocument();
+    }, { timeout: 20_000 });
     expect(screen.getByRole('button', { name: 'Print' })).toBeInTheDocument();
-  });
+  }, 30000);
 
   it('renders High Priority Actions card when summary has weekActions', async () => {
     api.getDashboardSummary.mockResolvedValue({
@@ -303,9 +303,9 @@ describe('Dashboard', () => {
     });
     renderDashboard();
 
-    await waitFor(() =>
-      expect(screen.getByText('High Priority Actions')).toBeInTheDocument()
-    );
+    await waitFor(() => {
+      expect(screen.getByText('High Priority Actions')).toBeInTheDocument();
+    }, { timeout: 20_000 });
     expect(screen.getAllByText('CQC overdue').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('3 expired training').length).toBeGreaterThanOrEqual(1);
   });

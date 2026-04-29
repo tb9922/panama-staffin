@@ -5,6 +5,7 @@ import multer from 'multer';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
+import { assertBufferPassedMalwareScan } from '../lib/malwareScan.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
@@ -134,6 +135,7 @@ router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     if (!req.file.originalname.toLowerCase().endsWith('.csv')) {
       return res.status(400).json({ error: 'Only CSV files are accepted' });
     }
+    await assertBufferPassedMalwareScan(req.file.buffer, { originalName: req.file.originalname });
 
     const dryRun = req.query.dryRun !== 'false'; // default true
     const { headers, rows } = parseCSV(req.file.buffer);

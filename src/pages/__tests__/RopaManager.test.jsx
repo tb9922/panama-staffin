@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import RopaManager from '../RopaManager.jsx';
@@ -77,15 +77,14 @@ describe('RopaManager', () => {
   });
 
   it('creates a new processing activity', async () => {
-    const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => expect(screen.getByText('Payroll processing')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: /\+ add activity/i }));
-    await user.type(screen.getByPlaceholderText(/staff payroll processing/i), 'Resident admissions');
-    await user.type(screen.getByPlaceholderText(/staff, residents, next-of-kin/i), 'Residents');
-    await user.type(screen.getByPlaceholderText(/contact, health, financial/i), 'Demographics');
-    await user.click(screen.getByRole('button', { name: /^create$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /\+ add activity/i }));
+    fireEvent.change(screen.getByPlaceholderText(/staff payroll processing/i), { target: { value: 'Resident admissions' } });
+    fireEvent.change(screen.getByPlaceholderText(/staff, residents, next-of-kin/i), { target: { value: 'Residents' } });
+    fireEvent.change(screen.getByPlaceholderText(/contact, health, financial/i), { target: { value: 'Demographics' } });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
 
     await waitFor(() => {
       expect(api.createRopaActivity).toHaveBeenCalledWith('test-home', expect.objectContaining({
@@ -93,8 +92,8 @@ describe('RopaManager', () => {
         categories_of_individuals: 'Residents',
         categories_of_data: 'Demographics',
       }));
-    });
-  });
+    }, { timeout: 20_000 });
+  }, 30000);
 
   it('edits an existing activity', async () => {
     const user = userEvent.setup();

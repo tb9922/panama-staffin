@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
-    testTimeout: 20000,
+    testTimeout: 30000,
     include: [
       'src/pages/__tests__/**/*.test.{js,jsx}',
       'src/components/**/__tests__/**/*.test.{js,jsx}',

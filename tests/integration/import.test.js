@@ -12,6 +12,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
+import { config } from '../../config.js';
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -210,6 +211,25 @@ describe('Dry Run — POST /staff?dryRun=true', () => {
       .expect(400);
 
     expect(res.body.error).toMatch(/No file/);
+  });
+
+  it('rejects the import when the upload malware scanner rejects it', async () => {
+    const originalUploadConfig = { ...config.upload };
+    try {
+      config.upload.scanCommand = process.execPath;
+      config.upload.scanArgs = ['-e', 'process.exit(1)'];
+      config.upload.scanTimeoutMs = 5000;
+
+      const res = await request(app)
+        .post(`${BASE}/staff?home=${homeASlug}&dryRun=true`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', Buffer.from(VALID_CSV), 'staff.csv')
+        .expect(400);
+
+      expect(res.body.error).toMatch(/malware scan/i);
+    } finally {
+      Object.assign(config.upload, originalUploadConfig);
+    }
   });
 
   it('defaults to dry run when dryRun param omitted', async () => {

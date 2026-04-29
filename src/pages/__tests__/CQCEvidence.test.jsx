@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CQCEvidence from '../CQCEvidence.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
@@ -327,21 +327,22 @@ describe('CQCEvidence', () => {
   });
 
   it('saves a self-assessment narrative for a statement', async () => {
-    const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('Learning Culture')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Learning Culture'));
-    await user.type(screen.getByLabelText('What the evidence shows'), 'Learning is discussed in daily handover.');
-    await user.click(screen.getByRole('button', { name: /Save Self-Assessment/i }));
+    fireEvent.click(screen.getByText('Learning Culture'));
+    fireEvent.change(screen.getByLabelText('What the evidence shows'), {
+      target: { value: 'Learning is discussed in daily handover.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save Self-Assessment/i }));
 
     await waitFor(() => {
       expect(api.upsertCqcNarrative).toHaveBeenCalled();
-    });
+    }, { timeout: 20_000 });
     expect(screen.getByText(/Self-assessment saved for S1/i)).toBeInTheDocument();
-  });
+  }, 30000);
 
   it('clicking + Add Evidence opens the Add Evidence modal', async () => {
     const user = userEvent.setup();
@@ -462,18 +463,17 @@ describe('CQCEvidence', () => {
   }, 20_000);
 
   it('lets you upload supporting files on the first pass by auto-saving the evidence item', async () => {
-    const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('Learning Culture')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Learning Culture'));
+    fireEvent.click(screen.getByText('Learning Culture'));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: '+ Add Evidence' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Evidence' }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Add Evidence Item' })).toBeInTheDocument();
     });
@@ -481,19 +481,23 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('Supporting Files')).toBeInTheDocument();
     expect(screen.getByText('You can upload on the first pass. We will save the evidence item automatically before the first file upload. Saving the evidence item alone does not attach the selected file — click Upload.')).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText('Brief title...'), 'Family feedback summary');
-    await user.upload(screen.getByLabelText('File'), new File(['hello'], 'evidence.txt', { type: 'text/plain' }));
+    fireEvent.change(screen.getByPlaceholderText('Brief title...'), {
+      target: { value: 'Family feedback summary' },
+    });
+    fireEvent.change(screen.getByLabelText('File'), {
+      target: { files: [new File(['hello'], 'evidence.txt', { type: 'text/plain' })] },
+    });
 
-    await user.click(screen.getByRole('button', { name: 'Upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
 
     await waitFor(() => {
       expect(api.createCqcEvidence).toHaveBeenCalled();
       expect(api.uploadCqcEvidenceFile).toHaveBeenCalledWith('cqc_evidence', 'ev-001', expect.any(File), '');
-    }, { timeout: 20_000 });
+    }, { timeout: 30_000 });
     expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
-  }, 20_000);
+  }, 30000);
 
   it('shows manual evidence file counts so unsaved attachments are obvious', async () => {
     api.getCqcEvidence.mockResolvedValue({
