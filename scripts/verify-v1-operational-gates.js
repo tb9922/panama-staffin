@@ -196,8 +196,9 @@ async function main() {
     portfolioKpiQuality(),
   ]);
 
-  if (homes >= MIN_HOMES) pass('3-home operational dataset', `${homes} active homes`);
-  else fail('3-home operational dataset', `${homes} active homes, expected at least ${MIN_HOMES}`);
+  const homeDatasetLabel = `${MIN_HOMES}-home operational dataset`;
+  if (homes >= MIN_HOMES) pass(homeDatasetLabel, `${homes} active homes`);
+  else fail(homeDatasetLabel, `${homes} active homes, expected at least ${MIN_HOMES}`);
 
   const retentionByTable = new Map(retention.map(row => [row.applies_to_table, row]));
   const missingRetention = REQUIRED_RETENTION_TABLES.filter(table => !retentionByTable.has(table));
