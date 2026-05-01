@@ -147,6 +147,11 @@ export default function AppLayout() {
   }, [activeHome, confirm, hasUnsavedChanges, homes, showToast, switchHome]);
 
   const activeHomeName = homes.find(h => h.id === activeHome)?.name || 'No home selected';
+  const fatalErrorHint = /too many requests|429/i.test(error || '')
+    ? 'Too many requests were sent in a short period. Wait a moment, then refresh and try again.'
+    : import.meta.env.DEV
+      ? 'Make sure the API server is running (`npm run dev`).'
+      : 'Refresh and try again. If the problem continues, contact a platform admin.';
 
   if (loading) return <LoadingState message="Loading staffing data..." className="h-screen bg-[var(--paper-2)]" />;
 
@@ -154,7 +159,7 @@ export default function AppLayout() {
     <div className="flex h-screen items-center justify-center bg-[var(--paper-2)]">
       <div className="mx-4 max-w-md rounded-2xl border border-[var(--alert)] bg-[var(--paper)] p-6 shadow-lg">
         <ErrorState title="Error loading data" message={error} compact />
-        <p className="mt-3 text-xs text-[var(--ink-3)]">Make sure the API server is running (`npm run dev`)</p>
+        <p className="mt-3 text-xs text-[var(--ink-3)]">{fatalErrorHint}</p>
       </div>
     </div>
   );

@@ -108,6 +108,15 @@ describe('AppLayout', () => {
     expect(screen.getByText(/Make sure the API server is running/)).toBeInTheDocument();
   });
 
+  it('shows a rate-limit hint instead of the dev-server hint for 429 failures', () => {
+    mockData({ error: 'Too many requests, please try again later', homes: [] });
+    renderLayout();
+    expect(screen.getByText('Error loading data')).toBeInTheDocument();
+    expect(screen.getByText('Too many requests, please try again later')).toBeInTheDocument();
+    expect(screen.getByText(/Wait a moment, then refresh and try again/)).toBeInTheDocument();
+    expect(screen.queryByText(/npm run dev/)).not.toBeInTheDocument();
+  });
+
   // 3. Non-fatal error (homes already loaded) shows inline banner, not full-screen
   it('shows inline error banner when error occurs after homes are loaded', () => {
     mockData({ error: 'Save failed', homes: ONE_HOME });
