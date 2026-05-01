@@ -45,6 +45,16 @@ function formatPct(value) {
   return `${Math.round(Number(value))}%`;
 }
 
+function formatCqcReadiness(overall) {
+  if (!overall) return 'Readiness pending';
+  if (typeof overall === 'string') {
+    return `${overall.replace(/_/g, ' ')} readiness`;
+  }
+  const label = overall.label || overall.band || overall.badge;
+  if (!label) return 'Readiness pending';
+  return `${String(label).replace(/^Heuristic:\s*/i, '').replace(/_/g, ' ')} readiness`;
+}
+
 function RagPill({ value, className = '' }) {
   return <span className={`${ragBadge(value)} whitespace-nowrap ${className}`.trim()}>{RAG_LABELS[value] || 'Unknown'}</span>;
 }
@@ -111,7 +121,7 @@ function buildMetricCards(home) {
       label: 'CQC',
       rag: home.rag?.cqc_evidence,
       value: `${formatNumber(home.cqc_evidence?.open_gaps)} gaps`,
-      detail: home.cqc_evidence?.overall ? `${home.cqc_evidence.overall} readiness` : 'Readiness pending',
+      detail: formatCqcReadiness(home.cqc_evidence?.overall),
     },
     {
       key: 'maintenance',
