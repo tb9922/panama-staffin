@@ -159,6 +159,18 @@ describe('portfolio KPI API', () => {
     expect(homeB.rag.staffing).toBe('unknown');
     expect(homeB.training.compliance_pct).toBe(null);
     expect(homeB.rag.training).toBe('unknown');
+    expect(homeB.data_quality.unknown_signals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'staffing',
+        reason: expect.stringContaining('No planned staffing baseline'),
+        route: '/settings',
+      }),
+      expect.objectContaining({
+        key: 'training',
+        reason: expect.stringContaining('Mandatory training requirements'),
+        route: '/training',
+      }),
+    ]));
     expect(homeB.audits.overdue).toBe(1);
     expect(homeB.rag.audits).toBe('amber');
   });
@@ -170,10 +182,16 @@ describe('portfolio KPI API', () => {
       .expect(200);
 
     expect(res.body.summary.home_count).toBe(2);
+    expect(res.body.summary.homes_with_unknown_kpis).toBeGreaterThan(0);
+    expect(res.body.summary.unknown_kpi_signals).toBeGreaterThan(0);
+    expect(res.body.summary.cqc_gap_homes).toBeGreaterThan(0);
     expect(res.body.homes.map(home => home.home_slug)).toEqual(expect.arrayContaining([HOME_A, HOME_B]));
     expect(res.body.homes.map(home => home.home_slug)).not.toContain(HOME_C);
     expect(res.body.weakest_homes.length).toBeGreaterThan(0);
     expect(res.body.agency_pressure.find(row => row.home_slug === HOME_A).emergency_override_pct).toBe(100);
+    expect(res.body.data_quality_issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ home_slug: HOME_B, key: 'staffing', route: '/settings' }),
+    ]));
 
     const { rows } = await pool.query(
       `SELECT home_slug, details

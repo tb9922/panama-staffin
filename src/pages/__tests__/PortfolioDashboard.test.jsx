@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
 import PortfolioDashboard from '../PortfolioDashboard.jsx';
@@ -16,6 +17,8 @@ vi.mock('../../lib/api.js', async () => {
 });
 
 import * as api from '../../lib/api.js';
+
+let switchHome;
 
 function portfolioPayload(overrides = {}) {
   return {
@@ -59,12 +62,13 @@ function portfolioPayload(overrides = {}) {
 describe('PortfolioDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    switchHome = vi.fn();
     useData.mockReturnValue({
       canRead: () => true,
       canWrite: () => true,
       homeRole: 'platform_admin',
       staffId: null,
-      switchHome: vi.fn(),
+      switchHome,
     });
     api.getPortfolioKpis.mockResolvedValue(portfolioPayload());
     api.getPortfolioBoardPack.mockResolvedValue({ homes: [] });
@@ -93,5 +97,72 @@ describe('PortfolioDashboard', () => {
     await waitFor(() => expect(screen.getByText('Portfolio API unavailable')).toBeInTheDocument());
     expect(screen.queryByText('No homes available')).not.toBeInTheDocument();
     expect(screen.queryByText('Red homes')).not.toBeInTheDocument();
+  });
+
+  it('makes unknown KPI coverage explicit and routes the fix action through the selected home', async () => {
+    const user = userEvent.setup();
+    api.getPortfolioKpis.mockResolvedValueOnce(portfolioPayload({
+      data_quality: {
+        unknown_count: 2,
+        unknown_signals: [
+          {
+            key: 'training',
+            label: 'Training',
+            reason: 'Mandatory training requirements have not been configured or no required records exist.',
+            fix: 'Configure role-required training and upload current certificates.',
+            route: '/training',
+          },
+          {
+            key: 'maintenance',
+            label: 'Maintenance',
+            reason: 'Maintenance/certificate status is not available.',
+            fix: 'Review maintenance checks and statutory certificate records.',
+            route: '/maintenance',
+          },
+        ],
+      },
+      rag: {
+        overall: 'unknown',
+        staffing: 'green',
+        training: 'unknown',
+        manager_actions: 'green',
+        incidents: 'green',
+        complaints: 'green',
+        cqc_evidence: 'green',
+        maintenance: 'unknown',
+        agency: 'green',
+        occupancy: 'green',
+        outcomes: 'green',
+      },
+    }));
+
+    renderWithProviders(<PortfolioDashboard />, {
+      route: '/portfolio',
+      user: { username: 'admin', role: 'admin', isPlatformAdmin: true },
+    });
+
+    await waitFor(() => expect(screen.getByText('Unknown KPI coverage')).toBeInTheDocument());
+    expect(screen.getByText('2 missing KPI signals need owner review before board sign-off.')).toBeInTheDocument();
+    expect(screen.getByText('2 unknown domains')).toBeInTheDocument();
+    expect(screen.getAllByText('Mandatory training requirements have not been configured or no required records exist.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Configure role-required training and upload current certificates.').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Fix Training coverage for Amberwood: Configure role-required training and upload current certificates.' }));
+
+    expect(switchHome).toHaveBeenCalledWith('amberwood');
+  });
+
+  it('adds direct drilldown affordances for red metric signals', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<PortfolioDashboard />, {
+      route: '/portfolio',
+      user: { username: 'admin', role: 'admin', isPlatformAdmin: true },
+    });
+
+    await waitFor(() => expect(screen.getByText('Portfolio Dashboard')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Open evidence for Amberwood CQC' }));
+
+    expect(switchHome).toHaveBeenCalledWith('amberwood');
   });
 });

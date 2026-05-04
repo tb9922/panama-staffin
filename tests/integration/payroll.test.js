@@ -942,6 +942,23 @@ describe('Agency — /agency', () => {
         emergency_override_reason: 'No safe internal cover available at handover',
       }).expect(201);
 
+      const sourceId = String(created.body.id);
+      let actionRows = await pool.query(
+        `SELECT id, source_type, source_id, source_action_key, priority, status
+           FROM action_items
+          WHERE home_id = $1
+            AND source_type = 'agency_approval_attempt'
+            AND source_id = $2
+            AND source_action_key = 'emergency_override_review'
+            AND deleted_at IS NULL`,
+        [homeAId, sourceId],
+      );
+      expect(actionRows.rowCount).toBe(1);
+      expect(actionRows.rows[0]).toMatchObject({
+        priority: 'high',
+        status: 'open',
+      });
+
       const updated = await adminPutApi(`/agency-attempts/${created.body.id}?home=${homeASlug}`, {
         internal_bank_checked: true,
         _version: created.body.version,
@@ -949,6 +966,18 @@ describe('Agency — /agency', () => {
 
       expect(updated.body.emergency_override).toBe(true);
       expect(updated.body.outcome).toBe('emergency_agency');
+
+      actionRows = await pool.query(
+        `SELECT id
+           FROM action_items
+          WHERE home_id = $1
+            AND source_type = 'agency_approval_attempt'
+            AND source_id = $2
+            AND source_action_key = 'emergency_override_review'
+            AND deleted_at IS NULL`,
+        [homeAId, sourceId],
+      );
+      expect(actionRows.rowCount).toBe(1);
     });
 
     it('GET filters agency attempts by emergency override state', async () => {

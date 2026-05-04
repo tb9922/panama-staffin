@@ -42,6 +42,10 @@ describe('pdfReports', () => {
         red_homes: 1,
         amber_homes: 0,
         green_homes: 0,
+        homes_with_unknown_kpis: 1,
+        unknown_kpi_signals: 1,
+        cqc_gap_homes: 1,
+        cqc_open_gaps: 3,
         overdue_actions: 2,
         escalated_actions_l3_plus: 1,
         emergency_override_pct_red_homes: 1,
@@ -73,6 +77,15 @@ describe('pdfReports', () => {
         maintenance: { overdue: 0, certs_expired: 0 },
         occupancy: { pct: 96, available: 1 },
         outcomes: { rag: 'green', falls_28d: 0, infections_28d: 0 },
+        data_quality: {
+          unknown_count: 1,
+          unknown_signals: [{
+            key: 'staffing',
+            label: 'Staffing',
+            reason: 'No planned staffing baseline is available for the next 7 days.',
+            fix: 'Set minimum staffing rules and rota patterns in Settings.',
+          }],
+        },
       }],
       weakest_homes: [{
         home_name: 'Oak House',
@@ -107,7 +120,19 @@ describe('pdfReports', () => {
         home_name: 'Oak House',
         open_gaps: 3,
         overall: { band: 'mostly_ready', label: 'Heuristic: Mostly Ready', badge: 'amber' },
+        gap_examples: [{
+          statement_name: 'Safe care and treatment',
+          status: 'partial',
+          reasons: ['Missing observation'],
+        }],
         rag: 'amber',
+      }],
+      data_quality_issues: [{
+        home_name: 'Oak House',
+        key: 'staffing',
+        label: 'Staffing',
+        reason: 'No planned staffing baseline is available for the next 7 days.',
+        fix: 'Set minimum staffing rules and rota patterns in Settings.',
       }],
     };
 

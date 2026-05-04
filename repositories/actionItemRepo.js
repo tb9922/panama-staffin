@@ -108,6 +108,20 @@ export async function findById(id, homeId, client = pool) {
   return shapeRow(rows[0]);
 }
 
+export async function findBySource(homeId, sourceType, sourceId, sourceActionKey, client = pool) {
+  const { rows } = await client.query(
+    `SELECT ${COLS}
+       FROM action_items
+      WHERE home_id = $1
+        AND source_type = $2
+        AND source_id = $3
+        AND source_action_key = $4
+        AND deleted_at IS NULL`,
+    [homeId, sourceType, sourceId, sourceActionKey]
+  );
+  return shapeRow(rows[0]);
+}
+
 export async function create(homeId, data, client = pool) {
   const { rows } = await client.query(
     `INSERT INTO action_items (
@@ -141,6 +155,59 @@ export async function create(homeId, data, client = pool) {
     ]
   );
   return shapeRow(rows[0]);
+}
+
+export async function findOrCreateBySource(homeId, data, client = pool) {
+  if (!data.source_type || data.source_id == null || !data.source_action_key) {
+    throw new Error('source_type, source_id and source_action_key are required for source action creation');
+  }
+
+  const sourceId = String(data.source_id);
+  const { rows } = await client.query(
+    `INSERT INTO action_items (
+       home_id, source_type, source_id, source_action_key, title, description,
+       category, priority, owner_user_id, owner_name, owner_role, due_date,
+       status, evidence_required, evidence_notes, escalation_level,
+       created_by, updated_by
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+     )
+     ON CONFLICT (home_id, source_type, source_id, source_action_key)
+       WHERE deleted_at IS NULL AND source_id IS NOT NULL AND source_action_key IS NOT NULL
+       DO NOTHING
+     RETURNING ${COLS}`,
+    [
+      homeId,
+      data.source_type,
+      sourceId,
+      data.source_action_key,
+      data.title,
+      data.description || null,
+      data.category || 'operational',
+      data.priority || 'medium',
+      data.owner_user_id || null,
+      data.owner_name || null,
+      data.owner_role || null,
+      data.due_date,
+      data.status || 'open',
+      data.evidence_required ?? false,
+      data.evidence_notes || null,
+      data.escalation_level ?? 0,
+      data.created_by || null,
+      data.updated_by || data.created_by || null,
+    ]
+  );
+
+  if (rows[0]) return { item: shapeRow(rows[0]), created: true };
+
+  const existing = await findBySource(
+    homeId,
+    data.source_type,
+    sourceId,
+    data.source_action_key,
+    client
+  );
+  return { item: existing, created: false };
 }
 
 const ALLOWED_UPDATE_COLUMNS = new Set([

@@ -91,9 +91,11 @@ async function upsertHome(client, slug, name, config) {
 async function resetPortfolioSeedData(client, primaryHomeId, portfolioHomeIds) {
   const allHomeIds = [primaryHomeId, ...portfolioHomeIds];
   await client.query(`DELETE FROM action_items WHERE home_id = $1 AND source_id = 'e2e-v1'`, [primaryHomeId]);
+  await client.query(`DELETE FROM action_items WHERE home_id = $1 AND source_id LIKE 'e2e-destructive-%'`, [primaryHomeId]);
   await client.query(`DELETE FROM outcome_metrics WHERE home_id = $1 AND metric_key LIKE 'e2e_%'`, [primaryHomeId]);
   await client.query(`DELETE FROM audit_tasks WHERE home_id = $1 AND template_key LIKE 'e2e_%'`, [primaryHomeId]);
   await client.query(`DELETE FROM reflective_practice WHERE home_id = $1 AND topic LIKE 'E2E V1 %'`, [primaryHomeId]);
+  await client.query(`DELETE FROM finance_expenses WHERE home_id = $1 AND invoice_ref LIKE 'E2E-DESTRUCTIVE-%'`, [primaryHomeId]);
 
   await client.query(`DELETE FROM action_items WHERE home_id = ANY($1::int[])`, [portfolioHomeIds]);
   await client.query(`DELETE FROM outcome_metrics WHERE home_id = ANY($1::int[])`, [portfolioHomeIds]);
@@ -250,12 +252,25 @@ async function seed() {
         isPlatformAdmin: false,
         homeRole: 'viewer',
       },
+      {
+        username: 'e2e_sandbox',
+        password: 'sandbox12345',
+        role: 'viewer',
+        displayName: 'E2E Sandbox User',
+        isPlatformAdmin: false,
+        homeRole: 'home_manager',
+      },
     ];
 
     const userRows = await Promise.all(testUsers.map(async (user) => ({
       ...user,
       passwordHash: await bcrypt.hash(user.password, 12),
     })));
+
+    await client.query(
+      `DELETE FROM token_denylist WHERE LOWER(username) = LOWER($1)`,
+      ['e2e_sandbox'],
+    );
 
     await client.query(
       `INSERT INTO users (username, password_hash, role, display_name, is_platform_admin)

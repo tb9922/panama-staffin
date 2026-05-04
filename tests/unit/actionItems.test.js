@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACTION_ITEM_SOURCE_TYPES,
   calculateEscalationLevel,
   daysPastDue,
   normalizeLegacyStatus,
@@ -8,6 +9,10 @@ import {
 const TODAY = new Date('2026-04-26T12:00:00Z');
 
 describe('action item helpers', () => {
+  it('allows agency approval attempts as accountable action sources', () => {
+    expect(ACTION_ITEM_SOURCE_TYPES).toContain('agency_approval_attempt');
+  });
+
   it('normalizes legacy action statuses into the V1 workflow', () => {
     expect(normalizeLegacyStatus('pending')).toBe('open');
     expect(normalizeLegacyStatus('open')).toBe('open');

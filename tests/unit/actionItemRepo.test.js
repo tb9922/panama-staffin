@@ -1,0 +1,86 @@
+import { describe, expect, it, vi } from 'vitest';
+import { findOrCreateBySource } from '../../repositories/actionItemRepo.js';
+
+function actionRow(overrides = {}) {
+  return {
+    id: 123,
+    home_id: 7,
+    source_type: 'agency_approval_attempt',
+    source_id: '42',
+    source_action_key: 'emergency_override_review',
+    title: 'Review emergency agency override',
+    description: null,
+    category: 'staffing',
+    priority: 'high',
+    owner_user_id: null,
+    owner_name: null,
+    owner_role: 'Home manager',
+    due_date: '2026-05-03',
+    status: 'open',
+    evidence_required: true,
+    evidence_notes: null,
+    escalation_level: 1,
+    escalated_at: null,
+    completed_at: null,
+    completed_by: null,
+    verified_at: null,
+    verified_by: null,
+    created_by: 99,
+    updated_by: 99,
+    version: 1,
+    created_at: '2026-05-04T10:00:00.000Z',
+    updated_at: '2026-05-04T10:00:00.000Z',
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+function sourceAction() {
+  return {
+    source_type: 'agency_approval_attempt',
+    source_id: 42,
+    source_action_key: 'emergency_override_review',
+    title: 'Review emergency agency override',
+    category: 'staffing',
+    priority: 'high',
+    owner_role: 'Home manager',
+    due_date: '2026-05-03',
+    evidence_required: true,
+    escalation_level: 1,
+    created_by: 99,
+  };
+}
+
+describe('action item repo source creation', () => {
+  it('inserts source actions with an idempotent conflict target', async () => {
+    const client = {
+      query: vi.fn(async () => ({ rows: [actionRow()] })),
+    };
+
+    const result = await findOrCreateBySource(7, sourceAction(), client);
+
+    expect(result.created).toBe(true);
+    expect(result.item.source_id).toBe('42');
+    expect(client.query).toHaveBeenCalledTimes(1);
+    expect(client.query.mock.calls[0][0]).toContain('ON CONFLICT (home_id, source_type, source_id, source_action_key)');
+    expect(client.query.mock.calls[0][1]).toContain('42');
+  });
+
+  it('returns the existing source action when the insert conflicts', async () => {
+    const existing = actionRow({ id: 456 });
+    const client = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('INSERT INTO action_items')) return { rows: [] };
+        return { rows: [existing] };
+      }),
+    };
+
+    const result = await findOrCreateBySource(7, sourceAction(), client);
+
+    expect(result).toMatchObject({
+      created: false,
+      item: { id: 456, source_action_key: 'emergency_override_review' },
+    });
+    expect(client.query).toHaveBeenCalledTimes(2);
+  });
+});

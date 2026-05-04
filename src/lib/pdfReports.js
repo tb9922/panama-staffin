@@ -1417,6 +1417,21 @@ function ragDrivers(home) {
     .join(', ') || 'No amber/red exceptions';
 }
 
+function cqcGapDriver(row) {
+  const gap = row?.gap_examples?.[0];
+  if (!gap) return row?.open_gaps == null ? 'Readiness could not be calculated' : 'No statement-level gap supplied';
+  const reasons = Array.isArray(gap.reasons) && gap.reasons.length > 0
+    ? gap.reasons.join('; ')
+    : gap.summary;
+  return [gap.statement_name || gap.statement_id, gap.status, reasons]
+    .filter(Boolean)
+    .join(' - ');
+}
+
+function dataQualityDriver(row) {
+  return [row.reason, row.fix].filter(Boolean).join(' Fix: ') || '-';
+}
+
 function addPortfolioFooter(doc) {
   const pageCount = doc.internal.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
@@ -1456,6 +1471,10 @@ export function generatePortfolioBoardPackPDF(pack) {
       ['Red homes', fmtPortfolioNumber(summary.red_homes || 0)],
       ['Amber homes', fmtPortfolioNumber(summary.amber_homes || 0)],
       ['Green homes', fmtPortfolioNumber(summary.green_homes || 0)],
+      ['Homes with unknown KPI coverage', fmtPortfolioNumber(summary.homes_with_unknown_kpis || 0)],
+      ['Unknown KPI signals requiring setup/review', fmtPortfolioNumber(summary.unknown_kpi_signals || 0)],
+      ['CQC evidence gap homes', fmtPortfolioNumber(summary.cqc_gap_homes || 0)],
+      ['Open CQC evidence gaps', fmtPortfolioNumber(summary.cqc_open_gaps || 0)],
       ['Overdue manager actions', fmtPortfolioNumber(summary.overdue_actions || 0)],
       ['L3/L4 escalated actions', fmtPortfolioNumber(summary.escalated_actions_l3_plus || 0)],
       ['Homes above 20% emergency agency override', fmtPortfolioNumber(summary.emergency_override_pct_red_homes || 0)],
@@ -1638,11 +1657,12 @@ export function generatePortfolioBoardPackPDF(pack) {
     tableWidth: 'wrap',
     margin: PORTFOLIO_TABLE_MARGIN,
     startY: y,
-    head: [['Home', 'Open evidence gaps', 'Readiness', 'RAG']],
+    head: [['Home', 'Open evidence gaps', 'Readiness', 'Top gap or sign-off risk', 'RAG']],
     body: (pack?.cqc_evidence_gaps || []).slice(0, 10).map(row => [
       row.home_name,
       fmtPortfolioNumber(row.open_gaps),
       fmtPortfolioReadiness(row.overall),
+      cqcGapDriver(row),
       row.rag || 'unknown',
     ]),
     styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
@@ -1650,11 +1670,35 @@ export function generatePortfolioBoardPackPDF(pack) {
     columnStyles: {
       0: { cellWidth: 60, fontStyle: 'bold' },
       1: { cellWidth: 38 },
-      2: { cellWidth: 60 },
-      3: { cellWidth: 22 },
+      2: { cellWidth: 48 },
+      3: { cellWidth: 82 },
+      4: { cellWidth: 22 },
     },
     didParseCell: paintPortfolioRagCell,
   });
+
+  const dataQualityIssues = pack?.data_quality_issues || [];
+  if (dataQualityIssues.length > 0) {
+    y = doc.lastAutoTable.finalY + 8;
+    autoTable(doc, {
+      tableWidth: 'wrap',
+      margin: PORTFOLIO_TABLE_MARGIN,
+      startY: y,
+      head: [['Home', 'Unknown KPI', 'Why board sign-off is limited']],
+      body: dataQualityIssues.slice(0, 10).map(row => [
+        row.home_name,
+        row.label || row.key,
+        dataQualityDriver(row),
+      ]),
+      styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: { fillColor: [31, 41, 55] },
+      columnStyles: {
+        0: { cellWidth: 50, fontStyle: 'bold' },
+        1: { cellWidth: 40 },
+        2: { cellWidth: 115 },
+      },
+    });
+  }
 
   for (const home of homes) {
     doc.addPage();
@@ -1672,6 +1716,7 @@ export function generatePortfolioBoardPackPDF(pack) {
         ['Incidents', home.rag?.incidents || 'unknown', `${fmtPortfolioNumber(home.incidents?.open)} open / ${fmtPortfolioNumber(home.incidents?.cqc_notifiable_overdue)} CQC overdue / ${fmtPortfolioNumber(home.incidents?.riddor_overdue)} RIDDOR overdue`],
         ['Complaints', home.rag?.complaints || 'unknown', `${fmtPortfolioNumber(home.complaints?.open)} open / ${fmtPortfolioNumber(home.complaints?.ack_overdue)} ack overdue / ${fmtPortfolioNumber(home.complaints?.response_overdue)} response overdue`],
         ['CQC evidence', home.rag?.cqc_evidence || 'unknown', `${fmtPortfolioNumber(home.cqc_evidence?.open_gaps)} open gaps / ${fmtPortfolioReadiness(home.cqc_evidence?.overall)}`],
+        ['Data quality', home.data_quality?.unknown_count ? 'unknown' : 'green', home.data_quality?.unknown_count ? `${fmtPortfolioNumber(home.data_quality.unknown_count)} unknown KPI signals: ${(home.data_quality.unknown_signals || []).map(signal => signal.label || signal.key).join(', ')}` : 'All portfolio KPIs calculated'],
         ['Maintenance', home.rag?.maintenance || 'unknown', `${fmtPortfolioNumber(home.maintenance?.overdue)} overdue / ${fmtPortfolioNumber(home.maintenance?.certs_expired)} expired certs`],
         ['Occupancy', home.rag?.occupancy || 'unknown', `${fmtPortfolioPct(home.occupancy?.pct)} occupied / ${fmtPortfolioNumber(home.occupancy?.available)} available`],
         ['Outcomes', home.rag?.outcomes || 'unknown', home.outcomes?.rag === 'unknown' ? 'No outcome RAG yet' : ragLabel(home.outcomes?.rag)],

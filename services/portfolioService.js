@@ -150,6 +150,100 @@ function buildOutcomeKpis(outcomes, home) {
   };
 }
 
+const UNKNOWN_SIGNAL_FIXES = Object.freeze({
+  staffing: {
+    label: 'Staffing',
+    reason: 'No planned staffing baseline is available for the next 7 days.',
+    fix: 'Set minimum staffing rules and rota patterns in Settings.',
+    route: '/settings',
+  },
+  agency: {
+    label: 'Agency',
+    reason: 'Agency pressure cannot be calculated from current agency data.',
+    fix: 'Check agency shift logging and agency-attempt links.',
+    route: '/agency',
+  },
+  training: {
+    label: 'Training',
+    reason: 'Mandatory training requirements have not been configured or no required records exist.',
+    fix: 'Configure role-required training and upload current certificates.',
+    route: '/training',
+  },
+  incidents: {
+    label: 'Incidents',
+    reason: 'Incident trend rates cannot be calculated from the current resident/period baseline.',
+    fix: 'Check resident capacity and incident outcome data.',
+    route: '/incidents',
+  },
+  complaints: {
+    label: 'Complaints',
+    reason: 'Complaint trend rates cannot be calculated from the current resident/period baseline.',
+    fix: 'Check resident capacity and complaint outcome data.',
+    route: '/complaints',
+  },
+  audits: {
+    label: 'Audits',
+    reason: 'Audit calendar status is not available.',
+    fix: 'Generate recurring audit tasks for this home.',
+    route: '/audit-calendar',
+  },
+  supervisions: {
+    label: 'Supervisions',
+    reason: 'Supervision status is not available.',
+    fix: 'Review the supervision matrix.',
+    route: '/training',
+  },
+  cqc_evidence: {
+    label: 'CQC Evidence',
+    reason: 'CQC evidence readiness could not be calculated.',
+    fix: 'Review CQC evidence domains and quality statements.',
+    route: '/cqc',
+  },
+  maintenance: {
+    label: 'Maintenance',
+    reason: 'Maintenance/certificate status is not available.',
+    fix: 'Review maintenance checks and statutory certificate records.',
+    route: '/maintenance',
+  },
+  manager_actions: {
+    label: 'Manager Actions',
+    reason: 'Manager action status is not available.',
+    fix: 'Review the action tracker.',
+    route: '/actions',
+  },
+  occupancy: {
+    label: 'Occupancy',
+    reason: 'Occupancy cannot be calculated because bed capacity or occupancy records are missing.',
+    fix: 'Review beds, residents, and registered capacity.',
+    route: '/beds',
+  },
+  outcomes: {
+    label: 'Outcomes',
+    reason: 'Outcome metrics are missing or cannot be derived yet.',
+    fix: 'Review outcome metrics and incident categories.',
+    route: '/outcomes',
+  },
+});
+
+function buildDataQuality(rag) {
+  const unknownSignals = Object.entries(rag || {})
+    .filter(([key, value]) => key !== 'overall' && value === 'unknown')
+    .map(([key]) => ({
+      key,
+      ...(UNKNOWN_SIGNAL_FIXES[key] || {
+        label: key.replace(/_/g, ' '),
+        reason: 'This KPI could not be calculated from current data.',
+        fix: 'Review source records for this signal.',
+        route: '/',
+      }),
+    }));
+
+  return {
+    unknown_count: unknownSignals.length,
+    unknown_signals: unknownSignals,
+  };
+}
+
 function calculatePeriodCoverage(staffForDay, period, config) {
   const required = config?.minimum_staffing?.[period] || { heads: 0, skill_points: 0 };
   const staff = staffForDay.filter((member) => {
@@ -260,6 +354,15 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
     cqc_evidence: {
       open_gaps: Array.isArray(readiness?.gaps) ? readiness.gaps.length : null,
       overall: readiness?.overall || null,
+      gap_examples: Array.isArray(readiness?.gaps)
+        ? readiness.gaps.slice(0, 3).map(gap => ({
+          statement_id: gap.statementId,
+          statement_name: gap.statementName,
+          status: gap.status,
+          summary: gap.summary || gap.statusReason || null,
+          reasons: Array.isArray(gap.reasons) ? gap.reasons.slice(0, 3) : [],
+        }))
+        : [],
     },
     maintenance: {
       overdue: m.maintenance?.overdue || 0,
@@ -274,9 +377,11 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
     },
     outcomes: outcomeKpis,
   };
+  const rag = buildPortfolioRag(kpis);
   return {
     ...kpis,
-    rag: buildPortfolioRag(kpis),
+    rag,
+    data_quality: buildDataQuality(rag),
   };
 }
 
@@ -293,6 +398,10 @@ function buildPortfolioSummary(homes) {
     amber_homes: 0,
     green_homes: 0,
     unknown_homes: 0,
+    homes_with_unknown_kpis: 0,
+    unknown_kpi_signals: 0,
+    cqc_open_gaps: 0,
+    cqc_gap_homes: 0,
     escalated_actions_l3_plus: 0,
     overdue_actions: 0,
     emergency_override_pct_red_homes: 0,
@@ -304,6 +413,16 @@ function buildPortfolioSummary(homes) {
     else if (overall === 'amber') summary.amber_homes += 1;
     else if (overall === 'green') summary.green_homes += 1;
     else summary.unknown_homes += 1;
+
+    const unknownCount = Number(home.data_quality?.unknown_count || 0);
+    if (unknownCount > 0) summary.homes_with_unknown_kpis += 1;
+    summary.unknown_kpi_signals += unknownCount;
+
+    const cqcOpenGaps = home.cqc_evidence?.open_gaps;
+    if (cqcOpenGaps == null || Number(cqcOpenGaps || 0) > 0 || home.rag?.cqc_evidence !== 'green') {
+      summary.cqc_gap_homes += 1;
+    }
+    if (cqcOpenGaps != null) summary.cqc_open_gaps += Number(cqcOpenGaps || 0);
 
     summary.escalated_actions_l3_plus += Number(home.manager_actions?.escalated_l3_plus || 0);
     summary.overdue_actions += Number(home.manager_actions?.overdue || 0);
@@ -378,12 +497,31 @@ function cqcEvidenceGaps(homes) {
       home_name: home.home_name,
       open_gaps: home.cqc_evidence?.open_gaps,
       overall: home.cqc_evidence?.overall || null,
+      gap_examples: home.cqc_evidence?.gap_examples || [],
       rag: home.rag?.cqc_evidence || 'unknown',
     }))
     .filter(row => row.open_gaps == null || row.open_gaps > 0 || row.rag !== 'green')
     .sort((a, b) => (
       Number(b.open_gaps ?? -1) - Number(a.open_gaps ?? -1)
       || String(a.home_name).localeCompare(String(b.home_name))
+    ));
+}
+
+function dataQualityIssues(homes) {
+  return homes
+    .flatMap(home => (home.data_quality?.unknown_signals || []).map(signal => ({
+      home_id: home.home_id,
+      home_slug: home.home_slug,
+      home_name: home.home_name,
+      key: signal.key,
+      label: signal.label,
+      reason: signal.reason,
+      fix: signal.fix,
+      route: signal.route,
+    })))
+    .sort((a, b) => (
+      String(a.home_name).localeCompare(String(b.home_name))
+      || String(a.label).localeCompare(String(b.label))
     ));
 }
 
@@ -398,6 +536,7 @@ export function buildPortfolioBoardPack(kpis, escalatedActions = []) {
     agency_pressure: agencyPressure(homes),
     training_gaps: trainingGaps(homes),
     cqc_evidence_gaps: cqcEvidenceGaps(homes),
+    data_quality_issues: dataQualityIssues(homes),
   };
 }
 

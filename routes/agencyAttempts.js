@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { pool } from '../db.js';
 import { zodError } from '../errors.js';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
@@ -9,10 +10,14 @@ import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js'
 import { diffFields } from '../lib/audit.js';
 import * as agencyAttemptRepo from '../repositories/agencyAttemptRepo.js';
 import * as auditService from '../services/auditService.js';
+import { ensureAgencyOverrideAction } from '../services/actionItemCreationService.js';
 
 const router = Router();
 const idSchema = z.coerce.number().int().positive();
 const attemptOutcomes = ['pending', 'internal_cover_found', 'no_viable_internal', 'emergency_agency', 'agency_used', 'agency_not_approved'];
+const UPDATE_NOT_FOUND = Symbol('agency-attempt-not-found');
+const UPDATE_VALIDATION_FAILED = Symbol('agency-attempt-validation-failed');
+const UPDATE_CONFLICT = Symbol('agency-attempt-version-conflict');
 
 const attemptBodySchema = z.object({
   gap_date: requiredDateInput,
@@ -43,6 +48,21 @@ const listSchema = paginationSchema.extend({
 
 function actorId(req) {
   return req.authDbUser?.id || null;
+}
+
+async function withTransaction(work) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 function validateAttemptPayload(data, res) {
@@ -89,15 +109,28 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     if (!validateAttemptPayload(parsed.data, res)) return;
 
-    const attempt = await agencyAttemptRepo.create(req.home.id, {
-      ...parsed.data,
-      checked_by: actorId(req),
+    let actionResult = { item: null, created: false };
+    const attempt = await withTransaction(async (client) => {
+      const created = await agencyAttemptRepo.create(req.home.id, {
+        ...parsed.data,
+        checked_by: actorId(req),
+      }, client);
+      actionResult = await ensureAgencyOverrideAction(req.home.id, created, { actorId: actorId(req) }, client);
+      return created;
     });
     await auditService.log('agency_attempt_create', req.home.slug, req.user.username, {
       id: attempt.id,
       emergency_override: attempt.emergency_override,
       viable_internal_candidate_count: attempt.viable_internal_candidate_count,
     });
+    if (actionResult.created) {
+      await auditService.log('action_item_auto_create', req.home.slug, req.user.username, {
+        id: actionResult.item.id,
+        sourceType: actionResult.item.source_type,
+        sourceId: actionResult.item.source_id,
+        sourceActionKey: actionResult.item.source_action_key,
+      });
+    }
     res.status(201).json(attempt);
   } catch (err) { next(err); }
 });
@@ -107,19 +140,38 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid attempt ID' });
     const parsed = attemptUpdateSchema.safeParse(req.body);
-    const existing = await agencyAttemptRepo.findById(idParsed.data, req.home.id);
-    if (!existing) return res.status(404).json({ error: 'Agency approval attempt not found' });
     if (!parsed.success) return zodError(res, parsed);
     const provided = keepProvidedFields(parsed.data, req.body);
-    if (!validateAttemptPayload({ ...existing, ...provided }, res)) return;
-    const { version } = splitVersion(provided);
-    const updates = definedWithoutVersion(provided);
-    const attempt = await agencyAttemptRepo.update(idParsed.data, req.home.id, updates, version);
-    if (attempt === null) {
+    let existing = null;
+    let actionResult = { item: null, created: false };
+    const attempt = await withTransaction(async (client) => {
+      existing = await agencyAttemptRepo.findById(idParsed.data, req.home.id, client);
+      if (!existing) return UPDATE_NOT_FOUND;
+      if (!validateAttemptPayload({ ...existing, ...provided }, res)) return UPDATE_VALIDATION_FAILED;
+      const { version } = splitVersion(provided);
+      const updates = definedWithoutVersion(provided);
+      const updated = await agencyAttemptRepo.update(idParsed.data, req.home.id, updates, version, client);
+      if (updated === null) return UPDATE_CONFLICT;
+      actionResult = await ensureAgencyOverrideAction(req.home.id, updated, { actorId: actorId(req) }, client);
+      return updated;
+    });
+    if (attempt === UPDATE_VALIDATION_FAILED) return;
+    if (attempt === UPDATE_NOT_FOUND) {
+      return res.status(404).json({ error: 'Agency approval attempt not found' });
+    }
+    if (attempt === UPDATE_CONFLICT) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
     const changes = diffFields(existing, attempt, { extraSensitive: ['reason', 'emergency_override_reason', 'notes'] });
     await auditService.log('agency_attempt_update', req.home.slug, req.user.username, { id: attempt.id, changes });
+    if (actionResult.created) {
+      await auditService.log('action_item_auto_create', req.home.slug, req.user.username, {
+        id: actionResult.item.id,
+        sourceType: actionResult.item.source_type,
+        sourceId: actionResult.item.source_id,
+        sourceActionKey: actionResult.item.source_action_key,
+      });
+    }
     res.json(attempt);
   } catch (err) { next(err); }
 });
