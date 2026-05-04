@@ -6,10 +6,9 @@ import { unlink } from 'fs/promises';
 import multer from 'multer';
 import path from 'path';
 import { z } from 'zod';
-import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
-import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
+import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../lib/uploadSecurity.js';
 import { config } from '../config.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as trainingAttachmentsRepo from '../repositories/trainingAttachments.js';
@@ -139,17 +138,9 @@ const attachmentStorage = multer.diskStorage({
   },
 });
 
-function attachmentFileFilter(req, file, cb) {
-  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`));
-  }
-}
-
 const attachmentUpload = multer({
   storage: attachmentStorage,
-  fileFilter: attachmentFileFilter,
+  fileFilter: genericAttachmentFileFilter,
   limits: { fileSize: config.upload.maxFileSize },
 });
 
@@ -334,6 +325,8 @@ router.get('/:staffId/:typeId/files', readRateLimiter, requireAuth, requireHomeA
     const staffParsed = staffIdSchema.safeParse(req.params.staffId);
     const typeParsed = typeIdSchema.safeParse(req.params.typeId);
     if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
+    const staff = await staffRepo.findById(req.home.id, staffParsed.data);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const files = await trainingAttachmentsRepo.findAttachments(req.home.id, staffParsed.data, typeParsed.data);
     res.json(files);
   } catch (err) { next(err); }
@@ -361,12 +354,7 @@ router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHom
           await unlink(filePath).catch(() => {});
           return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
         }
-        const detected = await fileTypeFromFile(filePath);
-        if (detected && detected.mime !== req.file.mimetype) {
-          await unlink(filePath).catch(() => {});
-          return res.status(400).json({ error: 'File content does not match declared type' });
-        }
-        await assertFilePassedMalwareScan(filePath);
+        await assertGenericAttachmentUploadSafe(req.file);
         const attachment = await trainingAttachmentsRepo.create(req.home.id, staffParsed.data, typeParsed.data, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,

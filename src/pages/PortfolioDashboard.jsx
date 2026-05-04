@@ -93,7 +93,9 @@ function buildMetricCards(home) {
       label: 'Training',
       rag: home.rag?.training,
       value: formatPct(home.training?.compliance_pct),
-      detail: `${formatNumber(home.training?.expired)} expired`,
+      detail: home.training?.baseline_configured === false
+        ? 'Configure mandatory training'
+        : `${formatNumber(home.training?.expired)} expired`,
     },
     {
       key: 'manager_actions',
@@ -157,7 +159,7 @@ function buildMetricCards(home) {
 function MetricTile({ metric }) {
   const accent = ragAccent(metric.rag);
   return (
-    <div className="min-h-24 border-t border-[var(--line)] py-3 sm:border-l sm:border-t-0 sm:px-3">
+    <div className="min-h-24 border-t border-[var(--line)] py-3 sm:border-l sm:px-3 sm:[&:nth-child(-n+2)]:border-t-0 sm:[&:nth-child(2n+1)]:border-l-0 lg:[&:nth-child(-n+5)]:border-t-0 lg:[&:nth-child(5n+1)]:border-l-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase text-[var(--ink-3)]">{metric.label}</p>
         <RagPill value={metric.rag} />
@@ -202,7 +204,7 @@ function HomePanel({ home, onOpen }) {
               <ExceptionStrip metrics={metrics} />
             </div>
           </div>
-          <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => onOpen(home)}>
+          <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => onOpen(home)} aria-label={`Drill into ${home.home_name}`}>
             Drilldown
           </button>
         </div>
@@ -290,19 +292,29 @@ export default function PortfolioDashboard() {
         </div>
       </div>
 
-      {error && <ErrorState message={error} onRetry={load} className="mb-4" />}
-      {packError && <ErrorState message={packError} onRetry={generateBoardPack} className="mb-4" />}
+      {error && !loading && <ErrorState message={error} onRetry={load} className="mb-4" />}
+      {!error && packError && (
+        <ErrorState
+          title="Unable to generate board pack"
+          message={packError}
+          onRetry={generateBoardPack}
+          retryLabel="Try again"
+          className="mb-4"
+        />
+      )}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Red homes" value={summary.red} rag={summary.red > 0 ? 'red' : 'green'} helper="Immediate exception load" />
-        <SummaryCard label="Amber homes" value={summary.amber} rag={summary.amber > 0 ? 'amber' : 'green'} helper="Watchlist pressure" />
-        <SummaryCard label="Green homes" value={summary.green} rag="green" helper="No red/amber overall" />
-        <SummaryCard label="Unknown" value={summary.unknown} rag={summary.unknown > 0 ? 'unknown' : 'green'} helper="Missing KPI coverage" />
-      </div>
+      {!error && (
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard label="Red homes" value={summary.red} rag={summary.red > 0 ? 'red' : 'green'} helper="Immediate exception load" />
+          <SummaryCard label="Amber homes" value={summary.amber} rag={summary.amber > 0 ? 'amber' : 'green'} helper="Watchlist pressure" />
+          <SummaryCard label="Green homes" value={summary.green} rag="green" helper="No red/amber overall" />
+          <SummaryCard label="Unknown" value={summary.unknown} rag={summary.unknown > 0 ? 'unknown' : 'green'} helper="Missing KPI coverage" />
+        </div>
+      )}
 
       {loading ? (
         <div className={CARD.flush}><LoadingState message="Loading portfolio KPIs..." /></div>
-      ) : homes.length === 0 ? (
+      ) : error ? null : homes.length === 0 ? (
         <div className={CARD.flush}><EmptyState title="No homes available" description="No report-visible homes are assigned to this user." /></div>
       ) : (
         <div className="space-y-4">

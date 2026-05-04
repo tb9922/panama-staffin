@@ -14,6 +14,13 @@ const COLS = `
   created_at
 `;
 
+const QUALIFIED_COLS = COLS
+  .split(',')
+  .map(col => col.trim())
+  .filter(Boolean)
+  .map(col => `f.${col}`)
+  .join(', ');
+
 function shape(row) {
   return row ? {
     id: row.id,
@@ -33,13 +40,17 @@ function shape(row) {
 export async function findAttachments(homeId, staffId, trainingType, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS}
-       FROM training_file_attachments
-      WHERE home_id = $1
-        AND staff_id = $2
-        AND training_type = $3
-        AND deleted_at IS NULL
-      ORDER BY created_at DESC`,
+    `SELECT ${QUALIFIED_COLS}
+       FROM training_file_attachments f
+       INNER JOIN staff s
+               ON s.home_id = f.home_id
+              AND s.id = f.staff_id
+              AND s.deleted_at IS NULL
+      WHERE f.home_id = $1
+        AND f.staff_id = $2
+        AND f.training_type = $3
+        AND f.deleted_at IS NULL
+      ORDER BY f.created_at DESC`,
     [homeId, staffId, trainingType]
   );
   return rows.map(shape);
@@ -48,11 +59,26 @@ export async function findAttachments(homeId, staffId, trainingType, client) {
 export async function findById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS}
-       FROM training_file_attachments
-      WHERE id = $1
-        AND home_id = $2
-        AND deleted_at IS NULL`,
+    `SELECT
+       f.id,
+       f.home_id,
+       f.staff_id,
+       f.training_type,
+       f.original_name,
+       f.stored_name,
+       f.mime_type,
+       f.size_bytes,
+       f.description,
+       f.uploaded_by,
+       f.created_at
+       FROM training_file_attachments f
+       INNER JOIN staff s
+               ON s.home_id = f.home_id
+              AND s.id = f.staff_id
+              AND s.deleted_at IS NULL
+      WHERE f.id = $1
+        AND f.home_id = $2
+        AND f.deleted_at IS NULL`,
     [id, homeId]
   );
   return shape(rows[0]);
@@ -83,12 +109,19 @@ export async function create(homeId, staffId, trainingType, data, client) {
 export async function softDelete(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `UPDATE training_file_attachments
+    `UPDATE training_file_attachments f
         SET deleted_at = NOW()
-      WHERE id = $1
-        AND home_id = $2
-        AND deleted_at IS NULL
-    RETURNING ${COLS}`,
+      WHERE f.id = $1
+        AND f.home_id = $2
+        AND f.deleted_at IS NULL
+        AND EXISTS (
+          SELECT 1
+            FROM staff s
+           WHERE s.home_id = f.home_id
+             AND s.id = f.staff_id
+             AND s.deleted_at IS NULL
+        )
+    RETURNING ${QUALIFIED_COLS}`,
     [id, homeId]
   );
   return shape(rows[0]);

@@ -69,7 +69,7 @@ describe('pdfReports', () => {
         training: { compliance_pct: 92, expired: 1 },
         incidents: { open: 0, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
         complaints: { open: 0, ack_overdue: 0, response_overdue: 0 },
-        cqc_evidence: { open_gaps: 3, overall: 'mostly_ready' },
+        cqc_evidence: { open_gaps: 3, overall: { band: 'mostly_ready', label: 'Heuristic: Mostly Ready', badge: 'amber' } },
         maintenance: { overdue: 0, certs_expired: 0 },
         occupancy: { pct: 96, available: 1 },
         outcomes: { rag: 'green', falls_28d: 0, infections_28d: 0 },
@@ -106,7 +106,7 @@ describe('pdfReports', () => {
       cqc_evidence_gaps: [{
         home_name: 'Oak House',
         open_gaps: 3,
-        overall: 'mostly_ready',
+        overall: { band: 'mostly_ready', label: 'Heuristic: Mostly Ready', badge: 'amber' },
         rag: 'amber',
       }],
     };

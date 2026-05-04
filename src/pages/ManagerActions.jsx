@@ -58,6 +58,10 @@ const LABELS = {
   reflective_practice: 'Reflective practice',
 };
 
+function hasEvidenceNotes(item) {
+  return typeof item?.evidence_notes === 'string' && item.evidence_notes.trim().length > 0;
+}
+
 const titleCase = value => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 function badgeForPriority(priority) {
@@ -284,6 +288,11 @@ export default function ManagerActions() {
   }
 
   async function handleComplete(item) {
+    if (item.evidence_required && !hasEvidenceNotes(item)) {
+      openEdit(item);
+      setSaveError('Evidence notes are required before completing this action.');
+      return;
+    }
     try {
       await completeActionItem(home, item.id, { _version: item.version });
       showNotice('Action completed.', { variant: 'success' });
@@ -294,6 +303,11 @@ export default function ManagerActions() {
   }
 
   async function handleVerify(item) {
+    if (item.evidence_required && !hasEvidenceNotes(item)) {
+      openEdit(item);
+      setSaveError('Evidence notes are required before verifying this action.');
+      return;
+    }
     try {
       await verifyActionItem(home, item.id, { _version: item.version });
       showNotice('Action verified.', { variant: 'success' });

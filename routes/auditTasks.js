@@ -8,7 +8,9 @@ import { requiredDateInput, nullableDateInput } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { buildAuditTasksForRange } from '../lib/auditTaskTemplates.js';
 import * as auditTaskRepo from '../repositories/auditTaskRepo.js';
+import * as userRepo from '../repositories/userRepo.js';
 import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
 
 const router = Router();
 const idSchema = z.coerce.number().int().positive();
@@ -52,6 +54,40 @@ function actorId(req) {
   return req.authDbUser?.id || null;
 }
 
+function hasText(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasRequiredEvidence(existing, evidenceNotes) {
+  return hasText(evidenceNotes) || hasText(existing?.evidence_notes);
+}
+
+function isProtectedWorkflowStatus(status) {
+  return ['completed', 'verified'].includes(status);
+}
+
+function isProtectedWorkflowTransition(existing, updates) {
+  return updates.status !== undefined
+    && updates.status !== existing?.status
+    && isProtectedWorkflowStatus(updates.status);
+}
+
+async function validateOwner(homeId, ownerUserId) {
+  if (ownerUserId == null) return null;
+  const owner = await userRepo.findByIdAtHome(ownerUserId, homeId);
+  return owner?.active ? owner : null;
+}
+
+async function parseOwnerOrReject(req, res, ownerUserId) {
+  if (ownerUserId == null) return true;
+  const owner = await validateOwner(req.home.id, ownerUserId);
+  if (!owner) {
+    res.status(400).json({ error: 'Owner user must be active and assigned to this home' });
+    return false;
+  }
+  return true;
+}
+
 function dateOnly(date) {
   return date.toISOString().slice(0, 10);
 }
@@ -77,6 +113,10 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = taskBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await parseOwnerOrReject(req, res, parsed.data.owner_user_id)) return;
+    if (isProtectedWorkflowStatus(parsed.data.status)) {
+      return res.status(400).json({ error: 'Complete or verify audit tasks using the workflow buttons' });
+    }
     const task = await auditTaskRepo.create(req.home.id, { ...parsed.data, actor_id: actorId(req) });
     await auditService.log('audit_task_create', req.home.slug, req.user.username, { id: task.id, frequency: task.frequency });
     res.status(201).json(task);
@@ -110,12 +150,18 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid task ID' });
     const parsed = taskUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await parseOwnerOrReject(req, res, parsed.data.owner_user_id)) return;
     const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Audit task not found' });
     const { version } = splitVersion(parsed.data);
-    const task = await auditTaskRepo.update(idParsed.data, req.home.id, definedWithoutVersion(parsed.data), version, actorId(req));
+    const updates = definedWithoutVersion(parsed.data);
+    if (isProtectedWorkflowTransition(existing, updates)) {
+      return res.status(400).json({ error: 'Complete or verify audit tasks using the workflow buttons' });
+    }
+    const task = await auditTaskRepo.update(idParsed.data, req.home.id, updates, version, actorId(req));
     if (task === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    await auditService.log('audit_task_update', req.home.slug, req.user.username, { id: task.id });
+    const changes = diffFields(existing, task, { extraSensitive: ['evidence_notes'] });
+    await auditService.log('audit_task_update', req.home.slug, req.user.username, { id: task.id, changes });
     res.json(task);
   } catch (err) { next(err); }
 });
@@ -128,10 +174,15 @@ router.post('/:id/complete', writeRateLimiter, requireAuth, requireHomeAccess, r
     if (!parsed.success) return zodError(res, parsed);
     const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Audit task not found' });
+    if (existing.status !== 'open') return res.status(400).json({ error: 'Only open audit tasks can be completed' });
+    if (existing.evidence_required && !hasRequiredEvidence(existing, parsed.data.evidence_notes)) {
+      return res.status(400).json({ error: 'Evidence notes are required before completing this audit task' });
+    }
     const { version } = splitVersion(parsed.data);
     const task = await auditTaskRepo.complete(idParsed.data, req.home.id, actorId(req), parsed.data.evidence_notes, version);
     if (task === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    await auditService.log('audit_task_complete', req.home.slug, req.user.username, { id: task.id });
+    const changes = diffFields(existing, task, { extraSensitive: ['evidence_notes'] });
+    await auditService.log('audit_task_complete', req.home.slug, req.user.username, { id: task.id, changes });
     res.json(task);
   } catch (err) { next(err); }
 });
@@ -145,10 +196,14 @@ router.post('/:id/verify', writeRateLimiter, requireAuth, requireHomeAccess, req
     const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Audit task not found' });
     if (existing.status !== 'completed') return res.status(400).json({ error: 'Complete the audit task before QA sign-off' });
+    if (existing.evidence_required && !hasRequiredEvidence(existing)) {
+      return res.status(400).json({ error: 'Evidence notes are required before QA sign-off' });
+    }
     const { version } = splitVersion(parsed.data);
     const task = await auditTaskRepo.verify(idParsed.data, req.home.id, actorId(req), version);
     if (task === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    await auditService.log('audit_task_verify', req.home.slug, req.user.username, { id: task.id });
+    const changes = diffFields(existing, task, { extraSensitive: ['evidence_notes'] });
+    await auditService.log('audit_task_verify', req.home.slug, req.user.username, { id: task.id, changes });
     res.json(task);
   } catch (err) { next(err); }
 });
@@ -157,9 +212,15 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid task ID' });
+    const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
     const deleted = await auditTaskRepo.softDelete(idParsed.data, req.home.id, actorId(req));
     if (!deleted) return res.status(404).json({ error: 'Audit task not found' });
-    await auditService.log('audit_task_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    await auditService.log('audit_task_delete', req.home.slug, req.user.username, {
+      id: idParsed.data,
+      title: existing?.title,
+      status: existing?.status,
+      due_date: existing?.due_date,
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

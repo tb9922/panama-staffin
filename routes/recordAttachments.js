@@ -5,11 +5,10 @@ import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
-import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
-import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
+import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../lib/uploadSecurity.js';
 import { config } from '../config.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
 import * as recordAttachmentsRepo from '../repositories/recordAttachments.js';
@@ -69,17 +68,9 @@ const storage = multer.diskStorage({
   },
 });
 
-function fileFilter(req, file, cb) {
-  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`));
-  }
-}
-
 const upload = multer({
   storage,
-  fileFilter,
+  fileFilter: genericAttachmentFileFilter,
   limits: { fileSize: config.upload.maxFileSize },
 });
 
@@ -144,12 +135,7 @@ router.post('/:module/:recordId', writeRateLimiter, requireAuth, requireHomeAcce
           await unlink(filePath).catch(() => {});
           return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
         }
-        const detected = await fileTypeFromFile(filePath);
-        if (detected && detected.mime !== req.file.mimetype) {
-          await unlink(filePath).catch(() => {});
-          return res.status(400).json({ error: 'File content does not match declared type' });
-        }
-        await assertFilePassedMalwareScan(filePath);
+        await assertGenericAttachmentUploadSafe(req.file);
         const attachment = await recordAttachmentsRepo.create(req.home.id, parsed.moduleId, parsed.recordId, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,

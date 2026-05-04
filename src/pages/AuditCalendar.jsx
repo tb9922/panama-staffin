@@ -37,6 +37,10 @@ const FREQUENCIES = ['daily', 'weekly', 'monthly', 'quarterly', 'annual', 'ad_ho
 const STATUSES = ['open', 'completed', 'verified', 'cancelled'];
 const CATEGORIES = ['governance', 'medication', 'infection_control', 'health_safety', 'care_records', 'environment', 'staffing'];
 
+function hasEvidenceNotes(task) {
+  return typeof task?.evidence_notes === 'string' && task.evidence_notes.trim().length > 0;
+}
+
 function titleCase(value) {
   return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -236,6 +240,11 @@ export default function AuditCalendar() {
   }
 
   async function completeTask(task) {
+    if (task.evidence_required && !hasEvidenceNotes(task)) {
+      openEdit(task);
+      setSaveError('Evidence notes are required before completing this audit task.');
+      return;
+    }
     try {
       await completeAuditTask(activeHome, task.id, { _version: task.version });
       showNotice('Audit task completed.');
@@ -246,6 +255,11 @@ export default function AuditCalendar() {
   }
 
   async function verifyTask(task) {
+    if (task.evidence_required && !hasEvidenceNotes(task)) {
+      openEdit(task);
+      setSaveError('Evidence notes are required before QA sign-off.');
+      return;
+    }
     try {
       await verifyAuditTask(activeHome, task.id, { _version: task.version });
       showNotice('Audit task QA signed off.');

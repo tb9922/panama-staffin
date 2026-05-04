@@ -79,5 +79,19 @@ describe('PortfolioDashboard', () => {
     await waitFor(() => expect(screen.getByText('Portfolio Dashboard')).toBeInTheDocument());
     expect(screen.getByText('Significant Gaps readiness')).toBeInTheDocument();
     expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Drill into Amberwood' })).toBeInTheDocument();
+  });
+
+  it('does not show zero-summary empty state after KPI load failure', async () => {
+    api.getPortfolioKpis.mockRejectedValueOnce(new Error('Portfolio API unavailable'));
+
+    renderWithProviders(<PortfolioDashboard />, {
+      route: '/portfolio',
+      user: { username: 'admin', role: 'admin', isPlatformAdmin: true },
+    });
+
+    await waitFor(() => expect(screen.getByText('Portfolio API unavailable')).toBeInTheDocument());
+    expect(screen.queryByText('No homes available')).not.toBeInTheDocument();
+    expect(screen.queryByText('Red homes')).not.toBeInTheDocument();
   });
 });

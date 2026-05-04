@@ -1,4 +1,5 @@
 import { pool, createShaper } from './shared.js';
+import { caseExists } from './caseNotes.js';
 
 const COLS = 'id, home_id, case_type, case_id, original_name, stored_name, mime_type, size_bytes, description, uploaded_by, created_at';
 
@@ -25,7 +26,9 @@ export async function findAttachmentById(id, homeId, client) {
     `SELECT ${COLS} FROM hr_file_attachments WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
-  return shapeAttachment(rows[0]);
+  const attachment = shapeAttachment(rows[0]);
+  if (!attachment) return null;
+  return await caseExists(homeId, attachment.case_type, attachment.case_id, conn) ? attachment : null;
 }
 
 export async function createAttachment(homeId, caseType, caseId, data, client) {
@@ -40,6 +43,8 @@ export async function createAttachment(homeId, caseType, caseId, data, client) {
 
 export async function deleteAttachment(id, homeId, client) {
   const conn = client || pool;
+  const existing = await findAttachmentById(id, homeId, conn);
+  if (!existing) return null;
   const { rows } = await conn.query(
     `UPDATE hr_file_attachments SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING ${COLS}`,
     [id, homeId]

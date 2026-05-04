@@ -49,6 +49,7 @@ test.describe('V1 operating-system UX', () => {
     await dialog.getByLabel('Due date').fill('2026-05-15');
     await dialog.getByLabel('Owner', { exact: true }).fill('E2E Manager');
     await dialog.getByLabel('Evidence required').check();
+    await dialog.getByLabel('Evidence notes').fill('E2E completion evidence recorded.');
 
     const createPromise = page.waitForResponse(response =>
       response.url().includes(`/api/action-items?${API_HOME}`) && response.request().method() === 'POST');
@@ -82,6 +83,7 @@ test.describe('V1 operating-system UX', () => {
     let dialog = page.getByRole('dialog', { name: 'New Audit Task' });
     await dialog.getByLabel('Title').fill(auditTitle);
     await dialog.getByLabel('Due date').fill('2026-05-16');
+    await dialog.getByLabel('Evidence notes').fill('E2E audit evidence recorded.');
     const auditPromise = page.waitForResponse(response =>
       response.url().includes(`/api/audit-tasks?${API_HOME}`) && response.request().method() === 'POST');
     await dialog.getByRole('button', { name: 'Save' }).click();

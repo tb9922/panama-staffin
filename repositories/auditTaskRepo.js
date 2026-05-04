@@ -194,6 +194,7 @@ export async function complete(id, homeId, actorId, evidenceNotes, version = nul
            updated_at = NOW(),
            version = version + 1
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+       AND status = 'open'
   `;
   if (version != null) {
     params.push(version);

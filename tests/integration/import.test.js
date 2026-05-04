@@ -292,6 +292,21 @@ describe('Live Import — POST /staff?dryRun=false', () => {
     expect(res.body.duplicates.length).toBeGreaterThan(0);
   });
 
+  it('detects normalized duplicates against existing DB staff', async () => {
+    const normalizedDupeCsv = [
+      'name,role,team,pref,skill,hourly_rate,start_date,contract_hours,wtr_opt_out',
+      '  alice   nurse  ,Senior Carer,Day A,E,2,18.50,2025-01-15,37.5,false',
+    ].join('\n');
+
+    const res = await request(app)
+      .post(`${BASE}/staff?home=${homeASlug}&dryRun=false`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(normalizedDupeCsv), 'staff.csv')
+      .expect(409);
+
+    expect(res.body.error).toMatch(/already exist/);
+  });
+
   it('import is home-scoped (same staff in different home succeeds)', async () => {
     const res = await request(app)
       .post(`${BASE}/staff?home=${homeBSlug}&dryRun=false`)

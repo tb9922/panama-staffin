@@ -6,7 +6,6 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import { assertBufferPassedMalwareScan } from '../lib/malwareScan.js';
-import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
@@ -34,6 +33,10 @@ const staffCsvRowSchema = z.object({
 
 const CSV_HEADERS = ['name', 'role', 'team', 'pref', 'skill', 'hourly_rate', 'start_date', 'contract_hours', 'wtr_opt_out'];
 const CSV_HEADERS_SET = new Set(CSV_HEADERS);
+
+function normalizedStaffDuplicateKey(name, startDate) {
+  return `${String(name || '').trim().replace(/\s+/g, ' ').toLowerCase()}|${String(startDate || '').slice(0, 10)}`;
+}
 
 /**
  * Split CSV text into logical lines, respecting quoted fields that may
@@ -172,7 +175,7 @@ router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     // Check for duplicates within the batch
     const seen = new Set();
     for (const row of validRows) {
-      const key = `${row.name}|${row.start_date}`;
+      const key = normalizedStaffDuplicateKey(row.name, row.start_date);
       if (seen.has(key)) {
         return res.status(400).json({ error: `Duplicate staff in CSV: ${row.name} starting ${row.start_date}` });
       }
@@ -182,10 +185,24 @@ router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     // Insert all within a transaction — duplicate check inside to prevent TOCTOU race
     let imported = 0;
     await withTransaction(async (client) => {
-      // Lock existing staff rows to prevent concurrent import creating duplicates
-      const { rows: existing } = await staffRepo.findByHome(req.home.id, { limit: 10000 }, client);
-      const existingKeys = new Set(existing.map(s => `${s.name}|${s.start_date}`));
-      const dupes = validRows.filter(r => existingKeys.has(`${r.name}|${r.start_date}`));
+      const incomingNames = validRows.map(row => String(row.name || '').trim().replace(/\s+/g, ' ').toLowerCase());
+      const incomingDates = validRows.map(row => row.start_date);
+      const { rows: existing } = await client.query(
+        `WITH incoming(name_key, start_date) AS (
+           SELECT * FROM unnest($2::text[], $3::date[])
+         )
+         SELECT s.name, s.start_date::text AS start_date
+           FROM staff s
+           JOIN incoming i
+             ON lower(regexp_replace(btrim(s.name), '[[:space:]]+', ' ', 'g')) = i.name_key
+            AND COALESCE(s.start_date, DATE '1900-01-01') = COALESCE(i.start_date, DATE '1900-01-01')
+          WHERE s.home_id = $1
+            AND s.deleted_at IS NULL
+          FOR UPDATE OF s`,
+        [req.home.id, incomingNames, incomingDates]
+      );
+      const existingKeys = new Set(existing.map(s => normalizedStaffDuplicateKey(s.name, s.start_date)));
+      const dupes = validRows.filter(r => existingKeys.has(normalizedStaffDuplicateKey(r.name, r.start_date)));
       if (dupes.length > 0) {
         const err = new Error(`${dupes.length} staff already exist with same name + start date`);
         err.statusCode = 409;
@@ -215,6 +232,9 @@ router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     await auditService.log('staff_import', req.home.slug, req.user.username, { count: imported, filename: req.file.originalname });
     res.status(201).json({ imported, filename: req.file.originalname });
   } catch (err) {
+    if (err.code === '23505' && err.constraint === 'staff_unique_active_name_start') {
+      return res.status(409).json({ error: 'One or more staff already exist with same name + start date', duplicates: [] });
+    }
     if (err.statusCode === 409) {
       return res.status(409).json({ error: err.message, duplicates: err.duplicates });
     }

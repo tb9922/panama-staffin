@@ -57,11 +57,15 @@ export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}, clie
 export async function findById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS}
-       FROM cqc_evidence_files
-      WHERE id = $1
-        AND home_id = $2
-        AND deleted_at IS NULL`,
+    `SELECT f.${COLS.split(', ').join(', f.')}
+       FROM cqc_evidence_files f
+       INNER JOIN cqc_evidence e
+               ON e.home_id = f.home_id
+              AND e.id = f.evidence_id
+              AND e.deleted_at IS NULL
+      WHERE f.id = $1
+        AND f.home_id = $2
+        AND f.deleted_at IS NULL`,
     [id, homeId]
   );
   return shape(rows[0]);
@@ -91,12 +95,19 @@ export async function create(homeId, evidenceId, data, client) {
 export async function softDelete(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `UPDATE cqc_evidence_files
+    `UPDATE cqc_evidence_files f
         SET deleted_at = NOW()
-      WHERE id = $1
-        AND home_id = $2
-        AND deleted_at IS NULL
-    RETURNING ${COLS}`,
+      WHERE f.id = $1
+        AND f.home_id = $2
+        AND f.deleted_at IS NULL
+        AND EXISTS (
+          SELECT 1
+            FROM cqc_evidence e
+           WHERE e.home_id = f.home_id
+             AND e.id = f.evidence_id
+             AND e.deleted_at IS NULL
+        )
+    RETURNING ${COLS.split(', ').map(col => `f.${col}`).join(', ')}`,
     [id, homeId]
   );
   return shape(rows[0]);

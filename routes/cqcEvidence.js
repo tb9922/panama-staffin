@@ -6,7 +6,6 @@ import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
-import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
@@ -18,7 +17,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
-import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
+import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../lib/uploadSecurity.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
 import { config } from '../config.js';
@@ -52,15 +51,7 @@ const storage = multer.diskStorage({
   },
 });
 
-function fileFilter(req, file, cb) {
-  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`));
-  }
-}
-
-const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.maxFileSize } });
+const upload = multer({ storage, fileFilter: genericAttachmentFileFilter, limits: { fileSize: config.upload.maxFileSize } });
 
 const evidenceBodySchema = z.object({
   quality_statement: statementIdSchema,
@@ -233,12 +224,7 @@ router.post('/:id/files', writeRateLimiter, requireAuth, requireHomeAccess, requ
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       try {
-        const detected = await fileTypeFromFile(req.file.path);
-        if (detected && detected.mime !== req.file.mimetype) {
-          await unlink(req.file.path).catch(() => {});
-          return res.status(400).json({ error: 'File content does not match declared type' });
-        }
-        await assertFilePassedMalwareScan(req.file.path);
+        await assertGenericAttachmentUploadSafe(req.file);
         const description = z.string().max(500).optional().safeParse(req.body.description);
         const attachment = await cqcEvidenceFileRepo.create(req.home.id, idParsed.data, {
           original_name: req.file.originalname,

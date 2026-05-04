@@ -5,11 +5,10 @@ import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
-import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import { config } from '../../config.js';
 import { sendStoredDownload } from '../../lib/sendDownload.js';
-import { assertFilePassedMalwareScan } from '../../lib/malwareScan.js';
+import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../../lib/uploadSecurity.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { caseTypeSchema } from './schemas.js';
@@ -38,15 +37,7 @@ const storage = multer.diskStorage({
   },
 });
 
-function fileFilter(req, file, cb) {
-  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`));
-  }
-}
-
-const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.maxFileSize } });
+const upload = multer({ storage, fileFilter: genericAttachmentFileFilter, limits: { fileSize: config.upload.maxFileSize } });
 
 // GET /api/hr/attachments/download/:id?home=X
 router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
@@ -96,14 +87,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       try {
-        // Verify file magic bytes match declared MIME type
-        const filePath = req.file.path;
-        const detected = await fileTypeFromFile(filePath);
-        if (detected && detected.mime !== req.file.mimetype) {
-          await unlink(filePath).catch(() => {});
-          return res.status(400).json({ error: 'File content does not match declared type' });
-        }
-        await assertFilePassedMalwareScan(filePath);
+        await assertGenericAttachmentUploadSafe(req.file);
         const descParsed = z.string().max(500).optional().safeParse(req.body.description);
         const description = descParsed.success ? (descParsed.data || null) : null;
         const attachment = await hrRepo.createAttachment(req.home.id, caseTypeParsed.data, caseId, {

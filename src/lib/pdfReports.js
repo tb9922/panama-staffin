@@ -1381,6 +1381,13 @@ function fmtPortfolioDateTime(value) {
   return date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function fmtPortfolioReadiness(value) {
+  if (!value) return '-';
+  if (typeof value === 'string') return value.replace(/_/g, ' ');
+  const label = value.label || value.band || value.badge;
+  return label ? String(label).replace(/^Heuristic:\s*/i, '').replace(/_/g, ' ') : '-';
+}
+
 function ragLabel(value) {
   if (value === 'green') return 'Green';
   if (value === 'amber') return 'Amber';
@@ -1635,7 +1642,7 @@ export function generatePortfolioBoardPackPDF(pack) {
     body: (pack?.cqc_evidence_gaps || []).slice(0, 10).map(row => [
       row.home_name,
       fmtPortfolioNumber(row.open_gaps),
-      row.overall || '-',
+      fmtPortfolioReadiness(row.overall),
       row.rag || 'unknown',
     ]),
     styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
@@ -1664,7 +1671,7 @@ export function generatePortfolioBoardPackPDF(pack) {
         ['Training', home.rag?.training || 'unknown', `${fmtPortfolioPct(home.training?.compliance_pct)} compliant / ${fmtPortfolioNumber(home.training?.expired)} expired`],
         ['Incidents', home.rag?.incidents || 'unknown', `${fmtPortfolioNumber(home.incidents?.open)} open / ${fmtPortfolioNumber(home.incidents?.cqc_notifiable_overdue)} CQC overdue / ${fmtPortfolioNumber(home.incidents?.riddor_overdue)} RIDDOR overdue`],
         ['Complaints', home.rag?.complaints || 'unknown', `${fmtPortfolioNumber(home.complaints?.open)} open / ${fmtPortfolioNumber(home.complaints?.ack_overdue)} ack overdue / ${fmtPortfolioNumber(home.complaints?.response_overdue)} response overdue`],
-        ['CQC evidence', home.rag?.cqc_evidence || 'unknown', `${fmtPortfolioNumber(home.cqc_evidence?.open_gaps)} open gaps / ${home.cqc_evidence?.overall || '-'}`],
+        ['CQC evidence', home.rag?.cqc_evidence || 'unknown', `${fmtPortfolioNumber(home.cqc_evidence?.open_gaps)} open gaps / ${fmtPortfolioReadiness(home.cqc_evidence?.overall)}`],
         ['Maintenance', home.rag?.maintenance || 'unknown', `${fmtPortfolioNumber(home.maintenance?.overdue)} overdue / ${fmtPortfolioNumber(home.maintenance?.certs_expired)} expired certs`],
         ['Occupancy', home.rag?.occupancy || 'unknown', `${fmtPortfolioPct(home.occupancy?.pct)} occupied / ${fmtPortfolioNumber(home.occupancy?.available)} available`],
         ['Outcomes', home.rag?.outcomes || 'unknown', home.outcomes?.rag === 'unknown' ? 'No outcome RAG yet' : ragLabel(home.outcomes?.rag)],

@@ -6,12 +6,11 @@ import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
-import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
-import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
+import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../lib/uploadSecurity.js';
 import { config } from '../config.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachments.js';
@@ -47,15 +46,7 @@ const storage = multer.diskStorage({
   },
 });
 
-function fileFilter(req, file, cb) {
-  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`));
-  }
-}
-
-const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.maxFileSize } });
+const upload = multer({ storage, fileFilter: genericAttachmentFileFilter, limits: { fileSize: config.upload.maxFileSize } });
 
 // Onboarding section data — strict schema, only known fields accepted
 const onboardingSectionSchema = z.object({
@@ -165,6 +156,10 @@ router.get('/:staffId/:section/files', readRateLimiter, requireAuth, requireHome
     if (!staffIdParsed.success || !sectionParsed.success) {
       return res.status(400).json({ error: 'Invalid staffId or section' });
     }
+    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
     const files = await onboardingAttachmentsRepo.findAttachments(req.home.id, staffIdParsed.data, sectionParsed.data);
     res.json(files);
   } catch (err) { next(err); }
@@ -188,12 +183,7 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       try {
-        const detected = await fileTypeFromFile(req.file.path);
-        if (detected && detected.mime !== req.file.mimetype) {
-          await unlink(req.file.path).catch(() => {});
-          return res.status(400).json({ error: 'File content does not match declared type' });
-        }
-        await assertFilePassedMalwareScan(req.file.path);
+        await assertGenericAttachmentUploadSafe(req.file);
         const description = z.string().max(500).optional().safeParse(req.body.description);
         const attachment = await onboardingAttachmentsRepo.create(req.home.id, staffIdParsed.data, sectionParsed.data, {
           original_name: req.file.originalname,

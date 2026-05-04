@@ -215,6 +215,8 @@ export async function getStaffingPressure(home, days = 7) {
 function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes, staffing) {
   const m = summary.modules || {};
   const outcomeKpis = buildOutcomeKpis(outcomes, home);
+  const trainingTotalRequired = Number(m.training?.totalRequired || 0);
+  const trainingCompliancePct = trainingTotalRequired > 0 ? m.training?.compliancePct : null;
   const kpis = {
     home_id: home.id,
     home_slug: home.slug,
@@ -223,7 +225,9 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
     staffing,
     agency,
     training: {
-      compliance_pct: m.training?.compliancePct ?? 100,
+      compliance_pct: trainingCompliancePct,
+      baseline_configured: trainingTotalRequired > 0,
+      total_required: trainingTotalRequired,
       expired: m.training?.expired || 0,
       expiring_30d: m.training?.expiringSoon || 0,
       not_started: m.training?.notStarted || 0,
@@ -247,8 +251,10 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
       response_overdue: m.complaints?.overdueResponse || 0,
     },
     audits: {
-      overdue: m.policies?.overdue || 0,
-      due_7d: null,
+      overdue: m.auditTasks?.overdue || 0,
+      due_7d: m.auditTasks?.dueSoon || 0,
+      pending_qa: m.auditTasks?.pendingQa || 0,
+      evidence_missing: m.auditTasks?.evidenceMissing || 0,
       policy_due_30d: m.policies?.dueSoon || 0,
     },
     cqc_evidence: {

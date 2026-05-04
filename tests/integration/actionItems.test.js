@@ -168,4 +168,54 @@ describe('action items API', () => {
       .send({ _version: created.body.version })
       .expect(400);
   });
+
+  it('requires owners for high-risk actions and evidence before completion', async () => {
+    await request(app)
+      .post(`/api/action-items?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        title: 'Unowned critical action',
+        category: 'safeguarding',
+        priority: 'critical',
+        due_date: '2026-04-30',
+      })
+      .expect(400);
+
+    const created = await request(app)
+      .post(`/api/action-items?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        title: 'Evidence controlled action',
+        category: 'governance',
+        priority: 'high',
+        due_date: '2026-04-30',
+        owner_role: 'Home manager',
+        evidence_required: true,
+      })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/action-items/${created.body.id}/complete?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ _version: created.body.version })
+      .expect(400);
+
+    await request(app)
+      .put(`/api/action-items/${created.body.id}?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ status: 'completed', _version: created.body.version })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/action-items?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        title: 'Already completed action',
+        category: 'governance',
+        priority: 'medium',
+        due_date: '2026-04-30',
+        status: 'completed',
+      })
+      .expect(400);
+  });
 });

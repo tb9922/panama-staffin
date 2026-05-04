@@ -7,6 +7,8 @@ import { pool } from '../../db.js';
 import * as cqcEvidenceFileRepo from '../../repositories/cqcEvidenceFileRepo.js';
 import * as hrAttachmentsRepo from '../../repositories/hr/attachments.js';
 import * as disciplinaryRepo from '../../repositories/hr/disciplinary.js';
+import * as onboardingAttachmentsRepo from '../../repositories/onboardingAttachments.js';
+import * as trainingAttachmentsRepo from '../../repositories/trainingAttachments.js';
 
 const PREFIX = 'download-safety-test';
 const HOME_SLUG = `${PREFIX}-home`;
@@ -20,8 +22,10 @@ let hrAttachmentId;
 let cqcEvidenceFileId;
 
 beforeAll(async () => {
-  await pool.query(`DELETE FROM hr_file_attachments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
-  await pool.query(`DELETE FROM cqc_evidence_files WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+    await pool.query(`DELETE FROM hr_file_attachments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+    await pool.query(`DELETE FROM cqc_evidence_files WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+    await pool.query(`DELETE FROM onboarding_file_attachments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+    await pool.query(`DELETE FROM training_file_attachments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_disciplinary_cases WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
@@ -89,6 +93,21 @@ beforeAll(async () => {
   });
   cqcEvidenceFileId = cqcFile.id;
 
+  await onboardingAttachmentsRepo.create(homeId, STAFF_ID, 'dbs_check', {
+    original_name: 'onboarding.pdf',
+    stored_name: 'onboarding.pdf',
+    mime_type: 'application/pdf',
+    size_bytes: 1024,
+    uploaded_by: USERNAME,
+  });
+  await trainingAttachmentsRepo.create(homeId, STAFF_ID, 'safeguarding', {
+    original_name: 'training.pdf',
+    stored_name: 'training.pdf',
+    mime_type: 'application/pdf',
+    size_bytes: 1024,
+    uploaded_by: USERNAME,
+  });
+
   const loginRes = await request(app)
     .post('/api/login')
     .send({ username: USERNAME, password: PASSWORD })
@@ -99,6 +118,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query(`DELETE FROM hr_file_attachments WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence_files WHERE home_id = $1`, [homeId]).catch(() => {});
+  await pool.query(`DELETE FROM onboarding_file_attachments WHERE home_id = $1`, [homeId]).catch(() => {});
+  await pool.query(`DELETE FROM training_file_attachments WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM hr_disciplinary_cases WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]).catch(() => {});
@@ -122,5 +143,31 @@ describe('attachment download safety', () => {
         .expect(404);
       expect(response.body.error).toMatch(/missing/i);
     }
+  });
+
+  it('hides attachment metadata and deletes after the parent is soft-deleted', async () => {
+    await pool.query(`UPDATE staff SET deleted_at = NOW() WHERE home_id = $1 AND id = $2`, [homeId, STAFF_ID]);
+    await pool.query(`UPDATE hr_disciplinary_cases SET deleted_at = NOW() WHERE home_id = $1`, [homeId]);
+    await pool.query(`UPDATE cqc_evidence SET deleted_at = NOW() WHERE home_id = $1`, [homeId]);
+
+    await request(app)
+      .get(`/api/onboarding/${STAFF_ID}/dbs_check/files?home=${HOME_SLUG}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+
+    await request(app)
+      .get(`/api/training/${STAFF_ID}/safeguarding/files?home=${HOME_SLUG}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+
+    await request(app)
+      .delete(`/api/hr/attachments/${hrAttachmentId}?home=${HOME_SLUG}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+
+    await request(app)
+      .delete(`/api/cqc-evidence/files/${cqcEvidenceFileId}?home=${HOME_SLUG}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
   });
 });

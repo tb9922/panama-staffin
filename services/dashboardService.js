@@ -22,6 +22,7 @@ const MODULE_PERMISSION = {
   careCertificate: 'compliance',
   risks: 'governance',
   policies: 'governance',
+  auditTasks: 'governance',
   whistleblowing: 'governance',
   beds: 'finance',
 };
@@ -146,6 +147,10 @@ function buildAlerts(m, { excludedModules = [] } = {}) {
     `${n(m.supervisions, 'dueSoon')} supervision(s) due soon`, '/training', 2);
   pushIf(alerts, n(m.policies, 'dueSoon') > 0, 'policies.due_soon', 'info', 'policies',
     `${n(m.policies, 'dueSoon')} policy review(s) due soon`, '/policies', 2);
+  pushIf(alerts, n(m.auditTasks, 'overdue') > 0, 'audit_tasks.overdue', 'warning', 'auditTasks',
+    `${n(m.auditTasks, 'overdue')} overdue audit task(s)`, '/audit-calendar', 3);
+  pushIf(alerts, n(m.auditTasks, 'pendingQa') > 0, 'audit_tasks.pending_qa', 'info', 'auditTasks',
+    `${n(m.auditTasks, 'pendingQa')} audit task(s) awaiting QA sign-off`, '/audit-calendar', 2);
 
   pushIf(alerts, n(m.fireDrills, 'drillsThisYear') < 4 && !b(m.fireDrills, 'overdue'), 'fire_drills.low_yearly_count', 'info', 'fireDrills',
     `Only ${n(m.fireDrills, 'drillsThisYear')} fire drill(s) this year - 4 required`, '/training', 1);
@@ -162,13 +167,14 @@ const DEFAULTS = {
   incidents:       { open: 0, cqcOverdue: 0, riddorOverdue: 0, docOverdue: 0, overdueActions: 0 },
   complaints:      { open: 0, unacknowledged: 0, overdueResponse: 0 },
   maintenance:     { total: 0, overdue: 0, dueSoon: 0, expiredCerts: 0, compliancePct: 100 },
-  training:        { totalRequired: 0, compliant: 0, compliancePct: 100, expired: 0, expiringSoon: 0, notStarted: 0 },
+  training:        { totalRequired: 0, compliant: 0, compliancePct: null, expired: 0, expiringSoon: 0, notStarted: 0 },
   supervisions:    { overdue: 0, dueSoon: 0, noRecord: 0 },
   appraisals:      { overdue: 0, dueSoon: 0, noRecord: 0 },
   fireDrills:      { lastDate: null, drillsThisYear: 0, overdue: false },
   ipc:             { activeOutbreaks: 0, overdueActions: 0, latestScore: null },
   risks:           { total: 0, critical: 0, overdueReviews: 0, overdueActions: 0 },
   policies:        { total: 0, overdue: 0, dueSoon: 0, compliancePct: 100 },
+  auditTasks:      { overdue: 0, dueSoon: 0, pendingQa: 0, evidenceMissing: 0 },
   whistleblowing:  { open: 0, unacknowledged: 0 },
   dols:            { active: 0, expiringSoon: 0, overdueReviews: 0 },
   careCertificate: { inProgress: 0, overdue: 0 },
@@ -193,6 +199,7 @@ export async function getDashboardSummary(homeId, { homeRole = null } = {}) {
     dashboardRepo.getIpcCounts(homeId),
     dashboardRepo.getRiskCounts(homeId, today),
     dashboardRepo.getPolicyCounts(homeId, today),
+    dashboardRepo.getAuditTaskCounts(homeId, today),
     dashboardRepo.getWhistleblowingCounts(homeId),
     dashboardRepo.getDolsCounts(homeId, today),
     dashboardRepo.getCareCertCounts(homeId, today),

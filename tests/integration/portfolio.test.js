@@ -79,6 +79,11 @@ beforeAll(async () => {
      VALUES ($1, 'standalone', 'Overdue portfolio action', 'governance', 'high', CURRENT_DATE - INTERVAL '1 day', 'open', 1)`,
     [homeAId]
   );
+  await pool.query(
+    `INSERT INTO audit_tasks (home_id, title, category, frequency, due_date, evidence_required, status)
+     VALUES ($1, 'Overdue audit calendar task', 'governance', 'weekly', CURRENT_DATE - INTERVAL '1 day', true, 'open')`,
+    [homeBId]
+  );
 
   const { rows: [provider] } = await pool.query(
     `INSERT INTO agency_providers (home_id, name, active) VALUES ($1, 'Portfolio Agency', true) RETURNING id`,
@@ -152,6 +157,10 @@ describe('portfolio KPI API', () => {
     expect(homeB.staffing.planned_shift_slots_7d).toBe(0);
     expect(homeB.staffing.gaps_per_100_planned_shifts).toBe(null);
     expect(homeB.rag.staffing).toBe('unknown');
+    expect(homeB.training.compliance_pct).toBe(null);
+    expect(homeB.rag.training).toBe('unknown');
+    expect(homeB.audits.overdue).toBe(1);
+    expect(homeB.rag.audits).toBe('amber');
   });
 
   it('generates an audited portfolio board-pack payload for visible homes', async () => {

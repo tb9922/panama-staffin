@@ -95,7 +95,42 @@ describe('V1 operating-system API foundations', () => {
     expect(completed.body.status).toBe('completed');
     expect(completed.body.completed_at).toBeTruthy();
 
+    await authed('post', `/api/audit-tasks/${created.body.id}/complete?home=${HOME_A}`)
+      .send({ _version: completed.body.version, evidence_notes: 'Trying to complete again.' })
+      .expect(400);
+
     await authed('get', `/api/audit-tasks?home=${HOME_B}`).expect(403);
+  });
+
+  it('requires evidence before completing evidence-required audit tasks', async () => {
+    const created = await authed('post', `/api/audit-tasks?home=${HOME_A}`)
+      .send({
+        title: 'Evidence-required audit',
+        category: 'governance',
+        frequency: 'ad_hoc',
+        due_date: '2026-05-01',
+        evidence_required: true,
+      })
+      .expect(201);
+
+    await authed('post', `/api/audit-tasks/${created.body.id}/complete?home=${HOME_A}`)
+      .send({ _version: created.body.version })
+      .expect(400);
+
+    await authed('put', `/api/audit-tasks/${created.body.id}?home=${HOME_A}`)
+      .send({ status: 'completed', _version: created.body.version })
+      .expect(400);
+
+    await authed('post', `/api/audit-tasks?home=${HOME_A}`)
+      .send({
+        title: 'Already completed audit',
+        category: 'governance',
+        frequency: 'ad_hoc',
+        due_date: '2026-05-01',
+        status: 'completed',
+        evidence_required: true,
+      })
+      .expect(400);
   });
 
   it('generates recurring audit calendar tasks idempotently', async () => {

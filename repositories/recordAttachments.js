@@ -159,7 +159,10 @@ export async function findById(id, homeId, client) {
         AND deleted_at IS NULL`,
     [id, homeId]
   );
-  return shape(rows[0]);
+  const attachment = shape(rows[0]);
+  if (!attachment) return null;
+  const hasParent = await parentExists(homeId, attachment.module, attachment.record_id, conn);
+  return hasParent ? attachment : null;
 }
 
 export async function create(homeId, moduleId, recordId, data, client) {

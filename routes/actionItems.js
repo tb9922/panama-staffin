@@ -91,6 +91,32 @@ function withEscalation(data) {
   };
 }
 
+function hasText(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasAccountableOwner(data) {
+  return data.owner_user_id != null || hasText(data.owner_name) || hasText(data.owner_role);
+}
+
+function requiresAccountableOwner(data) {
+  return ['high', 'critical'].includes(data.priority) && !hasAccountableOwner(data);
+}
+
+function hasRequiredEvidence(existing, evidenceNotes) {
+  return hasText(evidenceNotes) || hasText(existing?.evidence_notes);
+}
+
+function isProtectedWorkflowStatus(status) {
+  return ['completed', 'verified'].includes(status);
+}
+
+function isProtectedWorkflowTransition(existing, updates) {
+  return updates.status !== undefined
+    && updates.status !== existing?.status
+    && isProtectedWorkflowStatus(updates.status);
+}
+
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), async (req, res, next) => {
   try {
     const parsed = listFilterSchema.safeParse(req.query);
@@ -119,6 +145,12 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const parsed = actionItemBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (!await parseOwnerOrReject(req, res, parsed.data.owner_user_id)) return;
+    if (isProtectedWorkflowStatus(parsed.data.status)) {
+      return res.status(400).json({ error: 'Complete or verify actions using the workflow buttons' });
+    }
+    if (requiresAccountableOwner(parsed.data)) {
+      return res.status(400).json({ error: 'High and critical actions need an owner user, owner name, or owner role' });
+    }
 
     const item = await actionItemRepo.create(req.home.id, {
       ...withEscalation(parsed.data),
@@ -149,6 +181,13 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
         ...updates,
       });
     }
+    if (isProtectedWorkflowTransition(existing, updates)) {
+      return res.status(400).json({ error: 'Complete or verify actions using the workflow buttons' });
+    }
+    const merged = { ...existing, ...updates };
+    if (requiresAccountableOwner(merged)) {
+      return res.status(400).json({ error: 'High and critical actions need an owner user, owner name, or owner role' });
+    }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
     const item = await actionItemRepo.update(idParsed.data, req.home.id, updates, version, actorId(req));
@@ -173,6 +212,9 @@ router.post('/:id/complete', writeRateLimiter, requireAuth, requireHomeAccess, r
     if (['verified', 'cancelled'].includes(existing.status)) {
       return res.status(400).json({ error: 'Verified or cancelled actions cannot be completed' });
     }
+    if (existing.evidence_required && !hasRequiredEvidence(existing, parsed.data.evidence_notes)) {
+      return res.status(400).json({ error: 'Evidence notes are required before completing this action' });
+    }
 
     const { version } = splitVersion(parsed.data);
     const item = await actionItemRepo.complete(
@@ -185,7 +227,8 @@ router.post('/:id/complete', writeRateLimiter, requireAuth, requireHomeAccess, r
     if (item === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    await auditService.log('action_item_complete', req.home.slug, req.user.username, { id: item.id });
+    const changes = diffFields(existing, item, { extraSensitive: ['description', 'evidence_notes'] });
+    await auditService.log('action_item_complete', req.home.slug, req.user.username, { id: item.id, changes });
     res.json(item);
   } catch (err) { next(err); }
 });
@@ -202,13 +245,17 @@ router.post('/:id/verify', writeRateLimiter, requireAuth, requireHomeAccess, req
     if (existing.status !== 'completed') {
       return res.status(400).json({ error: 'Only completed actions can be verified' });
     }
+    if (existing.evidence_required && !hasRequiredEvidence(existing)) {
+      return res.status(400).json({ error: 'Evidence notes are required before verifying this action' });
+    }
 
     const { version } = splitVersion(parsed.data);
     const item = await actionItemRepo.verify(idParsed.data, req.home.id, actorId(req), version);
     if (item === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    await auditService.log('action_item_verify', req.home.slug, req.user.username, { id: item.id });
+    const changes = diffFields(existing, item, { extraSensitive: ['description', 'evidence_notes'] });
+    await auditService.log('action_item_verify', req.home.slug, req.user.username, { id: item.id, changes });
     res.json(item);
   } catch (err) { next(err); }
 });

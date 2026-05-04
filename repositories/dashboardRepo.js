@@ -198,7 +198,7 @@ export async function getTrainingCounts(homeId, today) {
   return {
     totalRequired,
     compliant,
-    compliancePct: totalRequired > 0 ? Math.round(100.0 * compliant / totalRequired) : 100,
+    compliancePct: totalRequired > 0 ? Math.round(100.0 * compliant / totalRequired) : null,
     expired: r.expired,
     expiringSoon: r.expiring_soon,
     notStarted: r.not_started,
@@ -206,6 +206,39 @@ export async function getTrainingCounts(homeId, today) {
 }
 
 // ── Supervisions ─────────────────────────────────────────────────────────────
+
+export async function getAuditTaskCounts(homeId, today) {
+  const { rows } = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE status = 'open' AND due_date < $2::date
+       )::int AS overdue,
+       COUNT(*) FILTER (
+         WHERE status = 'open'
+           AND due_date >= $2::date
+           AND due_date <= ($2::date + INTERVAL '7 days')
+       )::int AS due_soon,
+       COUNT(*) FILTER (
+         WHERE status = 'completed'
+       )::int AS pending_qa,
+       COUNT(*) FILTER (
+         WHERE evidence_required = true
+           AND status IN ('completed', 'verified')
+           AND (evidence_notes IS NULL OR btrim(evidence_notes) = '')
+       )::int AS evidence_missing
+     FROM audit_tasks
+     WHERE home_id = $1
+       AND deleted_at IS NULL`,
+    [homeId, today]
+  );
+  const r = rows[0];
+  return {
+    overdue: int(r.overdue),
+    dueSoon: int(r.due_soon),
+    pendingQa: int(r.pending_qa),
+    evidenceMissing: int(r.evidence_missing),
+  };
+}
 
 export async function getSupervisionCounts(homeId, today) {
   const { rows } = await pool.query(

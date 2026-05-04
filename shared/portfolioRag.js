@@ -73,7 +73,12 @@ export function buildPortfolioRag(kpis) {
         thresholds.overdueCounts,
       ),
     }),
-    audits: ragAtMost(kpis?.audits?.overdue, thresholds.overdueCounts),
+    audits: ragAtMost(
+      (kpis?.audits?.overdue || 0)
+      + (kpis?.audits?.evidence_missing || 0)
+      + (kpis?.audits?.pending_qa || 0),
+      thresholds.overdueCounts,
+    ),
     supervisions: ragAtMost(kpis?.supervisions?.overdue, thresholds.overdueCounts),
     cqc_evidence: ragAtMost(kpis?.cqc_evidence?.open_gaps, thresholds.cqcEvidenceGaps),
     maintenance: ragAtMost(
