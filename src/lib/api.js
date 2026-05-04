@@ -213,6 +213,10 @@ export async function getPortfolioBoardPack() {
   return apiFetch(`${API_BASE}/portfolio/board-pack`, { headers: authHeaders() });
 }
 
+export async function getOpsStatus() {
+  return apiFetch(`${API_BASE}/ops/status`, { headers: authHeaders() });
+}
+
 // Scan intake and document centres
 export async function listScanIntake(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });

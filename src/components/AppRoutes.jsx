@@ -16,7 +16,9 @@ const SickTrends = lazy(() => import('../pages/SickTrends.jsx'));
 const BudgetTracker = lazy(() => import('../pages/BudgetTracker.jsx'));
 const TrainingMatrix = lazy(() => import('../pages/TrainingMatrix.jsx'));
 const OnboardingTracker = lazy(() => import('../pages/OnboardingTracker.jsx'));
+const AcquisitionOnboarding = lazy(() => import('../pages/AcquisitionOnboarding.jsx'));
 const CQCEvidence = lazy(() => import('../pages/CQCEvidence.jsx'));
+const EvidenceQuality = lazy(() => import('../pages/EvidenceQuality.jsx'));
 const IncidentTracker = lazy(() => import('../pages/IncidentTracker.jsx'));
 const ComplaintsTracker = lazy(() => import('../pages/ComplaintsTracker.jsx'));
 const MaintenanceTracker = lazy(() => import('../pages/MaintenanceTracker.jsx'));
@@ -26,6 +28,8 @@ const ManagerActions = lazy(() => import('../pages/ManagerActions.jsx'));
 const AuditCalendar = lazy(() => import('../pages/AuditCalendar.jsx'));
 const PortfolioDashboard = lazy(() => import('../pages/PortfolioDashboard.jsx'));
 const OutcomeMetrics = lazy(() => import('../pages/OutcomeMetrics.jsx'));
+const MobileQuickActions = lazy(() => import('../pages/MobileQuickActions.jsx'));
+const OperationalReviews = lazy(() => import('../pages/OperationalReviews.jsx'));
 const PolicyReviewTracker = lazy(() => import('../pages/PolicyReviewTracker.jsx'));
 const WhistleblowingTracker = lazy(() => import('../pages/WhistleblowingTracker.jsx'));
 const DolsTracker = lazy(() => import('../pages/DolsTracker.jsx'));
@@ -71,7 +75,10 @@ const AuditLog = lazy(() => import('../pages/AuditLog.jsx'));
 const BedManager = lazy(() => import('../pages/BedManager.jsx'));
 const Residents = lazy(() => import('../pages/Residents.jsx'));
 const PlatformHomes = lazy(() => import('../pages/PlatformHomes.jsx'));
+const HomeSetupDashboard = lazy(() => import('../pages/HomeSetupDashboard.jsx'));
 const ScanInbox = lazy(() => import('../pages/ScanInbox.jsx'));
+const OpsConsole = lazy(() => import('../pages/OpsConsole.jsx'));
+const AccessReviews = lazy(() => import('../pages/AccessReviews.jsx'));
 const SuppliersManager = lazy(() => import('../pages/SuppliersManager.jsx'));
 const CqcDocsTracker = lazy(() => import('../pages/CqcDocsTracker.jsx'));
 const FinanceDocsTracker = lazy(() => import('../pages/FinanceDocsTracker.jsx'));
@@ -90,12 +97,14 @@ export default function AppRoutes() {
       <Route path="/rotation" element={<RouteErrorBoundary><RequireModule module="scheduling" allowOwn><RotationGrid /></RequireModule></RouteErrorBoundary>} />
       <Route path="/scenarios" element={<RouteErrorBoundary><RequireModule module="scheduling"><ScenarioModel /></RequireModule></RouteErrorBoundary>} />
       <Route path="/leave" element={<RouteErrorBoundary><RequireModule module="scheduling" allowOwn><AnnualLeave /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/mobile-quick-actions" element={<RouteErrorBoundary><RequireAnyModule modules={['scheduling', 'compliance', 'governance', 'reports']}><MobileQuickActions /></RequireAnyModule></RouteErrorBoundary>} />
 
       {/* Staff */}
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
       <Route path="/internal-bank" element={<RouteErrorBoundary><RequireModule module="staff"><InternalBank /></RequireModule></RouteErrorBoundary>} />
       <Route path="/onboarding" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/onboarding/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingDocsTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/acquisition" element={<RouteErrorBoundary><RequireModule module="governance"><AcquisitionOnboarding /></RequireModule></RouteErrorBoundary>} />
       <Route path="/training" element={<RouteErrorBoundary><RequireModule module="compliance"><TrainingMatrix /></RequireModule></RouteErrorBoundary>} />
       <Route path="/sick-trends" element={<RouteErrorBoundary><RequireModule module="staff"><SickTrends /></RequireModule></RouteErrorBoundary>} />
       <Route path="/fatigue" element={<RouteErrorBoundary><RequireModule module="staff"><FatigueTracker /></RequireModule></RouteErrorBoundary>} />
@@ -103,6 +112,7 @@ export default function AppRoutes() {
 
       {/* Compliance */}
       <Route path="/cqc" element={<RouteErrorBoundary><RequireModule module="compliance"><CQCEvidence /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/evidence-quality" element={<RouteErrorBoundary><RequireModule module="compliance"><EvidenceQuality /></RequireModule></RouteErrorBoundary>} />
       <Route path="/cqc/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><CqcDocsTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/incidents" element={<RouteErrorBoundary><RequireModule module="compliance"><IncidentTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/complaints" element={<RouteErrorBoundary><RequireModule module="compliance"><ComplaintsTracker /></RequireModule></RouteErrorBoundary>} />
@@ -165,9 +175,11 @@ export default function AppRoutes() {
 
       {/* Reports & System */}
       <Route path="/portfolio" element={<RouteErrorBoundary><RequireModule module="reports"><PortfolioDashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/operational-reviews" element={<RouteErrorBoundary><RequireAnyModule modules={['governance', 'payroll', 'compliance', 'gdpr']}><OperationalReviews /></RequireAnyModule></RouteErrorBoundary>} />
       <Route path="/outcomes" element={<RouteErrorBoundary><RequireModule module="reports"><OutcomeMetrics /></RequireModule></RouteErrorBoundary>} />
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
       <Route path="/evidence" element={<RouteErrorBoundary><RequireEvidenceHub><EvidenceHub /></RequireEvidenceHub></RouteErrorBoundary>} />
+      <Route path="/home-setup" element={<RouteErrorBoundary><RequireModule module="reports"><HomeSetupDashboard /></RequireModule></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><RequireUserManagement><UserManagement /></RequireUserManagement></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />
@@ -175,6 +187,8 @@ export default function AppRoutes() {
 
       {/* Platform admin only */}
       <Route path="/platform/homes" element={<RouteErrorBoundary><RequirePlatformAdmin><PlatformHomes /></RequirePlatformAdmin></RouteErrorBoundary>} />
+      <Route path="/platform/ops" element={<RouteErrorBoundary><RequirePlatformAdmin><OpsConsole /></RequirePlatformAdmin></RouteErrorBoundary>} />
+      <Route path="/platform/access-reviews" element={<RouteErrorBoundary><RequirePlatformAdmin><AccessReviews /></RequirePlatformAdmin></RouteErrorBoundary>} />
 
       {/* 404 catch-all */}
       <Route path="*" element={<RouteErrorBoundary><NotFound /></RouteErrorBoundary>} />

@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { useNotifications } from '../contexts/useNotifications.js';
 import { useToast } from '../contexts/useToast.js';
-import { ROLES, getRoleLabel, isOwnDataOnly } from '../../shared/roles.js';
+import { ROLES, getRoleLabel, hasModuleAccess } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 import { hasDirtyState, subscribeDirtyState } from '../lib/dirtyStateRegistry.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
@@ -64,9 +64,16 @@ export default function AppLayout() {
     if (item.requiresUserManagement && !canManageUsers) return false;
     if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
     if (item.requiresStaffPortal && !staffPortalEnabled) return false;
-    const effectiveModule = item.module || sectionModule;
-    if (effectiveModule && !canRead(effectiveModule)) return false;
-    if (effectiveModule && isOwnDataOnly(homeRole, effectiveModule)) return item.ownDataSafe === true;
+    const effectiveModules = item.modules || (item.module || sectionModule ? [item.module || sectionModule] : []);
+    if (effectiveModules.length > 0) {
+      const allowOwn = item.ownDataSafe === true;
+      const hasVisibleModule = effectiveModules.some((moduleId) => {
+        if (isPlatformAdmin) return true;
+        if (!canRead(moduleId)) return false;
+        return allowOwn || hasModuleAccess(homeRole, moduleId, 'read', { includeOwn: false });
+      });
+      if (!hasVisibleModule) return false;
+    }
     return true;
   }, [canManageUsers, canRead, canUseEvidenceHub, homeRole, isPlatformAdmin, staffPortalEnabled]);
 

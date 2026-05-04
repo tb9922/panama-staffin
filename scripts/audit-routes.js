@@ -45,6 +45,10 @@ const CUSTOM_AUTHZ_ROUTES = new Map([
   ['GET /api/gdpr/access-log', 'custom scoped GDPR access-log authorization'],
   ['GET /api/portfolio/kpis', 'custom per-home portfolio authorization'],
   ['GET /api/portfolio/board-pack', 'custom per-home portfolio authorization'],
+  ['GET /api/portfolio-snapshots', 'custom per-home portfolio authorization'],
+  ['POST /api/portfolio-snapshots/capture', 'custom per-home portfolio authorization'],
+  ['GET /api/home-setup', 'custom per-home setup authorization'],
+  ['GET /api/operational-reviews', 'custom per-home module-aware operational authorization'],
 ]);
 
 const AUTH_Z_PATTERNS = [
