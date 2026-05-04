@@ -74,4 +74,26 @@ describe('access review route', () => {
       }),
     });
   });
+
+  it('rejects invalid review and assignment ids before service calls', async () => {
+    await request(app)
+      .get('/api/access-reviews/not-a-number')
+      .set('Authorization', 'Bearer platform')
+      .expect(400);
+
+    await request(app)
+      .patch('/api/access-reviews/99/assignments/abc')
+      .set('Authorization', 'Bearer platform')
+      .send({ status: 'reviewed' })
+      .expect(400);
+
+    await request(app)
+      .post('/api/access-reviews/1.5/complete')
+      .set('Authorization', 'Bearer platform')
+      .expect(400);
+
+    expect(accessReviewService.getAccessReview).not.toHaveBeenCalled();
+    expect(accessReviewService.updateAccessReviewAssignment).not.toHaveBeenCalled();
+    expect(accessReviewService.completeAccessReview).not.toHaveBeenCalled();
+  });
 });

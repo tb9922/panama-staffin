@@ -52,6 +52,13 @@ const updateAssignmentSchema = z.object({
   status: assignmentStatusSchema,
   notes: z.string().max(2000).optional().default(''),
 });
+const idParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+const assignmentParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  assignmentId: z.coerce.number().int().positive(),
+});
 
 function actor(req) {
   return {
@@ -85,11 +92,13 @@ router.post('/', writeRateLimiter, requireAuth, requirePlatformAdmin, async (req
 
 router.get('/:id', readRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
+    const params = idParamSchema.safeParse(req.params);
+    if (!params.success) return zodError(res, params);
     const parsed = detailQuerySchema.safeParse(req.query);
     if (!parsed.success) return zodError(res, parsed);
     const result = await getAccessReview({
       actor: actor(req),
-      reviewId: Number(req.params.id),
+      reviewId: params.data.id,
       filters: {
         ...parsed.data,
         exceptionOnly: parsed.data.exception_only === true,
@@ -101,12 +110,14 @@ router.get('/:id', readRateLimiter, requireAuth, requirePlatformAdmin, async (re
 
 router.patch('/:id/assignments/:assignmentId', writeRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
+    const params = assignmentParamSchema.safeParse(req.params);
+    if (!params.success) return zodError(res, params);
     const parsed = updateAssignmentSchema.safeParse(req.body || {});
     if (!parsed.success) return zodError(res, parsed);
     const result = await updateAccessReviewAssignment({
       actor: actor(req),
-      reviewId: Number(req.params.id),
-      assignmentId: Number(req.params.assignmentId),
+      reviewId: params.data.id,
+      assignmentId: params.data.assignmentId,
       status: parsed.data.status,
       notes: parsed.data.notes,
     });
@@ -116,9 +127,11 @@ router.patch('/:id/assignments/:assignmentId', writeRateLimiter, requireAuth, re
 
 router.post('/:id/complete', writeRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
+    const params = idParamSchema.safeParse(req.params);
+    if (!params.success) return zodError(res, params);
     const result = await completeAccessReview({
       actor: actor(req),
-      reviewId: Number(req.params.id),
+      reviewId: params.data.id,
     });
     return res.json(result);
   } catch (err) { return next(err); }

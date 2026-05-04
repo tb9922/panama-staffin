@@ -129,18 +129,19 @@ export async function createGenerated(homeId, tasks, actorId = null, client = po
       task.period_start,
       task.period_end,
       task.due_date,
+      task.owner_user_id ?? actorId,
       task.evidence_required ?? true,
       actorId,
     );
     values.push(
-      `($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9},$${offset + 10},$${offset + 10})`,
+      `($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9},$${offset + 10},$${offset + 11},$${offset + 11})`,
     );
   }
 
   const { rows } = await client.query(
     `INSERT INTO audit_tasks (
        home_id, template_key, title, category, frequency, period_start, period_end,
-       due_date, evidence_required, created_by, updated_by
+       due_date, owner_user_id, evidence_required, created_by, updated_by
      ) VALUES ${values.join(', ')}
      ON CONFLICT (home_id, template_key, period_start)
        WHERE deleted_at IS NULL AND template_key IS NOT NULL AND period_start IS NOT NULL

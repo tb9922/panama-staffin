@@ -4,6 +4,7 @@ vi.mock('../../db.js', () => ({
   pool: {
     query: vi.fn(),
   },
+  withTransaction: vi.fn(async fn => fn({ tx: true })),
 }));
 
 vi.mock('../../services/portfolioService.js', () => ({
@@ -16,9 +17,14 @@ vi.mock('../../repositories/portfolioSnapshotRepo.js', () => ({
   listByHomeIds: vi.fn(),
 }));
 
+vi.mock('../../services/auditService.js', () => ({
+  log: vi.fn(),
+}));
+
 import { pool } from '../../db.js';
 import * as portfolioService from '../../services/portfolioService.js';
 import * as portfolioSnapshotRepo from '../../repositories/portfolioSnapshotRepo.js';
+import * as auditService from '../../services/auditService.js';
 import {
   capturePortfolioKpiSnapshotsForUser,
   listPortfolioKpiSnapshotsForUser,
@@ -88,11 +94,11 @@ describe('portfolioSnapshotService', () => {
     expect(portfolioSnapshotRepo.upsert).toHaveBeenNthCalledWith(1, 10, expect.objectContaining({
       period_date: '2026-05-04',
       period_granularity: 'daily',
-    }));
+    }), expect.any(Object));
     expect(portfolioSnapshotRepo.upsert).toHaveBeenNthCalledWith(3, 10, expect.objectContaining({
       period_date: '2026-05-04',
       period_granularity: 'daily',
-    }));
+    }), expect.any(Object));
   });
 
   it('stores rag JSON separately from the KPI JSON shape', async () => {
@@ -121,6 +127,12 @@ describe('portfolioSnapshotService', () => {
       training: { compliance_pct: 98 },
     });
     expect(result.snapshots[0].kpis).not.toHaveProperty('rag');
+    expect(auditService.log).toHaveBeenCalledWith('portfolio_snapshot_capture', null, 'manager', expect.objectContaining({
+      periodDate: '2026-05-04',
+      periodGranularity: 'daily',
+      homeCount: 1,
+      homeIds: [10],
+    }), expect.any(Object));
   });
 
   it('requires platform admin authority to capture snapshots', async () => {

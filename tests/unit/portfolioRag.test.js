@@ -23,7 +23,7 @@ describe('portfolio RAG thresholds', () => {
   });
 
   it('rolls up overall status from visible RAG values', () => {
-    expect(overallRag({ training: RAG.GREEN, cqc: RAG.UNKNOWN })).toBe(RAG.GREEN);
+    expect(overallRag({ training: RAG.GREEN, cqc: RAG.UNKNOWN })).toBe(RAG.UNKNOWN);
     expect(overallRag({ training: RAG.GREEN, cqc: RAG.AMBER })).toBe(RAG.AMBER);
     expect(overallRag({ training: RAG.AMBER, cqc: RAG.RED })).toBe(RAG.RED);
     expect(overallRag({ training: RAG.UNKNOWN })).toBe(RAG.UNKNOWN);
@@ -47,8 +47,8 @@ describe('portfolio RAG thresholds', () => {
 
     expect(rag.agency).toBe(RAG.RED);
     expect(rag.training).toBe(RAG.AMBER);
-    expect(rag.incidents).toBe(RAG.GREEN);
-    expect(rag.complaints).toBe(RAG.GREEN);
+    expect(rag.incidents).toBe(RAG.RED);
+    expect(rag.complaints).toBe(RAG.RED);
     expect(rag.supervisions).toBe(RAG.RED);
     expect(rag.cqc_evidence).toBe(RAG.RED);
     expect(rag.maintenance).toBe(RAG.GREEN);
@@ -84,5 +84,25 @@ describe('portfolio RAG thresholds', () => {
 
     expect(rag.incidents).toBe(RAG.RED);
     expect(rag.complaints).toBe(RAG.RED);
+  });
+
+  it('keeps unknown coverage visible in the overall RAG', () => {
+    const rag = buildPortfolioRag({
+      staffing: { gaps_per_100_planned_shifts: null },
+      agency: { emergency_override_pct: 0 },
+      training: { compliance_pct: 100 },
+      incidents: { open: 0, rate_per_resident_month: 0, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
+      complaints: { open: 0, rate_per_resident_month: 0, ack_overdue: 0, response_overdue: 0 },
+      audits: { overdue: 0 },
+      supervisions: { overdue: 0 },
+      cqc_evidence: { open_gaps: 0 },
+      maintenance: { overdue: 0, certs_expired: 0 },
+      manager_actions: { overdue: 0, escalated_l3_plus: 0 },
+      occupancy: { pct: 100 },
+      outcomes: { rag: RAG.GREEN },
+    });
+
+    expect(rag.staffing).toBe(RAG.UNKNOWN);
+    expect(rag.overall).toBe(RAG.UNKNOWN);
   });
 });

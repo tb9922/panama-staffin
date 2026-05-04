@@ -104,6 +104,19 @@ describe('cqc evidence routes readiness contract', () => {
     expect(res.body.error).toMatch(/Evidence To cannot be before Evidence From/i);
   });
 
+  it('accepts a blank evidence category as no category', async () => {
+    const res = await auth('post', `/api/cqc-evidence?home=${homeSlug}`)
+      .send({
+        quality_statement: 'S3',
+        type: 'qualitative',
+        title: 'Uncategorised evidence',
+        evidence_category: null,
+      })
+      .expect(201);
+
+    expect(res.body.evidence_category).toBeNull();
+  });
+
   it('supports narrative upsert and list endpoints with optimistic locking payloads', async () => {
     const putRes = await auth('put', `/api/cqc-evidence/narratives/S1?home=${homeSlug}`)
       .send({

@@ -135,6 +135,23 @@ describe('Config', () => {
     expect(screen.getByLabelText('Night Cycle Start Date')).toBeInTheDocument();
   }, 30000);
 
+  it('saves the separate night cycle start date', async () => {
+    setupAdminMocks();
+    renderWithProviders(<Config />, { user: { username: 'admin', role: 'admin' } });
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+
+    fireEvent.input(screen.getByLabelText('Night Cycle Start Date'), { target: { value: '2025-01-13' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(saveConfig).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({ cycle_start_date_night: '2025-01-13' }),
+        { clientUpdatedAt: '2026-03-28T10:00:00.000Z' }
+      );
+    });
+  });
+
   it('displays Bank Holiday & Sickness section', async () => {
     renderWithProviders(<Config />);
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());

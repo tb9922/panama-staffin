@@ -240,6 +240,14 @@ export async function startAccessReview({
       started_by_username: actor.username,
     }, client);
     const assignments = await accessReviewRepo.insertAssignments(review.id, assignmentRows, client);
+    await auditService.log('access_review_started', null, actor.username, {
+      reviewId: review.id,
+      cadence,
+      periodStart: period.period_start,
+      periodEnd: period.period_end,
+      assignmentCount: assignments.length,
+      snapshotCounts: snapshot.counts,
+    }, client);
     return { review, assignments, snapshot };
   });
 }
@@ -279,7 +287,7 @@ export async function updateAccessReviewAssignment({
     if (!review) throw new NotFoundError('Access review not found');
     if (review.status === 'completed') throw new ConflictError('Completed access reviews cannot be changed');
 
-    const existing = await accessReviewRepo.findAssignmentById(reviewId, assignmentId, client);
+    const existing = await accessReviewRepo.findAssignmentByIdForUpdate(reviewId, assignmentId, client);
     if (!existing) throw new NotFoundError('Access review assignment not found');
 
     const assignment = await accessReviewRepo.updateAssignmentStatus(reviewId, assignmentId, {
@@ -299,7 +307,7 @@ export async function updateAccessReviewAssignment({
       decided_by_username: actor.username,
     }, client);
 
-    await auditService.log('access_review_assignment_decision', '-', actor.username, {
+    await auditService.log('access_review_assignment_decision', assignment.home_slug || null, actor.username, {
       reviewId: review.id,
       assignmentId: assignment.id,
       assignmentKey: assignment.assignment_key,
@@ -315,11 +323,25 @@ export async function updateAccessReviewAssignment({
 
 export async function completeAccessReview({ actor, reviewId, now = new Date() } = {}) {
   assertPlatformAdmin(actor);
-  const review = await accessReviewRepo.findReviewById(reviewId);
-  if (!review) throw new NotFoundError('Access review not found');
-  if (review.status === 'completed') return review;
-  if (review.period_end > todayDate(now)) {
-    throw new ConflictError('Access review period has not ended');
-  }
-  return accessReviewRepo.markReviewCompleted(reviewId, actor.username);
+  return withTransaction(async (client) => {
+    const review = await accessReviewRepo.findReviewById(reviewId, client);
+    if (!review) throw new NotFoundError('Access review not found');
+    if (review.status === 'completed') return review;
+    if (review.period_end > todayDate(now)) {
+      throw new ConflictError('Access review period has not ended');
+    }
+    const pendingCount = Number(review.assignment_counts?.pending || 0);
+    if (pendingCount > 0) {
+      throw new ConflictError('Access review has pending assignments');
+    }
+    const completed = await accessReviewRepo.markReviewCompleted(reviewId, actor.username, client);
+    await auditService.log('access_review_completed', null, actor.username, {
+      reviewId: completed.id,
+      cadence: completed.cadence,
+      periodStart: completed.period_start,
+      periodEnd: completed.period_end,
+      assignmentCounts: completed.assignment_counts || review.assignment_counts || {},
+    }, client);
+    return completed;
+  });
 }

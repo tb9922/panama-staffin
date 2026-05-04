@@ -60,7 +60,7 @@ const evidenceBodySchema = z.object({
   description: z.string().max(10000).nullable().optional(),
   date_from: dateSchema.optional(),
   date_to: dateSchema.optional(),
-  evidence_category: z.enum(ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES).optional(),
+  evidence_category: z.preprocess(blankToNull, z.enum(ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES).nullable().optional()),
   evidence_owner: nullableShortText.optional(),
   review_due: dateSchema.optional(),
 });

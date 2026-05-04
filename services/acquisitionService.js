@@ -134,6 +134,9 @@ export async function createChecklistItem(home, data, actor) {
 }
 
 export async function updateChecklistItem(home, id, data, version, actor) {
+  if (version == null) {
+    throw new ValidationError('Version is required. Refresh and try again.');
+  }
   return withTransaction(async (client) => {
     const existing = await acquisitionRepo.findById(id, home.id, client);
     if (!existing) throw new NotFoundError('Acquisition onboarding item not found');
@@ -160,6 +163,9 @@ export async function updateChecklistItem(home, id, data, version, actor) {
 }
 
 export async function deleteChecklistItem(home, id, version, actor) {
+  if (version == null) {
+    throw new ValidationError('Version is required. Refresh and try again.');
+  }
   return withTransaction(async (client) => {
     const existing = await acquisitionRepo.findById(id, home.id, client);
     if (!existing) throw new NotFoundError('Acquisition onboarding item not found');

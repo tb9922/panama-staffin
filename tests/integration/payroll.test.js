@@ -993,6 +993,29 @@ describe('Agency — /agency', () => {
       }).expect(400);
     });
 
+    it('POST rejects a provider from another home before writing a shift', async () => {
+      const providerB = await adminPost(`/agency/providers?home=${homeBSlug}`, {
+        name: 'Cross Home Agency Co',
+        rate_day: 30,
+        rate_night: 35,
+      }).expect(201);
+      const attemptId = await createNoInternalCoverAttempt({ date: '2099-06-03', shift_code: 'AG-N' });
+
+      await adminPost(`/agency/shifts?home=${homeASlug}`, {
+        agency_id: providerB.body.id,
+        date: '2099-06-03',
+        shift_code: 'AG-N',
+        hours: 10,
+        hourly_rate: 30,
+        agency_attempt_id: attemptId,
+      }).expect(400);
+
+      const shifts = await adminGet(
+        `/agency/shifts?home=${homeASlug}&start=2099-06-03&end=2099-06-03`
+      ).expect(200);
+      expect(shifts.body).toEqual([]);
+    });
+
     it('POST rejects invalid shift_code', async () => {
       await adminPost(`/agency/shifts?home=${homeASlug}`, {
         agency_id: providerId,
@@ -1048,6 +1071,33 @@ describe('Agency — /agency', () => {
       expect(newAttempt.linked_agency_shift_id).toBe(shiftId);
       shiftAttemptId = attemptId;
       shiftVersion = res.body.version;
+    });
+
+    it('PUT rejects cross-home providers without hiding the existing shift', async () => {
+      const providerB = await adminPost(`/agency/providers?home=${homeBSlug}`, {
+        name: 'Cross Home Update Agency Co',
+        rate_day: 31,
+        rate_night: 36,
+      }).expect(201);
+      const attemptId = await createNoInternalCoverAttempt({ date: '2099-06-05', shift_code: 'AG-E' });
+
+      await adminPut(`/agency/shifts/${shiftId}?home=${homeASlug}`, {
+        agency_id: providerB.body.id,
+        date: '2099-06-01',
+        shift_code: 'AG-E',
+        hours: 8,
+        hourly_rate: 31,
+        agency_attempt_id: attemptId,
+        _version: shiftVersion,
+      }).expect(400);
+
+      const shifts = await adminGet(
+        `/agency/shifts?home=${homeASlug}&start=2099-06-01&end=2099-06-01`
+      ).expect(200);
+      const existing = shifts.body.find(shift => shift.id === shiftId);
+      expect(existing).toBeTruthy();
+      expect(existing.agency_id).toBe(providerId);
+      expect(existing.version).toBe(shiftVersion);
     });
 
     it('PUT rejects shift updates without a version', async () => {

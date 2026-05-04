@@ -28,8 +28,8 @@ export async function findProvidersByHome(homeId) {
   return rows.map(shapeProvider);
 }
 
-export async function findProviderById(id, homeId) {
-  const { rows } = await pool.query(
+export async function findProviderById(id, homeId, client = pool) {
+  const { rows } = await client.query(
     `SELECT ${PROVIDER_COLS} FROM agency_providers WHERE id = $1 AND home_id = $2`,
     [id, homeId],
   );

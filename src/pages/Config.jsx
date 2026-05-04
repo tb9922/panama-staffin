@@ -197,7 +197,7 @@ export default function Config() {
               id="config-night-cycle-start-date"
               type="date"
               value={config.cycle_start_date_night || ''}
-              onChange={e => handleChange('cycle_start_date_night', e.target.value || undefined)}
+              onInput={e => handleChange('cycle_start_date_night', e.currentTarget.value || undefined)}
               disabled={!canEdit}
               className={INPUT.sm}
             />

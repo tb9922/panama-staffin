@@ -14,6 +14,7 @@ vi.mock('../../repositories/accessReviewRepo.js', () => ({
   findReviewById: vi.fn(),
   listAssignments: vi.fn(),
   findAssignmentById: vi.fn(),
+  findAssignmentByIdForUpdate: vi.fn(),
   updateAssignmentStatus: vi.fn(),
   insertAssignmentDecision: vi.fn(),
   markReviewCompleted: vi.fn(),
@@ -27,6 +28,7 @@ import * as accessReviewRepo from '../../repositories/accessReviewRepo.js';
 import * as auditService from '../../services/auditService.js';
 import {
   buildAccessReviewSnapshotForTest,
+  completeAccessReview,
   listAccessReviews,
   startAccessReview,
   updateAccessReviewAssignment,
@@ -155,6 +157,11 @@ describe('accessReviewService', () => {
     }), expect.any(Object));
     expect(result.assignments.length).toBeGreaterThan(assignments.length);
     expect(result.snapshot.counts.platform_admins).toBe(1);
+    expect(auditService.log).toHaveBeenCalledWith('access_review_started', null, 'platform.admin', expect.objectContaining({
+      reviewId: 99,
+      cadence: 'quarterly',
+      assignmentCount: result.assignments.length,
+    }), expect.any(Object));
   });
 
   it('blocks duplicate review periods', async () => {
@@ -170,7 +177,7 @@ describe('accessReviewService', () => {
       id: 99,
       status: 'in_progress',
     });
-    accessReviewRepo.findAssignmentById.mockResolvedValue({
+    accessReviewRepo.findAssignmentByIdForUpdate.mockResolvedValue({
       id: 123,
       review_id: 99,
       assignment_key: 'home:10:finance.user',
@@ -212,13 +219,63 @@ describe('accessReviewService', () => {
       notes: 'Remove finance role',
       decided_by_username: 'platform.admin',
     }, expect.any(Object));
-    expect(auditService.log).toHaveBeenCalledWith('access_review_assignment_decision', '-', 'platform.admin', expect.objectContaining({
+    expect(accessReviewRepo.findAssignmentByIdForUpdate).toHaveBeenCalledWith(99, 123, expect.any(Object));
+    expect(auditService.log).toHaveBeenCalledWith('access_review_assignment_decision', 'amberwood', 'platform.admin', expect.objectContaining({
       reviewId: 99,
       assignmentId: 123,
       fromStatus: 'pending',
       toStatus: 'needs_change',
     }), expect.any(Object));
     expect(result.reviewed_by_username).toBe('platform.admin');
+  });
+
+  it('blocks completion while assignments are still pending', async () => {
+    accessReviewRepo.findReviewById.mockResolvedValue({
+      id: 99,
+      cadence: 'quarterly',
+      period_start: '2026-04-01',
+      period_end: '2026-04-30',
+      status: 'in_progress',
+      assignment_counts: { pending: 1, reviewed: 2 },
+    });
+
+    await expect(completeAccessReview({
+      actor,
+      reviewId: 99,
+      now: new Date('2026-05-04T12:00:00Z'),
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(accessReviewRepo.markReviewCompleted).not.toHaveBeenCalled();
+  });
+
+  it('audits completion when every assignment has been decided', async () => {
+    accessReviewRepo.findReviewById.mockResolvedValue({
+      id: 99,
+      cadence: 'quarterly',
+      period_start: '2026-04-01',
+      period_end: '2026-04-30',
+      status: 'in_progress',
+      assignment_counts: { reviewed: 3 },
+    });
+    accessReviewRepo.markReviewCompleted.mockResolvedValue({
+      id: 99,
+      cadence: 'quarterly',
+      period_start: '2026-04-01',
+      period_end: '2026-04-30',
+      status: 'completed',
+      assignment_counts: { reviewed: 3 },
+    });
+
+    await completeAccessReview({
+      actor,
+      reviewId: 99,
+      now: new Date('2026-05-04T12:00:00Z'),
+    });
+
+    expect(accessReviewRepo.markReviewCompleted).toHaveBeenCalledWith(99, 'platform.admin', expect.any(Object));
+    expect(auditService.log).toHaveBeenCalledWith('access_review_completed', null, 'platform.admin', expect.objectContaining({
+      reviewId: 99,
+      assignmentCounts: { reviewed: 3 },
+    }), expect.any(Object));
   });
 
   it('rejects invalid assignment status transitions', async () => {

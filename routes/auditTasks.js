@@ -113,11 +113,12 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = taskBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    if (!await parseOwnerOrReject(req, res, parsed.data.owner_user_id)) return;
+    const payload = { ...parsed.data, owner_user_id: parsed.data.owner_user_id ?? actorId(req) };
+    if (!await parseOwnerOrReject(req, res, payload.owner_user_id)) return;
     if (isProtectedWorkflowStatus(parsed.data.status)) {
       return res.status(400).json({ error: 'Complete or verify audit tasks using the workflow buttons' });
     }
-    const task = await auditTaskRepo.create(req.home.id, { ...parsed.data, actor_id: actorId(req) });
+    const task = await auditTaskRepo.create(req.home.id, { ...payload, actor_id: actorId(req) });
     await auditService.log('audit_task_create', req.home.slug, req.user.username, { id: task.id, frequency: task.frequency });
     res.status(201).json(task);
   } catch (err) { next(err); }

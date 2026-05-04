@@ -258,6 +258,18 @@ export async function findAssignmentById(reviewId, assignmentId, client = pool) 
   return shapeAssignment(rows[0]);
 }
 
+export async function findAssignmentByIdForUpdate(reviewId, assignmentId, client = pool) {
+  const { rows } = await client.query(
+    `SELECT *
+       FROM access_review_assignments
+      WHERE review_id = $1
+        AND id = $2
+      FOR UPDATE`,
+    [reviewId, assignmentId],
+  );
+  return shapeAssignment(rows[0]);
+}
+
 export async function updateAssignmentStatus(reviewId, assignmentId, data, client = pool) {
   const { rows } = await client.query(
     `UPDATE access_review_assignments

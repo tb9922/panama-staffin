@@ -75,7 +75,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
       return res.json(result);
     }
 
-    const slugs = await getAuditHomeSlugs(req.user.username, isPlatformAdmin);
+    const slugs = isPlatformAdmin ? null : await getAuditHomeSlugs(req.user.username, false);
     if (!isPlatformAdmin && slugs.length === 0) {
       return res.status(403).json({ error: 'No audit-read permission on any accessible home' });
     }

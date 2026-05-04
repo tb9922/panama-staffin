@@ -889,6 +889,10 @@ router.post('/agency/shifts', writeRateLimiter, requireAuth, requireHomeAccess, 
       if (attemptError) {
         throw Object.assign(new Error(attemptError), { status: 400 });
       }
+      const provider = await agencyRepo.findProviderById(data.agency_id, req.home.id, client);
+      if (!provider) {
+        throw Object.assign(new Error('Agency provider not found for this home'), { status: 400 });
+      }
       const created = await agencyRepo.createShift(req.home.id, data, client);
       const linked = await agencyAttemptRepo.linkAgencyShift(attempt.id, req.home.id, created.id, client);
       if (!linked) {
@@ -935,6 +939,10 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
       total_cost: Math.round(payload.hours * payload.hourly_rate * 100) / 100,
     };
     const shift = await withTransaction(async (client) => {
+      const provider = await agencyRepo.findProviderById(data.agency_id, req.home.id, client);
+      if (!provider) {
+        throw Object.assign(new Error('Agency provider not found for this home'), { status: 400 });
+      }
       if (data.agency_attempt_id) {
         const attempt = await agencyAttemptRepo.findByIdForUpdate(data.agency_attempt_id, req.home.id, client);
         const attemptError = agencyAttemptErrorForShift(attempt, data, idP.data);

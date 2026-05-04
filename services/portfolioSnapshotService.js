@@ -1,7 +1,8 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 import { ForbiddenError, ValidationError } from '../errors.js';
 import * as portfolioService from './portfolioService.js';
 import * as portfolioSnapshotRepo from '../repositories/portfolioSnapshotRepo.js';
+import * as auditService from './auditService.js';
 import { hasModuleAccess } from '../shared/roles.js';
 
 export const PERIOD_GRANULARITIES = ['daily', 'weekly'];
@@ -98,13 +99,23 @@ export async function capturePortfolioKpiSnapshotsForUser({
   portfolioService.clearPortfolioCache?.();
   const portfolio = await portfolioService.getPortfolioKpisForUser({ username, isPlatformAdmin });
   const homes = Array.isArray(portfolio?.homes) ? portfolio.homes : [];
-  const snapshots = await Promise.all(homes.map((home) => {
-    const payload = snapshotKpis(home);
-    return portfolioSnapshotRepo.upsert(home.home_id, {
-      ...period,
-      ...payload,
-    });
-  }));
+  const snapshots = await withTransaction(async (client) => {
+    const inserted = [];
+    for (const home of homes) {
+      const payload = snapshotKpis(home);
+      inserted.push(await portfolioSnapshotRepo.upsert(home.home_id, {
+        ...period,
+        ...payload,
+      }, client));
+    }
+    await auditService.log('portfolio_snapshot_capture', null, username, {
+      periodDate: period.period_date,
+      periodGranularity: period.period_granularity,
+      homeCount: inserted.length,
+      homeIds: inserted.map(snapshot => snapshot.home_id),
+    }, client);
+    return inserted;
+  });
 
   return {
     generated_at: new Date().toISOString(),

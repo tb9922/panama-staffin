@@ -117,6 +117,17 @@ describe('acquisitionService', () => {
     expect(auditService.log).not.toHaveBeenCalled();
   });
 
+  it('requires versions before updating or deleting checklist items', async () => {
+    await expect(updateChecklistItem(home, 31, { status: 'ready' }, undefined, actor))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await expect(deleteChecklistItem(home, 41, undefined, actor))
+      .rejects.toMatchObject({ statusCode: 400 });
+
+    expect(acquisitionRepo.findById).not.toHaveBeenCalled();
+    expect(acquisitionRepo.update).not.toHaveBeenCalled();
+    expect(acquisitionRepo.softDelete).not.toHaveBeenCalled();
+  });
+
   it('soft deletes an item through the home-scoped repository and audits it', async () => {
     const existing = { id: 41, item_key: 'users', status: 'ready', version: 3 };
     acquisitionRepo.findById.mockResolvedValue(existing);

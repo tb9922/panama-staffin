@@ -170,4 +170,21 @@ describe('acquisition route', () => {
       code: 'VERSION_CONFLICT',
     });
   });
+
+  it('requires versions for update and delete routes', async () => {
+    await request(app)
+      .put('/api/acquisition/2?home=home-a')
+      .set('Authorization', 'Bearer manager')
+      .send({ status: 'ready' })
+      .expect(400);
+
+    await request(app)
+      .delete('/api/acquisition/2?home=home-a')
+      .set('Authorization', 'Bearer manager')
+      .send({})
+      .expect(400);
+
+    expect(acquisitionService.updateChecklistItem).not.toHaveBeenCalled();
+    expect(acquisitionService.deleteChecklistItem).not.toHaveBeenCalled();
+  });
 });

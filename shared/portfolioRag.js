@@ -40,10 +40,11 @@ export function ragAtMost(value, { greenAtMost, amberAtMost }) {
 }
 
 export function overallRag(ragMap) {
-  const values = Object.values(ragMap || {}).filter(value => value !== RAG.UNKNOWN);
+  const values = Object.values(ragMap || {});
   if (values.length === 0) return RAG.UNKNOWN;
   if (values.includes(RAG.RED)) return RAG.RED;
   if (values.includes(RAG.AMBER)) return RAG.AMBER;
+  if (values.includes(RAG.UNKNOWN)) return RAG.UNKNOWN;
   return RAG.GREEN;
 }
 
@@ -58,6 +59,7 @@ export function buildPortfolioRag(kpis) {
       : ragAtMost(kpis.agency.emergency_override_pct, thresholds.agencyEmergencyOverridePct),
     training: ragAtLeast(kpis?.training?.compliance_pct, thresholds.trainingCompliancePct),
     incidents: overallRag({
+      open: ragAtMost(kpis?.incidents?.open, thresholds.incidentOpen),
       rate: ragAtMost(kpis?.incidents?.rate_per_resident_month, thresholds.incidentRatePerResidentMonth),
       overdue: ragAtMost(
         (kpis?.incidents?.cqc_notifiable_overdue || 0)
@@ -67,6 +69,7 @@ export function buildPortfolioRag(kpis) {
       ),
     }),
     complaints: overallRag({
+      open: ragAtMost(kpis?.complaints?.open, thresholds.complaintOpen),
       rate: ragAtMost(kpis?.complaints?.rate_per_resident_month, thresholds.complaintRatePerResidentMonth),
       overdue: ragAtMost(
         (kpis?.complaints?.ack_overdue || 0) + (kpis?.complaints?.response_overdue || 0),

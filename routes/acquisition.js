@@ -58,11 +58,11 @@ const itemUpdateSchema = z.object({
   evidence_ref: optionalText(500),
   notes: optionalText(5000),
   blockers: optionalText(5000),
-  _version: z.coerce.number().int().nonnegative().optional(),
+  _version: z.coerce.number().int().nonnegative(),
 });
 
 const versionOnlySchema = z.object({
-  _version: z.coerce.number().int().nonnegative().optional(),
+  _version: z.coerce.number().int().nonnegative(),
 });
 
 function actorFromReq(req) {
