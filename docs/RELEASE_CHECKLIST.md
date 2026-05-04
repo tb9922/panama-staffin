@@ -6,14 +6,16 @@ Current expected baseline is documented in
 ## Pre-Deploy
 
 - [ ] All changes committed and pushed
-- [ ] `bash scripts/verify-baseline.sh` confirms the work started from the expected mainline
+- [ ] `scripts/verify-baseline.sh` with VPS variables confirms local, `origin/main`, and VPS all match
 - [ ] `npm run lint` - lint passes
 - [ ] `npm run build` - production build passes
 - [ ] `npm run test:frontend` - frontend-focused suite passes
+- [ ] `npm run test:release` - full release gate passes against a local dev/test database
 - [ ] `npm run test:golden` - golden journey and role matrix pass
 - [ ] `npm run test:e2e` or the agreed targeted smoke slice passes
 - [ ] `npm run test:integration` passes for route, auth, migration, compliance, payroll, HR, GDPR, CQC, incident, or cross-module changes
 - [ ] `npm run audit:routes` - exit 0
+- [ ] `npm run verify:action-backfill`, `npm run verify:v1-operational`, and `npm run test:v1-scale` pass
 - [ ] `npm audit --omit=dev --json` - 0 production vulnerabilities
 - [ ] New migrations reviewed (if any)
 - [ ] `CLAUDE.md` updated if schema/API/test counts changed
@@ -25,7 +27,11 @@ Current expected baseline is documented in
 
 ```bash
 cd /var/www/panama-staffing
-git pull origin main
+EXPECTED_COMMIT=<github-sha>
+git fetch --prune origin main
+git checkout main
+git merge --ff-only "$EXPECTED_COMMIT"
+test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
 npm ci --omit=dev
 npm run build
 node scripts/migrate.js
@@ -44,6 +50,7 @@ pm2 restart panama
 - [ ] Data loads: navigate to Dashboard and one finance/payroll screen, confirm data renders
 - [ ] PM2 status: `pm2 status` shows `online`, no restart loops
 - [ ] Verify backup: `scripts/verify-backup.sh` passes
+- [ ] `scripts/verify-baseline.sh` with VPS variables confirms VPS HEAD is the deployed GitHub SHA
 
 ## Emergency Rollback
 

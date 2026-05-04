@@ -62,7 +62,7 @@ export async function findById(id, homeId, client = pool) {
   return shapeRow(rows[0]);
 }
 
-export async function upsert(homeId, data, actorId = null, client = pool) {
+export async function upsert(homeId, data, actorId = null, client = pool, version = null) {
   const { rows } = await client.query(
     `INSERT INTO outcome_metrics (
        home_id, metric_key, period_start, period_end, numerator, denominator,
@@ -81,6 +81,8 @@ export async function upsert(homeId, data, actorId = null, client = pool) {
        updated_at = NOW(),
        version = outcome_metrics.version + 1,
        deleted_at = NULL
+     WHERE outcome_metrics.deleted_at IS NOT NULL
+        OR ($9::int IS NOT NULL AND outcome_metrics.version = $9)
      RETURNING ${COLS}`,
     [
       homeId,
@@ -91,6 +93,7 @@ export async function upsert(homeId, data, actorId = null, client = pool) {
       data.denominator ?? null,
       data.notes || null,
       actorId,
+      version,
     ],
   );
   return shapeRow(rows[0]);

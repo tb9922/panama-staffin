@@ -250,7 +250,7 @@ export default function AppLayout() {
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div className="sidebar-mobile-overlay hidden md:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="sidebar-mobile-overlay md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}

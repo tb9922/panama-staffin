@@ -21,13 +21,13 @@ tagged `v2026.04.25-hr-ui-compliance-verify`.
 Run:
 
 ```bash
-bash scripts/verify-baseline.sh
+VPS_HOST=178.104.56.116 VPS_USER=root VPS_PATH=/var/www/panama-staffing VPS_SSH_KEY=/c/Users/teddy/.ssh/hetzner_ed25519 bash scripts/verify-baseline.sh
 ```
 
-With VPS verification:
+For an explicitly local-only baseline check:
 
 ```bash
-VPS_HOST=178.104.56.116 VPS_USER=root VPS_PATH=/var/www/panama-staffing VPS_SSH_KEY=/c/Users/teddy/.ssh/hetzner_ed25519 bash scripts/verify-baseline.sh
+BASELINE_ALLOW_VPS_SKIP=1 bash scripts/verify-baseline.sh
 ```
 
 If local, `origin/main`, and VPS do not match, stop and reconcile before making
@@ -52,8 +52,11 @@ npm run test:integration
 npm run test:e2e
 ```
 
-`npm run test:release` runs the broad local gate: lint, build, frontend tests,
-and the full Playwright suite.
+`npm run test:release` runs the broad release gate: lint, build, frontend and
+unit tests, disposable-DB integration tests, route audit, V1 action backfill,
+V1 operational verification, local V1 scale/load, Playwright E2E, UI stress,
+and production dependency audit. The DB-backed gates must point at a local
+dev/test database, never production.
 
 ## Golden Journey Coverage
 

@@ -368,6 +368,37 @@ describe('Finance service hotfixes', () => {
     expect(result.credit_note.total_amount).toBe(-850);
   });
 
+  it('recalculates invoice total and balance when only adjustments change', async () => {
+    const resident = await financeRepo.createResident(homeA, {
+      resident_name: 'Adjustment Recalc Resident',
+      weekly_fee: 1000,
+      created_by: 'admin',
+    });
+    const created = await financeService.createInvoiceWithLines(homeA, {
+      resident_id: resident.id,
+      payer_type: 'resident',
+      payer_name: resident.resident_name,
+      status: 'sent',
+      lines: [{ description: 'Care fees', quantity: 1, unit_price: 1000, amount: 1000, line_type: 'fee' }],
+    }, 'admin');
+    const paid = await financeService.recordPayment(created.id, homeA, {
+      amount: 200,
+      paid_date: '2026-03-15',
+      payment_method: 'bacs',
+    }, 'admin');
+
+    const updated = await financeService.updateInvoiceWithLines(created.id, homeA, {
+      adjustments: -100,
+    }, 'admin', paid.version);
+
+    expect(updated.subtotal).toBe(1000);
+    expect(updated.adjustments).toBe(-100);
+    expect(updated.total_amount).toBe(900);
+    expect(updated.amount_paid).toBe(200);
+    expect(updated.balance_due).toBe(700);
+    expect(updated.lines).toHaveLength(1);
+  });
+
   it('blocks resident deletion while a bed is still occupied', async () => {
     const resident = await financeRepo.createResident(homeA, {
       resident_name: 'Occupied Resident',

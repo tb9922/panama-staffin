@@ -20,11 +20,12 @@
     "test:watch": "vitest",
     "test:integration": "node scripts/run-bash-script.mjs scripts/test-integration.sh",
     "test:ui-stress": "node scripts/run-bash-script.mjs scripts/test-ui-stress.sh",
+    "test:v1-scale": "node scripts/v1-scale-load-check.js --json-out=.review/v1-scale-load-latest.json",
     "test:frontend": "vitest run --config vitest.config.frontend.js",
     "test:frontend:watch": "vitest --config vitest.config.frontend.js",
     "test:e2e": "node scripts/run-bash-script.mjs scripts/test-e2e.sh",
     "test:golden": "playwright test tests/e2e/golden-journey.spec.js tests/e2e/role-matrix.spec.js --project=chromium",
-    "test:release": "npm run lint && npm run build && npm run test:frontend && npm run test:e2e"
+    "test:release": "npm run lint && npm run build && npm run test:frontend && npm run test:ci && npm run test:integration && npm run audit:routes && npm run verify:action-backfill && npm run verify:v1-operational && npm run test:v1-scale && npm run test:e2e && npm run test:ui-stress && npm audit --omit=dev"
   },
   "dependencies": {
     "@sentry/node": "^10.40.0",

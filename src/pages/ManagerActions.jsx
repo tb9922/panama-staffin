@@ -6,6 +6,7 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import Pagination from '../components/Pagination.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -40,6 +41,8 @@ const EMPTY_FORM = {
   evidence_required: false,
   evidence_notes: '',
 };
+
+const PAGE_SIZE = 100;
 
 const LABELS = {
   standalone: 'Standalone',
@@ -187,6 +190,7 @@ export default function ManagerActions() {
   const { confirm, ConfirmDialog } = useConfirm();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saveError, setSaveError] = useState(null);
@@ -202,7 +206,7 @@ export default function ManagerActions() {
     if (!home) return;
     setLoading(true);
     try {
-      const result = await getActionItems(home, filters);
+      const result = await getActionItems(home, { ...filters, limit: PAGE_SIZE, offset });
       setItems(Array.isArray(result.actionItems) ? result.actionItems : []);
       setTotal(result._total || 0);
       setError(null);
@@ -211,7 +215,7 @@ export default function ManagerActions() {
     } finally {
       setLoading(false);
     }
-  }, [home, filters]);
+  }, [home, filters, offset]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -317,7 +321,13 @@ export default function ManagerActions() {
     }
   }
 
-  const setFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
+  const setFilter = (key, value) => {
+    setOffset(0);
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const showingStart = items.length === 0 ? 0 : offset + 1;
+  const showingEnd = offset + items.length;
 
   return (
     <div className={PAGE.container}>
@@ -358,6 +368,9 @@ export default function ManagerActions() {
             <option value="true">Overdue only</option>
           </select>
         </div>
+        <div className="mt-3 text-sm text-[var(--ink-3)]" aria-live="polite">
+          Showing {showingStart}-{showingEnd} of {total} actions
+        </div>
       </div>
 
       <div className={CARD.flush}>
@@ -365,8 +378,9 @@ export default function ManagerActions() {
           items.length === 0 ? (
             <EmptyState title="No actions found" description={total > 0 ? 'Adjust the filters to see more actions.' : 'Create the first manager action for this home.'} actionLabel={canEdit ? 'New Action' : undefined} onAction={canEdit ? openAdd : undefined} />
           ) : (
+            <>
             <div className={TABLE.wrapper}>
-              <table className={TABLE.table}>
+              <table className={`${TABLE.table} min-w-[58rem]`}>
                 <thead className={TABLE.thead}>
                   <tr>
                     <th className={TABLE.th}>Action</th>
@@ -410,6 +424,8 @@ export default function ManagerActions() {
                 </tbody>
               </table>
             </div>
+            <Pagination total={total} limit={PAGE_SIZE} offset={offset} onChange={setOffset} />
+            </>
           )
         )}
       </div>

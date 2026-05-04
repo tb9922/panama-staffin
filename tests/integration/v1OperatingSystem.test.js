@@ -94,6 +94,8 @@ describe('V1 operating-system API foundations', () => {
 
     expect(completed.body.status).toBe('completed');
     expect(completed.body.completed_at).toBeTruthy();
+    expect(completed.body.manager_signed_off_at).toBeNull();
+    expect(completed.body.manager_signed_off_by).toBeNull();
 
     await authed('post', `/api/audit-tasks/${created.body.id}/complete?home=${HOME_A}`)
       .send({ _version: completed.body.version, evidence_notes: 'Trying to complete again.' })
@@ -185,6 +187,43 @@ describe('V1 operating-system API foundations', () => {
 
     expect(created.body.metric_key).toBe('prn_antipsychotic_pct');
     expect(created.body.numerator).toBe(2);
+
+    await authed('post', `/api/outcomes/metrics?home=${HOME_A}`)
+      .send({
+        metric_key: 'prn_antipsychotic_pct',
+        period_start: '2026-04-01',
+        period_end: '2026-04-30',
+        numerator: 3,
+        denominator: 30,
+      })
+      .expect(409);
+
+    await authed('post', `/api/outcomes/metrics?home=${HOME_A}`)
+      .send({
+        metric_key: 'prn_antipsychotic_pct',
+        period_start: '2026-04-01',
+        period_end: '2026-04-30',
+        numerator: 3,
+        denominator: 30,
+        _version: 0,
+      })
+      .expect(409);
+
+    const updated = await authed('post', `/api/outcomes/metrics?home=${HOME_A}`)
+      .send({
+        metric_key: 'prn_antipsychotic_pct',
+        period_start: '2026-04-01',
+        period_end: '2026-04-30',
+        numerator: 3,
+        denominator: 30,
+        notes: 'Monthly governance review updated.',
+        _version: created.body.version,
+      })
+      .expect(201);
+
+    expect(updated.body.id).toBe(created.body.id);
+    expect(updated.body.version).toBe(created.body.version + 1);
+    expect(updated.body.numerator).toBe(3);
 
     const dashboard = await authed('get', `/api/outcomes/dashboard?home=${HOME_A}`).expect(200);
     expect(dashboard.body.derived).toHaveProperty('incidents');

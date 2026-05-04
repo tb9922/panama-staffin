@@ -5,7 +5,7 @@ import { getCqcNotificationDeadline, getCqcNotificationDeadlineKind } from '../s
 
 /* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
 const INCIDENT_COLS = `id, home_id, date, time, location, type, severity, description,
-  person_affected, person_affected_name, staff_involved, immediate_action,
+  person_affected, person_affected_name, resident_id, staff_involved, immediate_action,
   medical_attention, hospital_attendance,
   cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
   cqc_notified, cqc_notified_date, cqc_notified_time, cqc_reference,
@@ -42,6 +42,7 @@ function shapeRow(row) {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
     date: row.date, time: normalizeTimeStr(row.time), location: row.location, type: row.type, severity: row.severity,
     description: row.description, person_affected: row.person_affected, person_affected_name: row.person_affected_name,
+    resident_id: row.resident_id,
     staff_involved: row.staff_involved, immediate_action: row.immediate_action,
     medical_attention: row.medical_attention, hospital_attendance: row.hospital_attendance,
     cqc_notifiable: row.cqc_notifiable, cqc_notification_type: row.cqc_notification_type,
@@ -110,6 +111,7 @@ export async function sync(homeId, incidentsArr, client) {
       inc.description || null,
       inc.person_affected || null,
       inc.person_affected_name || null,
+      inc.resident_id ?? null,
       JSON.stringify(inc.staff_involved || []),
       inc.immediate_action || null,
       inc.medical_attention ?? null,
@@ -163,7 +165,7 @@ export async function sync(homeId, incidentsArr, client) {
     await conn.query(
       `INSERT INTO incidents (
          id, home_id, date, time, location, type, severity, description,
-         person_affected, person_affected_name, staff_involved, immediate_action,
+         person_affected, person_affected_name, resident_id, staff_involved, immediate_action,
          medical_attention, hospital_attendance,
          cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
          cqc_notified, cqc_notified_date, cqc_notified_time, cqc_reference,
@@ -185,6 +187,7 @@ export async function sync(homeId, incidentsArr, client) {
          description               = EXCLUDED.description,
          person_affected           = EXCLUDED.person_affected,
          person_affected_name      = EXCLUDED.person_affected_name,
+         resident_id               = EXCLUDED.resident_id,
          staff_involved            = EXCLUDED.staff_involved,
          immediate_action          = EXCLUDED.immediate_action,
          medical_attention         = EXCLUDED.medical_attention,
@@ -434,6 +437,7 @@ export async function upsert(homeId, data) {
     );
     if (fr.length === 1) {
       await pool.query(`UPDATE incidents SET resident_id = $1 WHERE home_id = $2 AND id = $3`, [fr[0].id, homeId, id]);
+      return findById(id, homeId);
     }
   }
   return rows[0] ? shapeRow(rows[0]) : null;

@@ -236,10 +236,14 @@ export async function countEmergencyOverridesByHome(homeIds, client = pool) {
   const { rows } = await client.query(
     `SELECT a.home_id,
             COUNT(*) FILTER (WHERE a.gap_date >= CURRENT_DATE - INTERVAL '7 days')::int AS attempts_7d,
+            COUNT(*) FILTER (
+              WHERE a.emergency_override = true
+                AND a.gap_date >= CURRENT_DATE - INTERVAL '7 days'
+            )::int AS emergency_overrides_7d,
             (COUNT(DISTINCT s.id) FILTER (
               WHERE a.emergency_override = true
                 AND s.date >= CURRENT_DATE - INTERVAL '7 days'
-            ))::int AS emergency_overrides_7d
+            ))::int AS linked_emergency_override_shifts_7d
        FROM agency_approval_attempts a
        LEFT JOIN agency_shifts s
          ON s.id = a.linked_agency_shift_id

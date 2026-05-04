@@ -61,4 +61,32 @@ describe('portfolio board pack evidence and data quality surfacing', () => {
       })],
     }));
   });
+
+  it('carries board-pack action exception totals and omitted counts', () => {
+    const pack = buildPortfolioBoardPack({
+      generated_at: '2026-05-04T09:00:00.000Z',
+      homes: [{
+        home_id: 1,
+        home_slug: 'oak-house',
+        home_name: 'Oak House',
+        rag: { overall: 'amber', manager_actions: 'amber' },
+        manager_actions: { overdue: 1, escalated_l3_plus: 0 },
+        agency: { emergency_override_pct: 0 },
+      }],
+    }, {
+      rows: [{
+        home_name: 'Oak House',
+        title: 'Overdue non-L3 action',
+        priority: 'high',
+        escalation_level: 1,
+      }],
+      total: 3,
+      omitted: 2,
+    });
+
+    expect(pack.escalated_actions).toHaveLength(1);
+    expect(pack.action_exceptions).toEqual(pack.escalated_actions);
+    expect(pack.action_exception_count).toBe(3);
+    expect(pack.action_exception_omitted_count).toBe(2);
+  });
 });

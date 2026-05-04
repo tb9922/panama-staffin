@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { findOrCreateBySource } from '../../repositories/actionItemRepo.js';
+import {
+  findBoardPackExceptionsByHomeIds,
+  findByHome,
+  findOrCreateBySource,
+  syncBySource,
+} from '../../repositories/actionItemRepo.js';
 
 function actionRow(overrides = {}) {
   return {
@@ -82,5 +87,102 @@ describe('action item repo source creation', () => {
       item: { id: 456, source_action_key: 'emergency_override_review' },
     });
     expect(client.query).toHaveBeenCalledTimes(2);
+  });
+
+  it('syncs existing source actions when upstream agency attempts change', async () => {
+    const existing = actionRow({
+      id: 456,
+      title: 'Review emergency agency override: AG-N',
+      description: 'No linked agency shift recorded',
+      priority: 'high',
+    });
+    const updated = actionRow({
+      id: 456,
+      title: 'Review emergency agency override: AG-N Senior carer',
+      description: 'Linked agency shift: 55',
+      priority: 'medium',
+      version: 2,
+    });
+    const client = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('INSERT INTO action_items')) return { rows: [] };
+        if (sql.includes('UPDATE action_items')) return { rows: [updated], rowCount: 1 };
+        return { rows: [existing] };
+      }),
+    };
+
+    const result = await syncBySource(7, {
+      ...sourceAction(),
+      title: 'Review emergency agency override: AG-N Senior carer',
+      description: 'Linked agency shift: 55',
+      priority: 'medium',
+    }, 99, client);
+
+    expect(result).toMatchObject({
+      created: false,
+      updated: true,
+      item: { id: 456, priority: 'medium', version: 2 },
+    });
+    const updateCall = client.query.mock.calls.find(([sql]) => sql.includes('UPDATE action_items'));
+    expect(updateCall[0]).toContain('version = version + 1');
+    expect(updateCall[1]).toEqual(expect.arrayContaining([
+      'Review emergency agency override: AG-N Senior carer',
+      'Linked agency shift: 55',
+      'medium',
+      99,
+    ]));
+  });
+
+  it('uses assigned user display names for owner labels in action lists', async () => {
+    const client = {
+      query: vi.fn(async () => ({
+        rows: [{
+          ...actionRow({ owner_user_id: 77, owner_name: null, owner_role: null }),
+          owner_display_name: 'Dana Manager',
+          owner_username: 'dana.manager',
+          _total: '1',
+        }],
+      })),
+    };
+
+    const result = await findByHome(7, {}, client);
+
+    expect(result.rows[0]).toMatchObject({
+      owner_user_id: 77,
+      owner_name: 'Dana Manager',
+      owner_label: 'Dana Manager',
+    });
+  });
+
+  it('finds board-pack high-risk and overdue exceptions with omitted counts', async () => {
+    const client = {
+      query: vi.fn(async (sql) => {
+        expect(sql).toContain("ai.priority IN ('high', 'critical')");
+        expect(sql).toContain('ai.due_date < CURRENT_DATE');
+        return {
+          rows: [{
+            ...actionRow({ owner_user_id: 77, owner_name: null, escalation_level: 1 }),
+            home_slug: 'oak-house',
+            home_name: 'Oak House',
+            owner_display_name: 'Dana Manager',
+            owner_username: 'dana.manager',
+            _total: '3',
+          }],
+        };
+      }),
+    };
+
+    const result = await findBoardPackExceptionsByHomeIds([7], 1, client);
+
+    expect(result).toMatchObject({
+      total: 3,
+      omitted: 2,
+      limit: 1,
+      rows: [expect.objectContaining({
+        home_name: 'Oak House',
+        owner_name: 'Dana Manager',
+        escalation_level: 1,
+      })],
+    });
   });
 });

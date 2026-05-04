@@ -6,6 +6,7 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import Pagination from '../components/Pagination.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -36,6 +37,7 @@ const EMPTY_TASK = {
 const FREQUENCIES = ['daily', 'weekly', 'monthly', 'quarterly', 'annual', 'ad_hoc'];
 const STATUSES = ['open', 'completed', 'verified', 'cancelled'];
 const CATEGORIES = ['governance', 'medication', 'infection_control', 'health_safety', 'care_records', 'environment', 'staffing'];
+const PAGE_SIZE = 100;
 
 function hasEvidenceNotes(task) {
   return typeof task?.evidence_notes === 'string' && task.evidence_notes.trim().length > 0;
@@ -152,6 +154,7 @@ export default function AuditCalendar() {
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const [tasks, setTasks] = useState([]);
   const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState({ status: '', category: '' });
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -166,7 +169,7 @@ export default function AuditCalendar() {
     if (!activeHome) return;
     setLoading(true);
     try {
-      const result = await getAuditTasks(activeHome, filters);
+      const result = await getAuditTasks(activeHome, { ...filters, limit: PAGE_SIZE, offset });
       setTasks(Array.isArray(result.tasks) ? result.tasks : []);
       setTotal(result._total || 0);
       setError(null);
@@ -175,7 +178,7 @@ export default function AuditCalendar() {
     } finally {
       setLoading(false);
     }
-  }, [activeHome, filters]);
+  }, [activeHome, filters, offset]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -282,6 +285,14 @@ export default function AuditCalendar() {
     }
   }
 
+  function setFilter(key, value) {
+    setOffset(0);
+    setFilters(current => ({ ...current, [key]: value }));
+  }
+
+  const showingStart = tasks.length === 0 ? 0 : offset + 1;
+  const showingEnd = offset + tasks.length;
+
   return (
     <div className={PAGE.container}>
       <div className={PAGE.header}>
@@ -310,27 +321,30 @@ export default function AuditCalendar() {
         <div className="grid gap-3 md:grid-cols-3">
           <div>
             <label htmlFor={filterStatusId} className={INPUT.label}>Status</label>
-            <select id={filterStatusId} className={INPUT.select} value={filters.status} onChange={e => setFilters(current => ({ ...current, status: e.target.value }))}>
+            <select id={filterStatusId} className={INPUT.select} value={filters.status} onChange={e => setFilter('status', e.target.value)}>
               <option value="">All statuses</option>
               {STATUSES.map(status => <option key={status} value={status}>{titleCase(status)}</option>)}
             </select>
           </div>
           <div>
             <label htmlFor={filterCategoryId} className={INPUT.label}>Category</label>
-            <select id={filterCategoryId} className={INPUT.select} value={filters.category} onChange={e => setFilters(current => ({ ...current, category: e.target.value }))}>
+            <select id={filterCategoryId} className={INPUT.select} value={filters.category} onChange={e => setFilter('category', e.target.value)}>
               <option value="">All categories</option>
               {CATEGORIES.map(category => <option key={category} value={category}>{titleCase(category)}</option>)}
             </select>
           </div>
-          <div className="flex items-end text-sm text-[var(--ink-3)]">{total} tasks</div>
+          <div className="flex items-end text-sm text-[var(--ink-3)]" aria-live="polite">
+            Showing {showingStart}-{showingEnd} of {total} tasks
+          </div>
         </div>
       </div>
 
       <div className={CARD.flush}>
         {loading ? <LoadingState message="Loading audit tasks..." /> : (
           tasks.length === 0 ? <EmptyState title="No audit tasks" description="Scheduled checks will appear here." /> : (
+            <>
             <div className={TABLE.wrapper}>
-              <table className={TABLE.table}>
+              <table className={`${TABLE.table} min-w-[58rem]`}>
                 <thead className={TABLE.thead}>
                   <tr>
                     <th className={TABLE.th}>Task</th>
@@ -370,6 +384,8 @@ export default function AuditCalendar() {
                 </tbody>
               </table>
             </div>
+            <Pagination total={total} limit={PAGE_SIZE} offset={offset} onChange={setOffset} />
+            </>
           )
         )}
       </div>

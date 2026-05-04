@@ -2,12 +2,13 @@ import { pool } from '../db.js';
 import { paginateResult } from '../lib/pagination.js';
 import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
-const COMPLAINT_COLS = 'id, home_id, version, date, raised_by, raised_by_name, category, title, description, acknowledged_date, response_deadline, status, investigator, investigation_notes, resolution, resolution_date, outcome_shared, root_cause, improvements, lessons_learned, reported_by, reported_at, updated_at, created_at, deleted_at';
+const COMPLAINT_COLS = 'id, home_id, version, date, raised_by, raised_by_name, resident_id, category, title, description, acknowledged_date, response_deadline, status, investigator, investigation_notes, resolution, resolution_date, outcome_shared, root_cause, improvements, lessons_learned, reported_by, reported_at, updated_at, created_at, deleted_at';
 
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
     date: row.date, raised_by: row.raised_by, raised_by_name: row.raised_by_name,
+    resident_id: row.resident_id,
     category: row.category, title: row.title, description: row.description,
     acknowledged_date: row.acknowledged_date, response_deadline: row.response_deadline, status: row.status,
     investigator: row.investigator, investigation_notes: row.investigation_notes,
@@ -36,7 +37,7 @@ export async function sync(homeId, arr, client) {
   const incomingIds = arr.map(c => c.id);
 
   // Batch upsert — 20 per-row params (id + 18 fields + reported_at; homeId=$1, updated_at=NOW())
-  const COLS_PER_ROW = 20;
+  const COLS_PER_ROW = 21;
   const CHUNK = Math.floor(65000 / COLS_PER_ROW);
   for (let i = 0; i < arr.length; i += CHUNK) {
     const chunk = arr.slice(i, i + CHUNK);
@@ -46,13 +47,13 @@ export async function sync(homeId, arr, client) {
       const b = j * COLS_PER_ROW + 2; // $1 is homeId
       placeholders.push(
         `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
-        `$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},` +
-        `$${b+12},$${b+13},$${b+14},$${b+15},$${b+16},` +
-        `$${b+17},$${b+18},$${b+19},NOW())`
+        `$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},` +
+        `$${b+13},$${b+14},$${b+15},$${b+16},$${b+17},` +
+        `$${b+18},$${b+19},$${b+20},NOW())`
       );
       values.push(
         c.id, c.date || null, c.raised_by || null, c.raised_by_name || null,
-        c.category || null, c.title || null, c.description || null,
+        c.resident_id ?? null, c.category || null, c.title || null, c.description || null,
         c.acknowledged_date || null, c.response_deadline || null, c.status || null,
         c.investigator || null, c.investigation_notes || null, c.resolution || null,
         c.resolution_date || null, c.outcome_shared ?? null, c.root_cause || null,
@@ -62,7 +63,7 @@ export async function sync(homeId, arr, client) {
     });
     await conn.query(
       `INSERT INTO complaints (
-         id, home_id, date, raised_by, raised_by_name, category, title, description,
+         id, home_id, date, raised_by, raised_by_name, resident_id, category, title, description,
          acknowledged_date, response_deadline, status, investigator, investigation_notes,
          resolution, resolution_date, outcome_shared, root_cause, improvements,
          lessons_learned, reported_by, reported_at, updated_at
@@ -71,6 +72,7 @@ export async function sync(homeId, arr, client) {
          date                = EXCLUDED.date,
          raised_by           = EXCLUDED.raised_by,
          raised_by_name      = EXCLUDED.raised_by_name,
+         resident_id         = EXCLUDED.resident_id,
          category            = EXCLUDED.category,
          title               = EXCLUDED.title,
          description         = EXCLUDED.description,
@@ -116,21 +118,21 @@ export async function upsert(homeId, data) {
   const now = new Date().toISOString();
   const { rows } = await pool.query(
     `INSERT INTO complaints (
-       id, home_id, date, raised_by, raised_by_name, category, title, description,
+       id, home_id, date, raised_by, raised_by_name, resident_id, category, title, description,
        acknowledged_date, response_deadline, status, investigator, investigation_notes,
        resolution, resolution_date, outcome_shared, root_cause, improvements,
        lessons_learned, reported_by, reported_at, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      ON CONFLICT (home_id, id) DO UPDATE SET
-       date=$3,raised_by=$4,raised_by_name=$5,category=$6,title=$7,description=$8,
-       acknowledged_date=$9,response_deadline=$10,status=$11,investigator=$12,
-       investigation_notes=$13,resolution=$14,resolution_date=$15,outcome_shared=$16,
-       root_cause=$17,improvements=$18,lessons_learned=$19,reported_by=$20,
-       reported_at=$21,updated_at=$22,deleted_at=NULL
+       date=$3,raised_by=$4,raised_by_name=$5,resident_id=$6,category=$7,title=$8,description=$9,
+       acknowledged_date=$10,response_deadline=$11,status=$12,investigator=$13,
+       investigation_notes=$14,resolution=$15,resolution_date=$16,outcome_shared=$17,
+       root_cause=$18,improvements=$19,lessons_learned=$20,reported_by=$21,
+       reported_at=$22,updated_at=$23,deleted_at=NULL
      RETURNING ${COMPLAINT_COLS}`,
     [
       id, homeId, data.date || null, data.raised_by || null, data.raised_by_name || null,
-      data.category || null, data.title || null, data.description || null,
+      data.resident_id ?? null, data.category || null, data.title || null, data.description || null,
       data.acknowledged_date || null, data.response_deadline || null, data.status || null,
       data.investigator || null, data.investigation_notes || null, data.resolution || null,
       data.resolution_date || null, data.outcome_shared ?? null, data.root_cause || null,
@@ -149,6 +151,7 @@ export async function upsert(homeId, data) {
         `UPDATE complaints SET resident_id = $1 WHERE home_id = $2 AND id = $3 AND deleted_at IS NULL`,
         [fr[0].id, homeId, id]
       );
+      return findById(id, homeId);
     }
   }
   return rows[0] ? shapeRow(rows[0]) : null;

@@ -23,6 +23,9 @@ import LoadingState from '../components/LoadingState.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 
+const DISABLED_CONTROL_CLASS = 'disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[var(--paper-2)] disabled:text-[var(--ink-3)] disabled:shadow-none';
+const DISABLED_CHECK_CLASS = 'disabled:cursor-not-allowed disabled:opacity-60';
+
 export default function Config() {
   const { canWrite } = useData();
   const canEdit = canWrite('config');
@@ -99,6 +102,7 @@ export default function Config() {
   }
 
   const inputIdFor = (path) => `config-${path.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+  const controlClass = (base, extra = '') => `${base} ${DISABLED_CONTROL_CLASS} ${extra}`.trim();
 
   const Field = ({ label, path, type = 'number', step, unit }) => {
     const id = inputIdFor(path);
@@ -110,12 +114,12 @@ export default function Config() {
             <input id={id} type="number" step={step || 1} value={getVal(path)}
               onChange={e => handleChange(path, e.target.value === '' ? '' : parseFloat(e.target.value))}
               disabled={!canEdit}
-              className={INPUT.sm} />
+              className={controlClass(INPUT.sm)} />
           ) : (
             <input id={id} type={type} value={getVal(path)}
               onChange={e => handleChange(path, e.target.value)}
               disabled={!canEdit}
-              className={INPUT.sm} />
+              className={controlClass(INPUT.sm)} />
           )}
           {unit && <span className="whitespace-nowrap text-xs text-[var(--ink-4)]">{unit}</span>}
         </div>
@@ -186,7 +190,8 @@ export default function Config() {
           <div>
             <label htmlFor="config-care-type" className={INPUT.label}>Care Type</label>
             <select id="config-care-type" value={config.care_type} onChange={e => handleChange('care_type', e.target.value)}
-              className={INPUT.select}>
+              disabled={!canEdit}
+              className={controlClass(INPUT.select)}>
               {['Residential', 'Nursing', 'Dementia', 'Mixed'].map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
@@ -199,7 +204,7 @@ export default function Config() {
               value={config.cycle_start_date_night || ''}
               onInput={e => handleChange('cycle_start_date_night', e.currentTarget.value || undefined)}
               disabled={!canEdit}
-              className={INPUT.sm}
+              className={controlClass(INPUT.sm)}
             />
             <p className="mt-1 text-[11px] text-[var(--ink-3)]">
               Optional. Leave blank to use the day cycle start date.
@@ -290,20 +295,20 @@ export default function Config() {
                   <label htmlFor={`config-mobile-shift-${code}-name`} className={INPUT.label}>Name</label>
                   <input id={`config-mobile-shift-${code}-name`} type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
                     disabled={!canEdit}
-                    className={INPUT.sm} />
+                    className={controlClass(INPUT.sm)} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label htmlFor={`config-mobile-shift-${code}-start`} className={INPUT.label}>Start</label>
                     <input id={`config-mobile-shift-${code}-start`} type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
                       disabled={!canEdit}
-                      className={INPUT.sm} />
+                      className={controlClass(INPUT.sm)} />
                   </div>
                   <div>
                     <label htmlFor={`config-mobile-shift-${code}-end`} className={INPUT.label}>End</label>
                     <input id={`config-mobile-shift-${code}-end`} type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
                       disabled={!canEdit}
-                      className={INPUT.sm} />
+                      className={controlClass(INPUT.sm)} />
                   </div>
                 </div>
                 <div>
@@ -311,7 +316,7 @@ export default function Config() {
                   <input id={`config-mobile-shift-${code}-hours`} type="number" step="0.25" value={shift.hours}
                     onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
                     disabled={!canEdit}
-                    className={INPUT.sm} />
+                    className={controlClass(INPUT.sm)} />
                 </div>
               </div>
             </div>
@@ -334,24 +339,28 @@ export default function Config() {
                   <td className={TABLE.tdMono}><span className="font-bold">{code}</span></td>
                   <td className={TABLE.td}>
                     <input type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
+                      disabled={!canEdit}
                       aria-label={`${code} shift name`}
-                      className={INPUT.sm} />
+                      className={controlClass(INPUT.sm)} />
                   </td>
                   <td className={TABLE.td}>
                     <input type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
+                      disabled={!canEdit}
                       aria-label={`${code} shift start time`}
-                      className={INPUT.sm} />
+                      className={controlClass(INPUT.sm)} />
                   </td>
                   <td className={TABLE.td}>
                     <input type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
+                      disabled={!canEdit}
                       aria-label={`${code} shift end time`}
-                      className={INPUT.sm} />
+                      className={controlClass(INPUT.sm)} />
                   </td>
                   <td className={TABLE.td}>
                     <input type="number" step="0.25" value={shift.hours}
                       onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
+                      disabled={!canEdit}
                       aria-label={`${code} shift hours`}
-                      className={`${INPUT.sm} w-20`} />
+                      className={controlClass(INPUT.sm, 'w-20')} />
                   </td>
                 </tr>
               ))}
@@ -396,14 +405,18 @@ export default function Config() {
           <Field label="Max AL Same Day" path="max_al_same_day" />
         </div>
         <div className="mt-4 space-y-2">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ink-2)]">
+          <label className={`flex items-center gap-2 text-sm text-[var(--ink-2)] ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
             <input type="checkbox" checked={!!config.enforce_onboarding_blocking}
-              onChange={e => handleChange('enforce_onboarding_blocking', e.target.checked)} className="accent-blue-600" />
+              onChange={e => handleChange('enforce_onboarding_blocking', e.target.checked)}
+              disabled={!canEdit}
+              className={`accent-blue-600 ${DISABLED_CHECK_CLASS}`} />
             Warn when rostering staff with incomplete onboarding (DBS, RTW, references, identity)
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ink-2)]">
+          <label className={`flex items-center gap-2 text-sm text-[var(--ink-2)] ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
             <input type="checkbox" checked={!!config.enforce_training_blocking}
-              onChange={e => handleChange('enforce_training_blocking', e.target.checked)} className="accent-blue-600" />
+              onChange={e => handleChange('enforce_training_blocking', e.target.checked)}
+              disabled={!canEdit}
+              className={`accent-blue-600 ${DISABLED_CHECK_CLASS}`} />
             Warn when rostering staff with expired critical training (fire safety, moving &amp; handling, safeguarding)
           </label>
         </div>
@@ -416,8 +429,9 @@ export default function Config() {
             maxLength={6}
             value={config.edit_lock_pin || ''}
             onChange={e => handleChange('edit_lock_pin', e.target.value.replace(/\D/g, ''))}
+            disabled={!canEdit}
             placeholder="Leave blank to disable locking"
-            className={`${INPUT.sm} w-40`}
+            className={controlClass(INPUT.sm, 'w-40')}
           />
           {config.edit_lock_pin && String(config.edit_lock_pin).length < 4 && (
             <p className="mt-1 text-xs text-[var(--alert)]">PIN must be at least 4 digits</p>
@@ -439,7 +453,7 @@ export default function Config() {
                 checked={!!config.clock_in_required}
                 onChange={(e) => handleChange('clock_in_required', e.target.checked)}
                 disabled={!canEdit}
-                className="mt-0.5 accent-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`mt-0.5 accent-blue-600 ${DISABLED_CHECK_CLASS}`}
               />
               <span>
                 <span className="block font-medium text-[var(--ink)]">Enable staff clock-in for this home</span>
@@ -482,7 +496,8 @@ export default function Config() {
             <label htmlFor="config-leave-year-start" className={INPUT.label}>Leave Year Start</label>
             <select id="config-leave-year-start" value={config.leave_year_start || '04-01'}
               onChange={e => handleChange('leave_year_start', e.target.value)}
-              className={INPUT.select}>
+              disabled={!canEdit}
+              className={controlClass(INPUT.select)}>
               <option value="01-01">January (Calendar year)</option>
               <option value="04-01">April (UK tax year)</option>
               <option value="09-01">September (Academic year)</option>
@@ -562,6 +577,7 @@ export default function Config() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-[var(--ink)]">Bank Holidays</h2>
           <button onClick={async () => {
+            if (!canEdit) return;
             setSyncStatus({ loading: true });
             try {
               const region = config.bank_holiday_region || 'england-and-wales';
@@ -573,7 +589,7 @@ export default function Config() {
               setSyncStatus({ error: true, msg: 'Sync failed: ' + err.message });
               setTimeout(() => setSyncStatus(null), 5000);
             }
-          }} disabled={syncStatus?.loading}
+          }} disabled={syncStatus?.loading || !canEdit}
             className={`${BTN.primary} ${BTN.sm}`}>
             {syncStatus?.loading ? 'Syncing...' : 'Sync UK Bank Holidays'}
           </button>
@@ -584,7 +600,8 @@ export default function Config() {
             aria-label="Bank Holiday Region"
             value={config.bank_holiday_region || 'england-and-wales'}
             onChange={(e) => handleChange('bank_holiday_region', e.target.value)}
-            className={INPUT.select}
+            disabled={!canEdit}
+            className={controlClass(INPUT.select)}
           >
             {BANK_HOLIDAY_REGIONS.map((region) => (
               <option key={region.value} value={region.value}>{region.label}</option>
@@ -607,24 +624,26 @@ export default function Config() {
                 <div className="font-medium text-xs">{bh.name}</div>
                 <div className="text-[10px] text-[var(--ink-3)]">{bh.date}</div>
               </div>
-              <button onClick={() => {
+              <button type="button" onClick={() => {
+                if (!canEdit) return;
                 const newBH = [...config.bank_holidays];
                 newBH.splice(i, 1);
                 handleChange('bank_holidays', newBH);
-              }} className="ml-2 text-xs text-[var(--alert)] transition-colors duration-150 hover:brightness-90">X</button>
+              }} disabled={!canEdit} className={`ml-2 text-xs text-[var(--alert)] transition-colors duration-150 hover:brightness-90 ${DISABLED_CHECK_CLASS}`}>X</button>
             </div>
           ))}
         </div>
         <div className="flex gap-3">
-          <input type="date" value={newBhDate} onChange={e => setNewBhDate(e.target.value)} aria-label="New bank holiday date" className={INPUT.sm} />
-          <input type="text" value={newBhName} onChange={e => setNewBhName(e.target.value)} aria-label="New bank holiday name" placeholder="Holiday name" className={`${INPUT.sm} flex-1`} />
-          <button onClick={() => {
+          <input type="date" value={newBhDate} onChange={e => setNewBhDate(e.target.value)} disabled={!canEdit} aria-label="New bank holiday date" className={controlClass(INPUT.sm)} />
+          <input type="text" value={newBhName} onChange={e => setNewBhName(e.target.value)} disabled={!canEdit} aria-label="New bank holiday name" placeholder="Holiday name" className={controlClass(INPUT.sm, 'flex-1')} />
+          <button type="button" onClick={() => {
+            if (!canEdit) return;
             if (newBhDate && newBhName) {
               handleChange('bank_holidays', [...(config.bank_holidays || []), { date: newBhDate, name: newBhName }]);
               setNewBhDate('');
               setNewBhName('');
             }
-          }} className={`${BTN.primary} ${BTN.sm}`}>Add</button>
+          }} disabled={!canEdit} className={`${BTN.primary} ${BTN.sm}`}>Add</button>
         </div>
       </section>
     </div>
@@ -738,7 +757,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
           value={displayPresetId}
           onChange={e => applyPreset(e.target.value)}
           disabled={!canEdit}
-          className={INPUT.sm}
+          className={`${INPUT.sm} ${DISABLED_CONTROL_CLASS}`}
           style={{ minWidth: 220 }}
         >
           <option value="">— Custom —</option>
@@ -790,6 +809,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
           checked={linkComplement}
           onChange={e => setLinkComplement(e.target.checked)}
           disabled={!canEdit}
+          className={DISABLED_CHECK_CLASS}
         />
         Keep A and B complementary (toggling one flips the other)
       </label>

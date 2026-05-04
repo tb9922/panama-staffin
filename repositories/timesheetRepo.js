@@ -38,6 +38,11 @@ function shapeRow(row) {
   };
 }
 
+function rowKey(row) {
+  const date = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10);
+  return `${row.staff_id}\u0000${date}`;
+}
+
 /** All timesheet entries for a home on a specific date. */
 export async function findByHomeAndDate(homeId, date) {
   const { rows } = await pool.query(
@@ -99,10 +104,10 @@ export async function upsert(homeId, entry, client) {
        snap_minutes_saved = EXCLUDED.snap_minutes_saved,
        break_minutes      = EXCLUDED.break_minutes,
        payable_hours      = EXCLUDED.payable_hours,
-       status             = CASE WHEN timesheet_entries.status IN ('locked', 'approved') THEN timesheet_entries.status
-                                 ELSE EXCLUDED.status END,
+       status             = EXCLUDED.status,
        notes              = EXCLUDED.notes,
        updated_at         = NOW()
+     WHERE timesheet_entries.status NOT IN ('approved', 'locked')
      RETURNING ${COLS}`,
     [
       homeId, entry.staff_id, entry.date,
@@ -114,16 +119,17 @@ export async function upsert(homeId, entry, client) {
       entry.status ?? 'pending', entry.notes || null,
     ],
   );
-  return shapeRow(rows[0]);
+  if (rows[0]) return shapeRow(rows[0]);
+  return findByStaffDate(homeId, entry.staff_id, entry.date, conn);
 }
 
-/** Approve a single entry. Cannot approve locked entries. */
+/** Approve a single pending entry. Approved/locked entries are immutable. */
 export async function approve(id, homeId, approvedBy, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE timesheet_entries
      SET status = 'approved', approved_by = $1, approved_at = NOW(), updated_at = NOW()
-     WHERE id = $2 AND home_id = $3 AND status NOT IN ('locked')
+     WHERE id = $2 AND home_id = $3 AND status = 'pending'
      RETURNING ${COLS}`,
     [approvedBy, id, homeId],
   );
@@ -166,13 +172,13 @@ export async function unlockByPeriod(homeId, periodStart, periodEnd, client) {
   return rowCount;
 }
 
-/** Dispute an entry. */
+/** Dispute a pending entry. Approved/locked entries are immutable. */
 export async function dispute(id, homeId, reason, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE timesheet_entries
      SET status = 'disputed', dispute_reason = $1, updated_at = NOW()
-     WHERE id = $2 AND home_id = $3 AND status NOT IN ('locked')
+     WHERE id = $2 AND home_id = $3 AND status = 'pending'
      RETURNING ${COLS}`,
     [reason, id, homeId],
   );
@@ -234,14 +240,24 @@ export async function bulkUpsert(homeId, entries, client) {
        snap_minutes_saved = EXCLUDED.snap_minutes_saved,
        break_minutes      = EXCLUDED.break_minutes,
        payable_hours      = EXCLUDED.payable_hours,
-       status             = CASE WHEN timesheet_entries.status IN ('locked', 'approved') THEN timesheet_entries.status
-                                 ELSE EXCLUDED.status END,
+       status             = EXCLUDED.status,
        notes              = EXCLUDED.notes,
        updated_at         = NOW()
+     WHERE timesheet_entries.status NOT IN ('approved', 'locked')
      RETURNING ${COLS}`,
     params,
   );
-  return rows.map(shapeRow);
+  const resultByKey = new Map(rows.map(row => [rowKey(row), shapeRow(row)]));
+  if (rows.length !== entries.length) {
+    for (const entry of entries) {
+      const key = `${entry.staff_id}\u0000${entry.date}`;
+      if (!resultByKey.has(key)) {
+        const existing = await findByStaffDate(homeId, entry.staff_id, entry.date, conn);
+        if (existing) resultByKey.set(key, existing);
+      }
+    }
+  }
+  return entries.map(entry => resultByKey.get(`${entry.staff_id}\u0000${entry.date}`)).filter(Boolean);
 }
 
 /** Approve all pending entries for a specific staff member within a date range. */

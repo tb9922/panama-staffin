@@ -9,9 +9,11 @@ Use this before each weekly merge from `v1-os` to `main`.
 - `npm run test:ci`
 - `npm run test:integration`
 - `npm run test:e2e`
+- `npm run test:ui-stress`
 - `npm run audit:routes`
 - `npm run verify:action-backfill`
 - `npm run verify:v1-operational`
+- `npm run test:v1-scale`
 - `npm audit --omit=dev`
 
 ## Operational Gates
@@ -22,6 +24,7 @@ Use this before each weekly merge from `v1-os` to `main`.
 - Production upload malware scanning is configured with `UPLOAD_SCAN_COMMAND` and the command is available on the server.
 - Escalation cron is tested with simulated overdue dates.
 - Action-item backfill has `expected = matched` for every legacy source.
+- The V1 scale/load harness runs against a local dev/test database only; never point it at production.
 - Portfolio board pack PDF is generated for a full week and reviewed.
 - Emergency agency override report is reviewed; more than 20% emergency overrides is treated as red.
 - Teddy signs off one feature end-to-end manually each week.

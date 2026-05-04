@@ -7,6 +7,7 @@ import * as auditRepo from '../repositories/auditRepo.js';
 import * as hrRepo from '../repositories/hrRepo.js';
 import { ConflictError, ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
+import { isPathInsideRoot } from '../lib/pathSafety.js';
 import * as authService from './authService.js';
 import logger from '../logger.js';
 
@@ -28,6 +29,32 @@ function anonymisedStaffPrefix(staffId) {
 
 function anonymisedStaffHash(homeId, staffId) {
   return createHash('sha256').update(`${homeId}:${staffId}`).digest('hex').slice(0, 8);
+}
+
+function erasureAttachmentPath(...segments) {
+  const uploadRoot = path.resolve(appConfig.upload.dir);
+  const filePath = path.resolve(path.join(uploadRoot, ...segments.map((segment) => String(segment))));
+  if (!isPathInsideRoot(uploadRoot, filePath)) {
+    throw new ValidationError('Attachment path is outside the upload directory');
+  }
+  return filePath;
+}
+
+export async function deleteErasureAttachmentFiles(filePaths) {
+  for (const filePath of filePaths) {
+    const uploadRoot = path.resolve(appConfig.upload.dir);
+    const resolved = path.resolve(filePath);
+    if (!isPathInsideRoot(uploadRoot, resolved)) {
+      throw new ValidationError('Attachment path is outside the upload directory');
+    }
+    try {
+      await fs.unlink(resolved);
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        throw new Error('Unable to delete attachment file for GDPR erasure');
+      }
+    }
+  }
 }
 
 async function resolveAnonymisedStaffName(client, homeId, staffId, startDate) {
@@ -620,9 +647,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
  * Uses transaction — all-or-nothing. Preserves record structure for CQC auditability.
  */
 export async function executeErasure(staffId, homeId, requestId, username, homeSlug) {
-  const filesToDelete = [];
-
-  const result = await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
     if (requestId) {
       const request = await gdprRepo.findRequestById(requestId, homeId, client);
       if (!request) throw new ValidationError('Data request not found');
@@ -690,16 +715,15 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
       [homeId, staffId]
     );
-    for (const attachment of trainingAttachments) {
-      filesToDelete.push(path.join(
-        appConfig.upload.dir,
+    await deleteErasureAttachmentFiles(trainingAttachments.map((attachment) => (
+      erasureAttachmentPath(
         String(homeId),
         'training',
         String(staffId),
         String(attachment.training_type),
         attachment.stored_name,
-      ));
-    }
+      )
+    )));
     await client.query(
       `DELETE FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
@@ -826,10 +850,10 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
        WHERE a.home_id = $1 AND (${hrCaseCondition})`,
       [homeId, staffId]
     );
-    // Delete physical files from disk
-    for (const att of attachments) {
-      filesToDelete.push(path.join(appConfig.upload.dir, String(homeId), att.case_type, String(att.case_id), att.stored_name));
-    }
+    // Delete physical files before metadata so failures leave the DB reference intact.
+    await deleteErasureAttachmentFiles(attachments.map((att) => (
+      erasureAttachmentPath(String(homeId), att.case_type, String(att.case_id), att.stored_name)
+    )));
     // Delete attachment metadata
     await client.query(
       `DELETE FROM hr_file_attachments a WHERE a.home_id = $1 AND (${hrCaseCondition})`,
@@ -934,16 +958,15 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
       [homeId, staffId]
     );
-    for (const attachment of onboardingAttachments) {
-      filesToDelete.push(path.join(
-        appConfig.upload.dir,
+    await deleteErasureAttachmentFiles(onboardingAttachments.map((attachment) => (
+      erasureAttachmentPath(
         String(homeId),
         'onboarding',
         String(staffId),
         String(attachment.section),
         attachment.stored_name,
-      ));
-    }
+      )
+    )));
     await client.query(
       `DELETE FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
@@ -1139,18 +1162,6 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
 
     return { anonymised: true, staff_id: staffId };
   });
-
-  await Promise.all(filesToDelete.map(async (filePath) => {
-    try {
-      await fs.unlink(filePath);
-    } catch (err) {
-      if (err?.code !== 'ENOENT') {
-        logger.warn({ filePath, err: err?.message }, 'GDPR erasure could not remove attachment after commit');
-      }
-    }
-  }));
-
-  return result;
 }
 
 /**

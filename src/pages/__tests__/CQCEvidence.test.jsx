@@ -282,6 +282,19 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('Learning Culture')).toBeInTheDocument();
   });
 
+  it('expands quality statements from the keyboard', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    const trigger = await screen.findByRole('button', { name: /Learning Culture/i });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    trigger.focus();
+    await user.keyboard('[Enter]');
+
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.getByRole('region', { name: /Learning Culture/i })).toBeInTheDocument();
+  });
+
   it('shows Generate Evidence Pack button', async () => {
     renderAdmin();
     await waitFor(() => {

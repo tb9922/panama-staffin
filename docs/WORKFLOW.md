@@ -2,7 +2,7 @@
 
 ## 1. Confirm Baseline
 
-Run `bash scripts/verify-baseline.sh` before starting a new round. If VPS access is available, include `VPS_HOST`, `VPS_USER`, `VPS_PATH`, and optionally `VPS_SSH_KEY` so local, `origin/main`, and deployed code are compared.
+Run `scripts/verify-baseline.sh` with `VPS_HOST`, `VPS_USER`, `VPS_PATH`, and optionally `VPS_SSH_KEY` before starting a new round so local, `origin/main`, and deployed code are compared. Use `BASELINE_ALLOW_VPS_SKIP=1` only for an explicit local-only check.
 
 The full source-of-truth and release gate lives in [MAINLINE.md](MAINLINE.md).
 

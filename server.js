@@ -204,6 +204,7 @@ app.use('/api/docs/onboarding', onboardingDocsRouter);
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;
 app.get('/readiness', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   if (shuttingDown) return res.status(503).json({ status: 'shutting_down' });
   try {
     await Promise.race([

@@ -31,6 +31,11 @@ describe('shared/evidenceHub helpers', () => {
     expect(canReadRecordAttachmentModule('viewer', 'staff_register')).toBe(true);
   });
 
+  it('gates handover attachments with compliance access, not scheduling access', () => {
+    expect(canReadRecordAttachmentModule('shift_coordinator', 'handover_entry')).toBe(false);
+    expect(canReadRecordAttachmentModule('training_lead', 'handover_entry')).toBe(true);
+  });
+
   it('delete permissions stay source-specific', () => {
     expect(canDeleteEvidenceSource('finance_officer', 'record', 'finance_invoice')).toBe(true);
     expect(canDeleteEvidenceSource('finance_officer', 'record', 'incident')).toBe(false);

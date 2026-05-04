@@ -103,6 +103,9 @@ jobs:
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           ALLOWED_ORIGIN: http://localhost:5173
 
+      - name: Run integration tests
+        run: npm run test:integration
+
       - name: Run frontend component tests
         run: npm run test:frontend
 
@@ -130,6 +133,48 @@ jobs:
           DB_PASSWORD: test_password
           DB_SSL: 'false'
 
+      - name: Run V1 action backfill gate
+        run: npm run verify:action-backfill
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
+
+      - name: Run V1 operational gate
+        run: npm run verify:v1-operational
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
+
+      - name: Run V1 scale/load gate
+        run: npm run test:v1-scale
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
+
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
@@ -147,6 +192,11 @@ jobs:
           ADMIN_PASSWORD_HASH: $2b$12$eZneW/Dpc9DPfyKDaj2TMea7V4.0PK9EmMYXZ/35m5JkIBKKdZd/m
           VIEWER_PASSWORD_HASH: $2b$12$Fqm4wyinj2K9eafKdNoP.OBwyUl14dGqkOWK.XzqW/2JcuF8qmqs6
           ALLOWED_ORIGIN: http://localhost:5173
+
+      - name: Run UI stress tests
+        run: npm run test:ui-stress
+        env:
+          CI: true
 
       - name: Verify backup-restore cycle
         run: |
@@ -207,8 +257,16 @@ jobs:
             fi
             export PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
             cd /var/www/panama-staffing
+            EXPECTED_COMMIT="${{ github.sha }}"
             PREV_COMMIT=$(git rev-parse HEAD)
-            git pull --ff-only origin main
+            git fetch --prune origin main
+            git checkout main
+            git merge --ff-only "$EXPECTED_COMMIT"
+            DEPLOYED_COMMIT=$(git rev-parse HEAD)
+            if [ "$DEPLOYED_COMMIT" != "$EXPECTED_COMMIT" ]; then
+              echo "VPS HEAD $DEPLOYED_COMMIT does not match expected GitHub SHA $EXPECTED_COMMIT"
+              exit 1
+            fi
             npm ci
             npm run build
             find dist -name '*.map' -delete
@@ -228,4 +286,5 @@ jobs:
             sleep 5
             curl -f http://localhost:3001/health || exit 1
             curl -f http://localhost:3001/readiness || exit 1
+            echo "VPS HEAD verified: $DEPLOYED_COMMIT"
             echo "Health check passed — deploy complete: $(date)"

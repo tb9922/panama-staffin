@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { pool } from '../../db.js';
 import * as incidentRepo from '../../repositories/incidentRepo.js';
+import * as financeRepo from '../../repositories/financeRepo.js';
 
 let homeA, homeB;
 const createdIds = [];
@@ -17,6 +18,7 @@ const createdIds = [];
 beforeAll(async () => {
   await pool.query(`DELETE FROM incident_addenda WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'inc-test-%')`).catch(() => {});
   await pool.query(`DELETE FROM incidents WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'inc-test-%')`).catch(() => {});
+  await pool.query(`DELETE FROM finance_residents WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'inc-test-%')`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'inc-test-%'`);
 
   const { rows: [ha] } = await pool.query(
@@ -34,6 +36,8 @@ afterAll(async () => {
     await pool.query('DELETE FROM incident_addenda WHERE incident_id = $1', [id]).catch(() => {});
     await pool.query('DELETE FROM incidents WHERE id = $1', [id]).catch(() => {});
   }
+  if (homeA) await pool.query('DELETE FROM finance_residents WHERE home_id = $1', [homeA]).catch(() => {});
+  if (homeB) await pool.query('DELETE FROM finance_residents WHERE home_id = $1', [homeB]).catch(() => {});
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);
 });
@@ -89,6 +93,32 @@ describe('Incidents: upsert and read', () => {
     expect(Array.isArray(found.staff_involved)).toBe(true);
     expect(found.staff_involved).toContain('S001');
     expect(found.staff_involved).toContain('S002');
+  });
+
+  it('persists and returns resident_id on incident rows', async () => {
+    const resident = await financeRepo.createResident(homeA, {
+      resident_name: 'Incident Resident',
+      weekly_fee: 950,
+      created_by: 'admin',
+    });
+    const created = await incidentRepo.upsert(homeA, {
+      date: '2026-01-18',
+      type: 'fall',
+      severity: 'minor',
+      description: 'Resident-linked incident',
+      person_affected: 'resident',
+      person_affected_name: resident.resident_name,
+      resident_id: resident.id,
+      reported_by: 'test-user',
+    });
+    createdIds.push(created.id);
+
+    const found = await incidentRepo.findById(created.id, homeA);
+    const list = await incidentRepo.findByHome(homeA);
+
+    expect(created.resident_id).toBe(resident.id);
+    expect(found.resident_id).toBe(resident.id);
+    expect(list.rows.find(row => row.id === created.id).resident_id).toBe(resident.id);
   });
 
   it('increments version and updated_at on upsert conflict path', async () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeEndpointPath, resolveAccessLogEndpoint } from '../../middleware/accessLog.js';
+import {
+  classifyAccessLogCategories,
+  normalizeEndpointPath,
+  resolveAccessLogEndpoint,
+} from '../../middleware/accessLog.js';
 
 describe('accessLog helpers', () => {
   it('normalizes obvious ID-like path segments in fallback paths', () => {
@@ -22,5 +26,12 @@ describe('accessLog helpers', () => {
       originalUrl: '/api/cqc-evidence-links/source/handover/123?home=oakwood',
     });
     expect(endpoint).toBe('/api/cqc-evidence-links/source/handover/:id');
+  });
+
+  it('classifies sensitive attachment and staff portal routes', () => {
+    expect(classifyAccessLogCategories('/api/record-attachments/download/42')).toEqual(['attachments', 'personal_data']);
+    expect(classifyAccessLogCategories('/api/me/payslips')).toEqual(['staff_portal', 'personal_data']);
+    expect(classifyAccessLogCategories('/api/scan-intake/7/confirm')).toEqual(['documents', 'personal_data']);
+    expect(classifyAccessLogCategories('/api/docs/onboarding')).toEqual(['hr', 'recruitment', 'documents']);
   });
 });

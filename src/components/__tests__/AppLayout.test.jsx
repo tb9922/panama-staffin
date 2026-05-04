@@ -330,4 +330,18 @@ describe('AppLayout', () => {
     renderLayout();
     expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument();
   });
+
+  it('renders a visible mobile backdrop when the navigation drawer opens', () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+
+    renderLayout();
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+
+    const backdrop = document.querySelector('.sidebar-mobile-overlay');
+    expect(backdrop).toBeInTheDocument();
+    expect(backdrop).not.toHaveClass('hidden');
+
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
+  });
 });

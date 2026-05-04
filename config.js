@@ -43,6 +43,9 @@ function parseFloatEnv(value, fallback) {
 
 // Missing any of these is a fatal startup error.
 const REQUIRED_VARS = ['JWT_SECRET', 'DB_PASSWORD', 'ALLOWED_ORIGIN'];
+if (process.env.NODE_ENV === 'production') {
+  REQUIRED_VARS.push('ENCRYPTION_KEY');
+}
 const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
@@ -60,7 +63,8 @@ if (process.env.ALLOWED_ORIGIN === '*') {
   process.exit(1);
 }
 
-// ENCRYPTION_KEY is optional, but if set it must be exactly 64 hex characters.
+// ENCRYPTION_KEY is required in production; outside production it is optional,
+// but if set it must be exactly 64 hex characters.
 if (process.env.ENCRYPTION_KEY) {
   const validHex = /^[0-9a-fA-F]+$/.test(process.env.ENCRYPTION_KEY);
   if (process.env.ENCRYPTION_KEY.length !== 64 || !validHex) {

@@ -2,25 +2,47 @@ import { pool } from '../db.js';
 import logger from '../logger.js';
 
 // Data category classification by endpoint prefix
-const CATEGORY_MAP = {
-  '/api/data':       ['staff', 'scheduling', 'overrides'],
-  '/api/payroll':    ['payroll', 'tax', 'pension'],
-  '/api/handover':   ['clinical', 'handover'],
-  '/api/audit':      ['audit'],
-  '/api/export':     ['staff', 'scheduling', 'overrides'],
-  '/api/gdpr':       ['gdpr', 'personal_data'],
-  '/api/dashboard':  ['compliance', 'staffing'],
-  '/api/hr':         ['hr', 'employment'],
-  '/api/finance':    ['finance', 'billing'],
-  '/api/incidents':  ['clinical', 'safety'],
-  '/api/complaints': ['clinical', 'feedback'],
-  '/api/training':   ['staff', 'compliance'],
-  '/api/dols':       ['clinical', 'dols'],
-  '/api/webhooks':   ['system', 'integration'],
-};
+const CATEGORY_MAP = [
+  ['/api/record-attachments', ['attachments', 'personal_data']],
+  ['/api/cqc-evidence', ['compliance', 'cqc', 'evidence']],
+  ['/api/evidence-hub', ['compliance', 'evidence']],
+  ['/api/evidence-quality', ['compliance', 'evidence']],
+  ['/api/docs/cqc', ['compliance', 'cqc', 'documents']],
+  ['/api/docs/finance', ['finance', 'documents']],
+  ['/api/docs/maintenance', ['compliance', 'maintenance', 'documents']],
+  ['/api/docs/onboarding', ['hr', 'recruitment', 'documents']],
+  ['/api/care-cert', ['staff', 'training', 'compliance']],
+  ['/api/onboarding', ['hr', 'recruitment', 'identity_checks']],
+  ['/api/import', ['staff', 'import']],
+  ['/api/staff-auth', ['staff', 'authentication']],
+  ['/api/me', ['staff_portal', 'personal_data']],
+  ['/api/staff', ['staff', 'employment']],
+  ['/api/users', ['users', 'access_control']],
+  ['/api/access-reviews', ['access_control', 'gdpr']],
+  ['/api/scan-intake', ['documents', 'personal_data']],
+  ['/api/whistleblowing', ['governance', 'whistleblowing']],
+  ['/api/ropa', ['gdpr', 'ropa']],
+  ['/api/dpia', ['gdpr', 'dpia']],
+  ['/api/clock-in', ['staff', 'attendance']],
+  ['/api/beds', ['residents', 'occupancy']],
+  ['/api/data', ['staff', 'scheduling', 'overrides']],
+  ['/api/payroll', ['payroll', 'tax', 'pension']],
+  ['/api/handover', ['clinical', 'safety', 'handover']],
+  ['/api/audit', ['audit']],
+  ['/api/export', ['staff', 'scheduling', 'overrides']],
+  ['/api/gdpr', ['gdpr', 'personal_data']],
+  ['/api/dashboard', ['compliance', 'staffing']],
+  ['/api/hr', ['hr', 'employment', 'special_category']],
+  ['/api/finance', ['finance', 'billing']],
+  ['/api/incidents', ['clinical', 'safety']],
+  ['/api/complaints', ['clinical', 'feedback']],
+  ['/api/training', ['staff', 'compliance']],
+  ['/api/dols', ['clinical', 'dols']],
+  ['/api/webhooks', ['system', 'integration']],
+];
 
-function classifyCategories(endpoint) {
-  for (const [prefix, cats] of Object.entries(CATEGORY_MAP)) {
+export function classifyAccessLogCategories(endpoint) {
+  for (const [prefix, cats] of CATEGORY_MAP) {
     if (endpoint.startsWith(prefix)) return cats;
   }
   return [];
@@ -77,7 +99,7 @@ export function accessLog(req, res, next) {
     // Skip health checks and login (login is already rate-limited + audited)
     if (requestPath === '/health' || requestPath.startsWith('/api/login')) return;
 
-    const categories = classifyCategories(requestPath);
+    const categories = classifyAccessLogCategories(requestPath);
     const ip = req.ip || req.connection?.remoteAddress || null;
     const endpoint = resolveAccessLogEndpoint(req);
 

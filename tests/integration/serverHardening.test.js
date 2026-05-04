@@ -38,6 +38,11 @@ describe('Health endpoint', () => {
     const res = await request(app).get('/health');
     expect(res.headers['cache-control']).toBe('no-store');
   });
+
+  it('marks the readiness probe as non-cacheable', async () => {
+    const res = await request(app).get('/readiness');
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
 });
 
 // ── Helmet Security Headers ─────────────────────────────────────────────────

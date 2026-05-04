@@ -6,6 +6,7 @@ local_short="$(git rev-parse --short HEAD)"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 tags="$(git tag --points-at HEAD | tr '\n' ' ')"
 warn_only="${BASELINE_WARN_ONLY:-0}"
+allow_vps_skip="${BASELINE_ALLOW_VPS_SKIP:-0}"
 mismatch=0
 
 echo "Local branch: $branch"
@@ -40,7 +41,13 @@ if [[ -n "${VPS_HOST:-}" && -n "${VPS_PATH:-}" ]]; then
     mismatch=1
   fi
 else
-  echo "VPS HEAD:     skipped (set VPS_HOST and VPS_PATH)"
+  if [[ "$allow_vps_skip" == "1" ]]; then
+    echo "VPS HEAD:     skipped (BASELINE_ALLOW_VPS_SKIP=1)"
+  else
+    echo "VPS HEAD:     not checked"
+    echo "ERROR: VPS alignment not checked. Set VPS_HOST and VPS_PATH, or set BASELINE_ALLOW_VPS_SKIP=1 for an explicit local-only baseline." >&2
+    mismatch=1
+  fi
 fi
 
 if [[ "$mismatch" -ne 0 && "$warn_only" != "1" ]]; then

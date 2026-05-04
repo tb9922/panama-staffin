@@ -24,13 +24,13 @@ Last updated: 2026-04-25
 Run:
 
 ```bash
-bash scripts/verify-baseline.sh
+VPS_HOST=your-host VPS_USER=your-user VPS_PATH=/path/to/panama-staffing VPS_SSH_KEY=~/.ssh/id_ed25519 bash scripts/verify-baseline.sh
 ```
 
-With VPS checking enabled:
+For an explicitly local-only check:
 
 ```bash
-VPS_HOST=your-host VPS_USER=your-user VPS_PATH=/path/to/panama-staffing VPS_SSH_KEY=~/.ssh/id_ed25519 bash scripts/verify-baseline.sh
+BASELINE_ALLOW_VPS_SKIP=1 bash scripts/verify-baseline.sh
 ```
 
 For authenticated smoke checks:

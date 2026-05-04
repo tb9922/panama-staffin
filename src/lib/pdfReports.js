@@ -1432,6 +1432,21 @@ function dataQualityDriver(row) {
   return [row.reason, row.fix].filter(Boolean).join(' Fix: ') || '-';
 }
 
+function manualOutcomeDriver(home) {
+  const signals = Array.isArray(home?.outcomes?.manual_metrics) ? home.outcomes.manual_metrics : [];
+  const drivers = signals
+    .filter(signal => signal?.rag === 'red' || signal?.rag === 'amber')
+    .slice(0, 3)
+    .map(signal => `${String(signal.key || '').replace(/_/g, ' ')} ${fmtPortfolioNumber(signal.value)} (${ragLabel(signal.rag)})`);
+  if (drivers.length === 0) return '';
+  return ` Manual: ${drivers.join('; ')}`;
+}
+
+function outcomeDriver(home) {
+  const base = home.outcomes?.rag === 'unknown' ? 'No outcome RAG yet' : ragLabel(home.outcomes?.rag);
+  return `${base}.${manualOutcomeDriver(home)}`.trim();
+}
+
 function addPortfolioFooter(doc) {
   const pageCount = doc.internal.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
@@ -1574,18 +1589,32 @@ export function generatePortfolioBoardPackPDF(pack) {
   });
 
   y = doc.lastAutoTable.finalY + 8;
+  const actionExceptions = pack?.action_exceptions || pack?.escalated_actions || [];
+  const actionExceptionTotal = Number(pack?.action_exception_count ?? actionExceptions.length);
+  const actionRowsShown = Math.min(18, actionExceptions.length);
+  const actionExceptionOmitted = Number(pack?.action_exception_omitted_count || 0)
+    + Math.max(0, actionExceptionTotal - Number(pack?.action_exception_count ?? actionExceptions.length))
+    + Math.max(0, actionExceptions.length - actionRowsShown);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text(
+    `High-risk and overdue action exceptions (${fmtPortfolioNumber(actionRowsShown)} shown${actionExceptionOmitted > 0 ? `, ${fmtPortfolioNumber(actionExceptionOmitted)} omitted` : ''})`,
+    14,
+    y,
+  );
+  y += 4;
   autoTable(doc, {
     tableWidth: 'wrap',
     margin: PORTFOLIO_TABLE_MARGIN,
     startY: y,
     head: [['Home', 'Action', 'Priority', 'Due', 'Escalation', 'Owner']],
-    body: (pack?.escalated_actions || []).slice(0, 18).map(action => [
+    body: actionExceptions.slice(0, 18).map(action => [
       action.home_name,
       action.title,
       action.priority,
       action.due_date || '-',
       `L${action.escalation_level || 0}`,
-      action.owner_name || action.owner_role || '-',
+      action.owner_label || action.owner_name || action.owner_role || '-',
     ]),
     styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
     headStyles: { fillColor: [31, 41, 55] },
@@ -1719,7 +1748,7 @@ export function generatePortfolioBoardPackPDF(pack) {
         ['Data quality', home.data_quality?.unknown_count ? 'unknown' : 'green', home.data_quality?.unknown_count ? `${fmtPortfolioNumber(home.data_quality.unknown_count)} unknown KPI signals: ${(home.data_quality.unknown_signals || []).map(signal => signal.label || signal.key).join(', ')}` : 'All portfolio KPIs calculated'],
         ['Maintenance', home.rag?.maintenance || 'unknown', `${fmtPortfolioNumber(home.maintenance?.overdue)} overdue / ${fmtPortfolioNumber(home.maintenance?.certs_expired)} expired certs`],
         ['Occupancy', home.rag?.occupancy || 'unknown', `${fmtPortfolioPct(home.occupancy?.pct)} occupied / ${fmtPortfolioNumber(home.occupancy?.available)} available`],
-        ['Outcomes', home.rag?.outcomes || 'unknown', home.outcomes?.rag === 'unknown' ? 'No outcome RAG yet' : ragLabel(home.outcomes?.rag)],
+        ['Outcomes', home.rag?.outcomes || 'unknown', outcomeDriver(home)],
       ],
       styles: { fontSize: 8, cellPadding: 2.3, overflow: 'linebreak' },
       headStyles: { fillColor: [31, 41, 55] },

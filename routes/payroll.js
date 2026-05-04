@@ -34,6 +34,7 @@ import * as overrideRepo      from '../repositories/overrideRepo.js';
 import * as payrollService    from '../services/payrollService.js';
 import * as auditService      from '../services/auditService.js';
 import { dispatchEvent }      from '../services/webhookService.js';
+import { ensureAgencyOverrideAction } from '../services/actionItemCreationService.js';
 
 import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
@@ -233,6 +234,10 @@ const hourAdjustmentBodySchema = z.object({
 
 function round2(n) {
   return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function actorId(req) {
+  return req.authDbUser?.id || null;
 }
 
 function agencyAttemptErrorForShift(attempt, shiftData, existingShiftId = null) {
@@ -898,6 +903,7 @@ router.post('/agency/shifts', writeRateLimiter, requireAuth, requireHomeAccess, 
       if (!linked) {
         throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });
       }
+      await ensureAgencyOverrideAction(req.home.id, linked, { actorId: actorId(req) }, client);
       return created;
     });
     await auditService.log('payroll_create', req.home.slug, req.user.username, {
@@ -953,12 +959,16 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
       const updated = await agencyRepo.updateShift(idP.data, req.home.id, data, client, _version);
       if (updated && data.agency_attempt_id) {
         if (existing.agency_attempt_id && existing.agency_attempt_id !== data.agency_attempt_id) {
-          await agencyAttemptRepo.unlinkAgencyShift(existing.agency_attempt_id, req.home.id, updated.id, client);
+          const unlinked = await agencyAttemptRepo.unlinkAgencyShift(existing.agency_attempt_id, req.home.id, updated.id, client);
+          if (unlinked) {
+            await ensureAgencyOverrideAction(req.home.id, unlinked, { actorId: actorId(req) }, client);
+          }
         }
         const linked = await agencyAttemptRepo.linkAgencyShift(data.agency_attempt_id, req.home.id, updated.id, client);
         if (!linked) {
           throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });
         }
+        await ensureAgencyOverrideAction(req.home.id, linked, { actorId: actorId(req) }, client);
       }
       return updated;
     });

@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { findOrCreateBySource } from '../../repositories/actionItemRepo.js';
+import { cancelBySource, syncBySource } from '../../repositories/actionItemRepo.js';
 import {
   buildAgencyOverrideAction,
   ensureAgencyOverrideAction,
 } from '../../services/actionItemCreationService.js';
 
 vi.mock('../../repositories/actionItemRepo.js', () => ({
-  findOrCreateBySource: vi.fn(),
+  cancelBySource: vi.fn(),
+  syncBySource: vi.fn(),
 }));
 
 const TODAY = new Date('2026-05-04T12:00:00Z');
@@ -30,19 +31,31 @@ function emergencyAttempt(overrides = {}) {
 
 describe('action item creation service', () => {
   beforeEach(() => {
-    vi.mocked(findOrCreateBySource).mockReset();
+    vi.mocked(cancelBySource).mockReset();
+    vi.mocked(syncBySource).mockReset();
   });
 
-  it('skips agency attempts that are not emergency overrides', async () => {
+  it('cancels source actions when agency attempts are no longer emergency overrides', async () => {
+    const client = { query: vi.fn() };
+    vi.mocked(cancelBySource).mockResolvedValue({ item: { id: 123, status: 'cancelled' }, cancelled: true });
+
     const result = await ensureAgencyOverrideAction(
       7,
       emergencyAttempt({ emergency_override: false }),
       { actorId: 99, today: TODAY },
-      { query: vi.fn() },
+      client,
     );
 
-    expect(result).toEqual({ item: null, created: false, skipped: true });
-    expect(findOrCreateBySource).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ item: { id: 123, status: 'cancelled' }, created: false, skipped: true, cancelled: true });
+    expect(cancelBySource).toHaveBeenCalledWith(
+      7,
+      'agency_approval_attempt',
+      '42',
+      'emergency_override_review',
+      99,
+      client,
+    );
+    expect(syncBySource).not.toHaveBeenCalled();
   });
 
   it('builds a critical accountable action for override abuse risk', () => {
@@ -70,7 +83,7 @@ describe('action item creation service', () => {
   it('creates through the repo using the stable source key', async () => {
     const client = { query: vi.fn() };
     const item = { id: 123, source_type: 'agency_approval_attempt' };
-    vi.mocked(findOrCreateBySource).mockResolvedValue({ item, created: true });
+    vi.mocked(syncBySource).mockResolvedValue({ item, created: true, updated: false });
 
     const result = await ensureAgencyOverrideAction(
       7,
@@ -79,8 +92,8 @@ describe('action item creation service', () => {
       client,
     );
 
-    expect(result).toEqual({ item, created: true });
-    expect(findOrCreateBySource).toHaveBeenCalledWith(
+    expect(result).toEqual({ item, created: true, updated: false });
+    expect(syncBySource).toHaveBeenCalledWith(
       7,
       expect.objectContaining({
         source_type: 'agency_approval_attempt',
@@ -88,6 +101,7 @@ describe('action item creation service', () => {
         source_action_key: 'emergency_override_review',
         priority: 'medium',
       }),
+      99,
       client,
     );
   });

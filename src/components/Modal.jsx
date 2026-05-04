@@ -93,7 +93,7 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
       aria-labelledby={titleId}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div ref={panelRef} className={`${PANEL_SIZE[size] || PANEL_SIZE.md} relative`}>
+      <div ref={panelRef} className={`${PANEL_SIZE[size] || PANEL_SIZE.md} modal-panel relative`}>
         <button
           type="button"
           onClick={onClose}

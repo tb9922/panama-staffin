@@ -88,10 +88,13 @@ export function buildPortfolioRag(kpis) {
       (kpis?.maintenance?.overdue || 0) + (kpis?.maintenance?.certs_expired || 0),
       thresholds.expiredCertificates,
     ),
-    manager_actions: ragAtMost(
-      (kpis?.manager_actions?.overdue || 0) + (kpis?.manager_actions?.escalated_l3_plus || 0),
-      thresholds.managerActionsOverdue,
-    ),
+    manager_actions: overallRag({
+      overdue: ragAtMost(kpis?.manager_actions?.overdue || 0, thresholds.managerActionsOverdue),
+      escalated_l3_plus: ragAtMost(
+        kpis?.manager_actions?.escalated_l3_plus || 0,
+        thresholds.escalatedActionsL3Plus,
+      ),
+    }),
     occupancy: ragAtLeast(kpis?.occupancy?.pct, thresholds.occupancyPct),
     outcomes: kpis?.outcomes?.rag || RAG.UNKNOWN,
   };

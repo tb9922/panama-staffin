@@ -17,6 +17,14 @@ import {
 } from '../lib/statusTransitions.js';
 
 const router = Router();
+const GDPR_BREACH_AUDIT_SENSITIVE_FIELDS = [
+  'title',
+  'description',
+  'containment_actions',
+  'root_cause',
+  'preventive_measures',
+  'decision_rationale',
+];
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -304,14 +312,15 @@ router.put('/breaches/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     const { version, payload } = splitVersion(parsed.data);
     const result = await gdprService.updateBreach(idP.data, req.home.id, payload, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    const changes = diffFields(existing, result);
+    const changes = diffFields(existing, result, { extraSensitive: GDPR_BREACH_AUDIT_SENSITIVE_FIELDS });
     await auditService.log('gdpr_breach_update', req.home.slug, req.user.username, { id: idP.data, changes });
     // Additional audit entry for ICO decision overrides
     if ('manual_decision' in parsed.data && existing.recommended_ico_notification != null
         && parsed.data.manual_decision !== existing.recommended_ico_notification) {
       await auditService.log('breach_ico_override', req.home.slug, req.user.username, {
         id: idP.data, recommended: existing.recommended_ico_notification,
-        decision: parsed.data.manual_decision, rationale: parsed.data.decision_rationale,
+        decision: parsed.data.manual_decision,
+        rationaleProvided: Boolean(parsed.data.decision_rationale?.trim()),
       });
     }
     res.json(result);

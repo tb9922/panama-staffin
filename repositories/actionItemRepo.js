@@ -16,6 +16,12 @@ const JOIN_COLS = COLS
   .map(col => `ai.${col}`)
   .join(', ');
 
+const JOIN_COLS_WITH_OWNER = `
+  ${JOIN_COLS},
+  NULLIF(u.display_name, '') AS owner_display_name,
+  u.username AS owner_username
+`;
+
 const DATE_FIELDS = new Set(['due_date']);
 const JSON_INT_FIELDS = new Set([
   'id',
@@ -48,17 +54,21 @@ function shapeRow(row) {
     else if (key.endsWith('_at')) shaped[key] = toIsoOrNull(value);
     else shaped[key] = value;
   }
+  if (shaped.owner_user_id != null && !shaped.owner_name) {
+    shaped.owner_name = shaped.owner_display_name || shaped.owner_username || null;
+  }
+  shaped.owner_label = shaped.owner_name || shaped.owner_role || shaped.owner_display_name || shaped.owner_username || null;
   return shaped;
 }
 
 export async function findByHome(homeId, filters = {}, client = pool) {
-  const clauses = ['home_id = $1', 'deleted_at IS NULL'];
+  const clauses = ['ai.home_id = $1', 'ai.deleted_at IS NULL'];
   const params = [homeId];
 
   const addFilter = (column, value) => {
     if (value == null || value === '') return;
     params.push(value);
-    clauses.push(`${column} = $${params.length}`);
+    clauses.push(`ai.${column} = $${params.length}`);
   };
 
   addFilter('status', filters.status);
@@ -67,11 +77,11 @@ export async function findByHome(homeId, filters = {}, client = pool) {
   addFilter('category', filters.category);
   if (filters.owner_user_id != null && filters.owner_user_id !== '') {
     params.push(filters.owner_user_id);
-    clauses.push(`owner_user_id = $${params.length}`);
+    clauses.push(`ai.owner_user_id = $${params.length}`);
   }
   if (filters.overdue === true || filters.overdue === 'true') {
-    clauses.push(`due_date < CURRENT_DATE`);
-    clauses.push(`status NOT IN ('completed', 'verified', 'cancelled')`);
+    clauses.push(`ai.due_date < CURRENT_DATE`);
+    clauses.push(`ai.status NOT IN ('completed', 'verified', 'cancelled')`);
   }
 
   const limit = Math.min(parseInt(filters.limit ?? 100, 10) || 100, 500);
@@ -81,13 +91,14 @@ export async function findByHome(homeId, filters = {}, client = pool) {
   const offsetParam = params.length;
 
   const { rows } = await client.query(
-    `SELECT ${COLS}, COUNT(*) OVER() AS _total
-       FROM action_items
+    `SELECT ${JOIN_COLS_WITH_OWNER}, COUNT(*) OVER() AS _total
+       FROM action_items ai
+       LEFT JOIN users u ON u.id = ai.owner_user_id
       WHERE ${clauses.join(' AND ')}
       ORDER BY
-        CASE priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
-        due_date ASC,
-        id DESC
+        CASE ai.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
+        ai.due_date ASC,
+        ai.id DESC
       LIMIT $${limitParam} OFFSET $${offsetParam}`,
     params
   );
@@ -100,9 +111,10 @@ export async function findByHome(homeId, filters = {}, client = pool) {
 
 export async function findById(id, homeId, client = pool) {
   const { rows } = await client.query(
-    `SELECT ${COLS}
-       FROM action_items
-      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    `SELECT ${JOIN_COLS_WITH_OWNER}
+       FROM action_items ai
+       LEFT JOIN users u ON u.id = ai.owner_user_id
+      WHERE ai.id = $1 AND ai.home_id = $2 AND ai.deleted_at IS NULL`,
     [id, homeId]
   );
   return shapeRow(rows[0]);
@@ -110,13 +122,14 @@ export async function findById(id, homeId, client = pool) {
 
 export async function findBySource(homeId, sourceType, sourceId, sourceActionKey, client = pool) {
   const { rows } = await client.query(
-    `SELECT ${COLS}
-       FROM action_items
-      WHERE home_id = $1
-        AND source_type = $2
-        AND source_id = $3
-        AND source_action_key = $4
-        AND deleted_at IS NULL`,
+    `SELECT ${JOIN_COLS_WITH_OWNER}
+       FROM action_items ai
+       LEFT JOIN users u ON u.id = ai.owner_user_id
+      WHERE ai.home_id = $1
+        AND ai.source_type = $2
+        AND ai.source_id = $3
+        AND ai.source_action_key = $4
+        AND ai.deleted_at IS NULL`,
     [homeId, sourceType, sourceId, sourceActionKey]
   );
   return shapeRow(rows[0]);
@@ -208,6 +221,64 @@ export async function findOrCreateBySource(homeId, data, client = pool) {
     client
   );
   return { item: existing, created: false };
+}
+
+const SOURCE_SYNC_COLUMNS = [
+  'title',
+  'description',
+  'category',
+  'priority',
+  'owner_user_id',
+  'owner_name',
+  'owner_role',
+  'due_date',
+  'evidence_required',
+  'evidence_notes',
+  'escalation_level',
+];
+
+const CLOSED_STATUSES = new Set(['completed', 'verified', 'cancelled']);
+
+function valuesDiffer(left, right) {
+  if (left == null && right == null) return false;
+  return String(left ?? '') !== String(right ?? '');
+}
+
+export async function syncBySource(homeId, data, updatedBy = null, client = pool) {
+  const result = await findOrCreateBySource(homeId, data, client);
+  if (result.created || !result.item || CLOSED_STATUSES.has(result.item.status)) {
+    return { ...result, updated: false };
+  }
+
+  const updates = {};
+  for (const key of SOURCE_SYNC_COLUMNS) {
+    if (data[key] !== undefined && valuesDiffer(result.item[key], data[key])) {
+      updates[key] = data[key];
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return { ...result, updated: false };
+  }
+
+  const item = await update(result.item.id, homeId, updates, null, updatedBy, client);
+  return { item, created: false, updated: true };
+}
+
+export async function cancelBySource(homeId, sourceType, sourceId, sourceActionKey, updatedBy = null, client = pool) {
+  const existing = await findBySource(homeId, sourceType, String(sourceId), sourceActionKey, client);
+  if (!existing || CLOSED_STATUSES.has(existing.status)) {
+    return { item: existing, cancelled: false };
+  }
+  const item = await update(
+    existing.id,
+    homeId,
+    { status: 'cancelled', escalation_level: 0 },
+    null,
+    updatedBy,
+    client,
+  );
+  return { item, cancelled: Boolean(item) };
 }
 
 const ALLOWED_UPDATE_COLUMNS = new Set([
@@ -394,9 +465,10 @@ export async function findEscalatedByHomeIds(homeIds, limit = 25, client = pool)
   if (!Array.isArray(homeIds) || homeIds.length === 0) return [];
   const cappedLimit = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 100);
   const { rows } = await client.query(
-    `SELECT ${JOIN_COLS}, h.slug AS home_slug, COALESCE(h.config->>'home_name', h.name) AS home_name
+    `SELECT ${JOIN_COLS_WITH_OWNER}, h.slug AS home_slug, COALESCE(h.config->>'home_name', h.name) AS home_name
        FROM action_items ai
        JOIN homes h ON h.id = ai.home_id
+       LEFT JOIN users u ON u.id = ai.owner_user_id
       WHERE ai.home_id = ANY($1::int[])
         AND ai.deleted_at IS NULL
         AND ai.status NOT IN ('completed', 'verified', 'cancelled')
@@ -413,4 +485,46 @@ export async function findEscalatedByHomeIds(homeIds, limit = 25, client = pool)
     home_slug: row.home_slug,
     home_name: row.home_name,
   }));
+}
+
+export async function findBoardPackExceptionsByHomeIds(homeIds, limit = 50, client = pool) {
+  if (!Array.isArray(homeIds) || homeIds.length === 0) {
+    return { rows: [], total: 0, omitted: 0, limit: 0 };
+  }
+  const cappedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 250);
+  const { rows } = await client.query(
+    `SELECT ${JOIN_COLS_WITH_OWNER}, h.slug AS home_slug,
+            COALESCE(h.config->>'home_name', h.name) AS home_name,
+            COUNT(*) OVER() AS _total
+       FROM action_items ai
+       JOIN homes h ON h.id = ai.home_id
+       LEFT JOIN users u ON u.id = ai.owner_user_id
+      WHERE ai.home_id = ANY($1::int[])
+        AND ai.deleted_at IS NULL
+        AND ai.status NOT IN ('completed', 'verified', 'cancelled')
+        AND (
+          ai.due_date < CURRENT_DATE
+          OR ai.priority IN ('high', 'critical')
+          OR ai.escalation_level >= 3
+        )
+      ORDER BY
+        CASE ai.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
+        CASE WHEN ai.due_date < CURRENT_DATE THEN 0 ELSE 1 END,
+        ai.due_date ASC,
+        ai.escalation_level DESC,
+        ai.id DESC
+      LIMIT $2`,
+    [homeIds, cappedLimit]
+  );
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return {
+    rows: rows.map(({ _total, ...row }) => ({
+      ...shapeRow(row),
+      home_slug: row.home_slug,
+      home_name: row.home_name,
+    })),
+    total,
+    omitted: Math.max(0, total - rows.length),
+    limit: cappedLimit,
+  };
 }

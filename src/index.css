@@ -359,8 +359,23 @@ button, a, input, select, textarea {
 
   /* Make modals full-width on mobile */
   .max-w-sm { max-width: calc(100vw - 2rem) !important; }
+  .max-w-xl { max-width: calc(100vw - 2rem) !important; }
   .max-w-md { max-width: calc(100vw - 2rem) !important; }
   .max-w-lg { max-width: calc(100vw - 2rem) !important; }
+  .max-w-2xl { max-width: calc(100vw - 2rem) !important; }
+  .max-w-3xl { max-width: calc(100vw - 2rem) !important; }
+  .max-w-4xl { max-width: calc(100vw - 2rem) !important; }
+  .max-w-5xl { max-width: calc(100vw - 2rem) !important; }
+  .max-w-6xl { max-width: calc(100vw - 2rem) !important; }
+
+  .modal-panel {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
+    margin-left: 0.5rem !important;
+    margin-right: 0.5rem !important;
+    overflow-x: auto;
+  }
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

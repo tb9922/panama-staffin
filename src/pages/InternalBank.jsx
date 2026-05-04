@@ -99,16 +99,16 @@ export default function InternalBank() {
       </div>
 
       {error && <ErrorState title="Internal bank unavailable" message={error} onRetry={runSearch} />}
-      {loading && <LoadingState label="Checking internal bank..." />}
+      {loading && <LoadingState message="Checking internal bank..." />}
 
       {!loading && !error && payload && candidates.length === 0 && (
-        <EmptyState title="No candidates found" message="No matching internal-bank staff were available for this search." />
+        <EmptyState title="No candidates found" description="No matching internal-bank staff were available for this search." />
       )}
 
       {!loading && !error && candidates.length > 0 && (
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
-            <table className={TABLE.table}>
+            <table className={`${TABLE.table} min-w-[52rem]`}>
               <thead className={TABLE.thead}>
                 <tr>
                   <th className={TABLE.th}>Staff</th>

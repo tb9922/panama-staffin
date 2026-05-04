@@ -7,7 +7,7 @@ export const RECORD_ATTACHMENT_MODULES = [
   { id: 'maintenance', label: 'Maintenance', permissionModule: 'compliance', pagePath: '/maintenance' },
   { id: 'bed', label: 'Bed', permissionModule: 'finance', pagePath: '/beds' },
   { id: 'budget_month', label: 'Budget', permissionModule: 'finance', pagePath: '/budget' },
-  { id: 'handover_entry', label: 'Handover', permissionModule: 'scheduling', pagePath: '/handover' },
+  { id: 'handover_entry', label: 'Handover', permissionModule: 'compliance', pagePath: '/handover' },
   { id: 'payroll_run', label: 'Payroll Run', permissionModule: 'payroll', pagePath: '/payroll' },
   { id: 'schedule_override', label: 'Schedule Override', permissionModule: 'scheduling', pagePath: '/day' },
   { id: 'investigation_meeting', label: 'Investigation Meeting', permissionModule: 'hr', pagePath: '/hr/disciplinary' },

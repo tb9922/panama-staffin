@@ -145,6 +145,15 @@ describe('Modal', () => {
     expect(panel).toHaveClass('panel');
   });
 
+  it('adds the shared mobile sizing hook to the panel', () => {
+    render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Responsive Modal">
+        <p>Content</p>
+      </Modal>
+    );
+    expect(screen.getByRole('dialog').firstChild).toHaveClass('modal-panel');
+  });
+
   it('does not try to refocus a detached trigger element when closing', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);

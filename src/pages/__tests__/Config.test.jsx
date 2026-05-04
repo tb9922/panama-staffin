@@ -327,4 +327,16 @@ describe('Config', () => {
     expect(screen.getByRole('option', { name: 'Dementia' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Mixed' })).toBeInTheDocument();
   });
+
+  it('disables editable settings controls for read-only roles', async () => {
+    setupViewerMocks();
+    renderWithProviders(<Config />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+
+    expect(screen.getByLabelText('Care Type')).toBeDisabled();
+    expect(screen.getByLabelText('E shift name')).toBeDisabled();
+    expect(screen.getByLabelText('Bank Holiday Region')).toBeDisabled();
+    expect(screen.getByLabelText('New bank holiday name')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Sync UK Bank Holidays/i })).toBeDisabled();
+  });
 });

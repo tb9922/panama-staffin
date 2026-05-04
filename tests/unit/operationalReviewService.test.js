@@ -83,6 +83,19 @@ function reviewRows() {
     ],
     signOff: [
       {
+        source_id: 54,
+        home_id: 1,
+        home_slug: 'amberwood',
+        home_name: 'Amberwood',
+        source_kind: 'audit_task',
+        title: 'Completed audit needs manager sign-off',
+        due_date: '2026-05-01',
+        completed_at: '2026-05-02T09:00:00Z',
+        review_at: '2026-05-02T09:00:00Z',
+        owner_display_name: 'Dana Manager',
+        _type_total: '2',
+      },
+      {
         source_id: 55,
         home_id: 2,
         home_slug: 'birch-house',
@@ -156,13 +169,13 @@ describe('operational review service', () => {
     const result = await getOperationalReviewQueueForUser({ username: 'manager', limit: 20 }, client);
 
     expect(result.homes.map(home => home.slug)).toEqual(['amberwood', 'birch-house']);
-    expect(result.summary.total).toBe(3);
+    expect(result.summary.total).toBe(4);
     expect(result.summary.by_type).toMatchObject({
       overdue_escalation: 1,
       emergency_agency_override: 0,
       unverified_completed_action: 1,
       evidence_missing: 1,
-      manager_sign_off_required: 0,
+      manager_sign_off_required: 1,
     });
 
     const agency = result.items.find(item => item.type === 'emergency_agency_override');
@@ -171,6 +184,13 @@ describe('operational review service', () => {
     const overdue = result.items.find(item => item.type === 'overdue_escalation');
     expect(overdue.link_target).toMatchObject({ path: '/actions', module: 'governance', home_slug: 'amberwood' });
     expect(overdue.meta.escalation_level).toBe(3);
+
+    const managerSignOff = result.items.find(item => item.type === 'manager_sign_off_required');
+    expect(managerSignOff).toMatchObject({
+      title: 'Completed audit needs manager sign-off',
+      actionable_label: 'Manager sign-off required',
+      link_target: { path: '/audit-calendar', module: 'governance', home_slug: 'amberwood' },
+    });
   });
 
   it('applies type and severity filters after collecting scoped queues', async () => {

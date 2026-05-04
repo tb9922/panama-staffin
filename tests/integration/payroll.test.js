@@ -978,6 +978,29 @@ describe('Agency — /agency', () => {
         [homeAId, sourceId],
       );
       expect(actionRows.rowCount).toBe(1);
+
+      const shift = await adminPost(`/agency/shifts?home=${homeASlug}`, {
+        agency_id: providerId,
+        date: '2099-06-04',
+        shift_code: 'AG-E',
+        hours: 8,
+        hourly_rate: 22,
+        agency_attempt_id: created.body.id,
+      }).expect(201);
+
+      actionRows = await pool.query(
+        `SELECT priority, description
+           FROM action_items
+          WHERE home_id = $1
+            AND source_type = 'agency_approval_attempt'
+            AND source_id = $2
+            AND source_action_key = 'emergency_override_review'
+            AND deleted_at IS NULL`,
+        [homeAId, sourceId],
+      );
+      expect(actionRows.rowCount).toBe(1);
+      expect(actionRows.rows[0].priority).toBe('medium');
+      expect(actionRows.rows[0].description).toContain(`Linked agency shift: ${shift.body.id}`);
     });
 
     it('GET filters agency attempts by emergency override state', async () => {

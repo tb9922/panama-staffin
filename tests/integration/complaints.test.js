@@ -11,6 +11,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { pool } from '../../db.js';
 import * as complaintRepo from '../../repositories/complaintRepo.js';
 import * as surveyRepo from '../../repositories/complaintSurveyRepo.js';
+import * as financeRepo from '../../repositories/financeRepo.js';
 
 let homeA, homeB;
 const complaintIds = [];
@@ -19,6 +20,7 @@ const surveyIds = [];
 beforeAll(async () => {
   await pool.query(`DELETE FROM complaint_surveys WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'cmp-test-%')`).catch(() => {});
   await pool.query(`DELETE FROM complaints WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'cmp-test-%')`).catch(() => {});
+  await pool.query(`DELETE FROM finance_residents WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'cmp-test-%')`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'cmp-test-%'`);
 
   const { rows: [ha] } = await pool.query(
@@ -38,6 +40,8 @@ afterAll(async () => {
   for (const id of complaintIds) {
     await pool.query('DELETE FROM complaints WHERE id = $1', [id]).catch(() => {});
   }
+  if (homeA) await pool.query('DELETE FROM finance_residents WHERE home_id = $1', [homeA]).catch(() => {});
+  if (homeB) await pool.query('DELETE FROM finance_residents WHERE home_id = $1', [homeB]).catch(() => {});
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);
 });
@@ -80,6 +84,32 @@ describe('Complaints: create and read', () => {
   it('blocks cross-home read', async () => {
     const found = await complaintRepo.findById(cmpId, homeB);
     expect(found).toBeNull();
+  });
+
+  it('persists and returns resident_id on complaint rows', async () => {
+    const resident = await financeRepo.createResident(homeA, {
+      resident_name: 'Complaint Resident',
+      weekly_fee: 900,
+      created_by: 'admin',
+    });
+    const created = await complaintRepo.upsert(homeA, {
+      date: '2026-01-20',
+      raised_by: 'resident',
+      raised_by_name: resident.resident_name,
+      resident_id: resident.id,
+      category: 'care-quality',
+      title: 'Resident-linked complaint',
+      status: 'open',
+      reported_by: 'admin',
+    });
+    complaintIds.push(created.id);
+
+    const found = await complaintRepo.findById(created.id, homeA);
+    const list = await complaintRepo.findByHome(homeA);
+
+    expect(created.resident_id).toBe(resident.id);
+    expect(found.resident_id).toBe(resident.id);
+    expect(list.rows.find(row => row.id === created.id).resident_id).toBe(resident.id);
   });
 });
 

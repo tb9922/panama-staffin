@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { denyHomeRoles, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
+import * as financeRepo from '../repositories/financeRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
@@ -61,6 +62,16 @@ const surveyUpdateSchema = surveyBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
+async function validateResidentId(homeId, residentId, res) {
+  if (residentId == null) return true;
+  const resident = await financeRepo.findResidentById(residentId, homeId);
+  if (!resident) {
+    res.status(400).json({ error: 'Resident does not exist for this home' });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/complaints?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -93,6 +104,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveC
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['improvements'], 'complaints')) return;
+    if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
     const { id: _id, ...complaintBody } = parsed.data;
     const complaint = await complaintRepo.upsert(req.home.id, { ...complaintBody, reported_by: req.user.username });
@@ -111,6 +123,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiv
     // Only send fields that were actually provided in the request body
     const updates = definedWithoutVersion(parsed.data);
     if (rejectLegacyActionWriteIfFrozen(res, updates, ['improvements'], 'complaints')) return;
+    if (!await validateResidentId(req.home.id, updates.resident_id, res)) return;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await complaintRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });

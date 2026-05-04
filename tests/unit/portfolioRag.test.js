@@ -86,6 +86,26 @@ describe('portfolio RAG thresholds', () => {
     expect(rag.complaints).toBe(RAG.RED);
   });
 
+  it('forces manager actions red when L3+ escalations are open', () => {
+    const rag = buildPortfolioRag({
+      staffing: { gaps_per_100_planned_shifts: 0 },
+      agency: { emergency_override_pct: 0 },
+      training: { compliance_pct: 100 },
+      incidents: { open: 0, rate_per_resident_month: 0, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
+      complaints: { open: 0, rate_per_resident_month: 0, ack_overdue: 0, response_overdue: 0 },
+      audits: { overdue: 0 },
+      supervisions: { overdue: 0 },
+      cqc_evidence: { open_gaps: 0 },
+      maintenance: { overdue: 0, certs_expired: 0 },
+      manager_actions: { overdue: 0, escalated_l3_plus: 1 },
+      occupancy: { pct: 100 },
+      outcomes: { rag: RAG.GREEN },
+    });
+
+    expect(rag.manager_actions).toBe(RAG.RED);
+    expect(rag.overall).toBe(RAG.RED);
+  });
+
   it('keeps unknown coverage visible in the overall RAG', () => {
     const rag = buildPortfolioRag({
       staffing: { gaps_per_100_planned_shifts: null },

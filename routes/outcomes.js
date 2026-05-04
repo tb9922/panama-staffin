@@ -18,6 +18,7 @@ const metricSchema = z.object({
   numerator: z.number().nullable().optional(),
   denominator: z.number().nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
+  _version: z.number().int().nonnegative().optional(),
 });
 
 const metricUpdateSchema = metricSchema.partial().extend({
@@ -64,7 +65,9 @@ router.post('/metrics', writeRateLimiter, requireAuth, requireHomeAccess, requir
     if (parsed.data.period_end < parsed.data.period_start) {
       return res.status(400).json({ error: 'Period end must be on or after period start' });
     }
-    const metric = await outcomeMetricRepo.upsert(req.home.id, parsed.data, actorId(req));
+    const { version, payload } = splitVersion(parsed.data);
+    const metric = await outcomeMetricRepo.upsert(req.home.id, payload, actorId(req), undefined, version);
+    if (metric === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('outcome_metric_upsert', req.home.slug, req.user.username, { id: metric.id, metric_key: metric.metric_key });
     res.status(201).json(metric);
   } catch (err) { next(err); }

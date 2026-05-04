@@ -31,6 +31,7 @@ async function cleanup() {
   const homeIds = rows.map(row => row.id);
   for (const homeId of homeIds) {
     await pool.query(`DELETE FROM action_items WHERE home_id = $1`, [homeId]).catch(() => {});
+    await pool.query(`DELETE FROM outcome_metrics WHERE home_id = $1`, [homeId]).catch(() => {});
     await pool.query(`DELETE FROM agency_shifts WHERE home_id = $1`, [homeId]).catch(() => {});
     await pool.query(`DELETE FROM agency_approval_attempts WHERE home_id = $1`, [homeId]).catch(() => {});
     await pool.query(`DELETE FROM agency_providers WHERE home_id = $1`, [homeId]).catch(() => {});
@@ -83,6 +84,15 @@ beforeAll(async () => {
     `INSERT INTO audit_tasks (home_id, title, category, frequency, due_date, evidence_required, status)
      VALUES ($1, 'Overdue audit calendar task', 'governance', 'weekly', CURRENT_DATE - INTERVAL '1 day', true, 'open')`,
     [homeBId]
+  );
+  await pool.query(
+    `INSERT INTO outcome_metrics (
+       home_id, metric_key, period_start, period_end, numerator, denominator, notes
+     ) VALUES (
+       $1, 'pressure_sores_new', CURRENT_DATE - INTERVAL '27 days', CURRENT_DATE, 2, NULL,
+       'Manual pressure-sore metric should drive portfolio outcomes'
+     )`,
+    [homeAId]
   );
 
   const { rows: [provider] } = await pool.query(
@@ -149,7 +159,12 @@ describe('portfolio KPI API', () => {
     expect(homeA.staffing.gaps_per_100_planned_shifts).toBe(100);
     expect(homeA.rag.staffing).toBe('red');
     expect(homeA.agency.shifts_28d).toBe(1);
+    expect(homeA.agency.agency_attempts_7d).toBe(2);
+    expect(homeA.agency.emergency_overrides_7d).toBe(2);
     expect(homeA.agency.emergency_override_pct).toBe(100);
+    expect(homeA.outcomes.manual_rag).toBe('red');
+    expect(homeA.outcomes.pressure_sores_new_28d).toBe(2);
+    expect(homeA.rag.outcomes).toBe('red');
     expect(homeA.rag.manager_actions).toBe('amber');
     expect(homeA.rag).toHaveProperty('overall');
 
@@ -189,6 +204,14 @@ describe('portfolio KPI API', () => {
     expect(res.body.homes.map(home => home.home_slug)).not.toContain(HOME_C);
     expect(res.body.weakest_homes.length).toBeGreaterThan(0);
     expect(res.body.agency_pressure.find(row => row.home_slug === HOME_A).emergency_override_pct).toBe(100);
+    expect(res.body.action_exceptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        home_slug: HOME_A,
+        title: 'Overdue portfolio action',
+        escalation_level: 1,
+      }),
+    ]));
+    expect(res.body.action_exception_count).toBeGreaterThanOrEqual(1);
     expect(res.body.data_quality_issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ home_slug: HOME_B, key: 'staffing', route: '/settings' }),
     ]));

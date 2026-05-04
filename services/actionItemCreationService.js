@@ -61,6 +61,20 @@ export function buildAgencyOverrideAction(attempt, { actorId = null, today = new
 
 export async function ensureAgencyOverrideAction(homeId, attempt, options = {}, client) {
   const action = buildAgencyOverrideAction(attempt, options);
-  if (!action) return { item: null, created: false, skipped: true };
-  return actionItemRepo.findOrCreateBySource(homeId, action, client);
+  if (!action) {
+    if (attempt?.id == null) return { item: null, created: false, skipped: true };
+    return {
+      ...(await actionItemRepo.cancelBySource(
+        homeId,
+        'agency_approval_attempt',
+        String(attempt.id),
+        AGENCY_OVERRIDE_ACTION_KEY,
+        options.actorId ?? null,
+        client,
+      )),
+      created: false,
+      skipped: true,
+    };
+  }
+  return actionItemRepo.syncBySource(homeId, action, options.actorId ?? null, client);
 }

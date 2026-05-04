@@ -784,13 +784,22 @@ function CQCEvidenceInner({ data }) {
               const autoCount = ev?.autoEvidence?.length || 0;
               const manualCount = ev?.manualEvidence?.length || 0;
               const narrativeDraft = getNarrativeDraft(qs.id);
+              const statementDomId = String(qs.id).replace(/[^a-z0-9_-]/gi, '-');
+              const buttonId = `cqc-statement-button-${statementDomId}`;
+              const panelId = `cqc-statement-panel-${statementDomId}`;
 
               return (
                 <div key={qs.id} className={CARD.padded}>
-                  <div className="flex cursor-pointer flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
-                    onClick={() => setExpandedStatement(isExpanded ? null : qs.id)}>
+                  <button
+                    id={buttonId}
+                    type="button"
+                    className="flex w-full cursor-pointer flex-col gap-3 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 focus:ring-offset-[var(--paper)] sm:flex-row sm:items-start sm:justify-between"
+                    aria-expanded={isExpanded}
+                    aria-controls={panelId}
+                    onClick={() => setExpandedStatement(isExpanded ? null : qs.id)}
+                  >
                     <div className="flex min-w-0 items-start gap-3">
-                      <svg className="h-5 w-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                      <svg className="h-5 w-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d={qs.icon} />
                       </svg>
                       <div className="min-w-0">
@@ -809,12 +818,12 @@ function CQCEvidenceInner({ data }) {
                           {ae.value}{ae.unit}
                         </span>
                       ))}
-                      <span className="text-gray-400 text-xs">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                      <span className="text-gray-400 text-xs" aria-hidden="true">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                     </div>
-                  </div>
+                  </button>
 
                   {isExpanded && (
-                    <div className="mt-3 border-t border-gray-100 pt-3">
+                    <div id={panelId} role="region" aria-labelledby={buttonId} className="mt-3 border-t border-gray-100 pt-3">
                       <p className="text-xs text-gray-500 mb-3">{qs.description}</p>
                       {readiness && (
                         <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -878,13 +887,14 @@ function CQCEvidenceInner({ data }) {
                                 {canEdit && (
                                   <div className="flex shrink-0 gap-2 sm:ml-2">
                                     <button
+                                      type="button"
                                       onClick={(e) => { e.stopPropagation(); openEditEvidence(me); }}
                                       disabled={savingEvidence}
                                       className="text-xs text-blue-500 hover:text-blue-700"
                                     >
                                       Edit
                                     </button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
                                       disabled={savingEvidence}
                                       className="text-xs text-red-400 hover:text-red-600">Remove</button>
                                   </div>
@@ -966,6 +976,7 @@ function CQCEvidenceInner({ data }) {
                           {canEdit ? (
                             <div className="flex justify-end">
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleSaveNarrative(qs.id);
@@ -985,7 +996,7 @@ function CQCEvidenceInner({ data }) {
                           <LoadingState message="Loading evidence..." compact />
                         </div>
                       ) : canEdit ? (
-                        <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
                           className={`${BTN.secondary} ${BTN.xs}`}>
                           + Add Evidence
                         </button>
@@ -1035,45 +1046,47 @@ function CQCEvidenceInner({ data }) {
                 />
               </div>
             ) : (
-              <table className={TABLE.table}>
-                <thead className={TABLE.thead}>
-                  <tr>
-                    <th className={TABLE.th}>Date</th>
-                    <th className={TABLE.th}>Score</th>
-                    <th className={TABLE.th}>Band</th>
-                    <th className={TABLE.th}>Engine</th>
-                    <th className={TABLE.th}>Computed By</th>
-                    <th className={TABLE.th}>Sign-off</th>
-                    <th className={TABLE.th}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshots.map(s => (
-                    <tr key={s.id} className={TABLE.tr}>
-                      <td className={TABLE.td}>{s.computed_at?.slice(0, 10)}</td>
-                      <td className={TABLE.td}>{s.overall_score}%</td>
-                      <td className={TABLE.td}><span className={BADGE[s.band === 'Outstanding' ? 'green' : s.band === 'Good' ? 'blue' : s.band === 'Requires Improvement' ? 'amber' : 'red']}>{s.band}</span></td>
-                      <td className={TABLE.td}><span className={BADGE.gray}>{s.engine_version}</span></td>
-                      <td className={TABLE.td}>{s.computed_by}</td>
-                      <td className={TABLE.td}>
-                        {s.signed_off_by ? (
-                          <span className={BADGE.green}>{s.signed_off_by}</span>
-                        ) : (
-                          <span className={BADGE.gray}>Pending</span>
-                        )}
-                      </td>
-                      <td className={TABLE.td}>
-                        <div className="flex gap-1">
-                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewSnapshot(s.id)}>View</button>
-                          {!s.signed_off_by && canEdit && (
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOff(s.id, '')}>Sign Off</button>
-                          )}
-                        </div>
-                      </td>
+              <div className={TABLE.wrapper}>
+                <table className={`${TABLE.table} min-w-[48rem]`}>
+                  <thead className={TABLE.thead}>
+                    <tr>
+                      <th className={TABLE.th}>Date</th>
+                      <th className={TABLE.th}>Score</th>
+                      <th className={TABLE.th}>Band</th>
+                      <th className={TABLE.th}>Engine</th>
+                      <th className={TABLE.th}>Computed By</th>
+                      <th className={TABLE.th}>Sign-off</th>
+                      <th className={TABLE.th}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {snapshots.map(s => (
+                      <tr key={s.id} className={TABLE.tr}>
+                        <td className={TABLE.td}>{s.computed_at?.slice(0, 10)}</td>
+                        <td className={TABLE.td}>{s.overall_score}%</td>
+                        <td className={TABLE.td}><span className={BADGE[s.band === 'Outstanding' ? 'green' : s.band === 'Good' ? 'blue' : s.band === 'Requires Improvement' ? 'amber' : 'red']}>{s.band}</span></td>
+                        <td className={TABLE.td}><span className={BADGE.gray}>{s.engine_version}</span></td>
+                        <td className={TABLE.td}>{s.computed_by}</td>
+                        <td className={TABLE.td}>
+                          {s.signed_off_by ? (
+                            <span className={BADGE.green}>{s.signed_off_by}</span>
+                          ) : (
+                            <span className={BADGE.gray}>Pending</span>
+                          )}
+                        </td>
+                        <td className={TABLE.td}>
+                          <div className="flex gap-1">
+                            <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewSnapshot(s.id)}>View</button>
+                            {!s.signed_off_by && canEdit && (
+                              <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOff(s.id, '')}>Sign Off</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

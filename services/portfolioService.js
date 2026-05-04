@@ -7,7 +7,7 @@ import * as outcomeMetricRepo from '../repositories/outcomeMetricRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import { hasModuleAccess } from '../shared/roles.js';
-import { PORTFOLIO_RAG_THRESHOLDS, buildPortfolioRag, overallRag, ragAtMost } from '../shared/portfolioRag.js';
+import { PORTFOLIO_RAG_THRESHOLDS, buildPortfolioRag, overallRag, ragAtLeast, ragAtMost } from '../shared/portfolioRag.js';
 import {
   addDays,
   formatDate,
@@ -68,17 +68,23 @@ async function getAgencyByHome(homeIds) {
     ),
     agencyAttemptRepo.countEmergencyOverridesByHome(homeIds),
   ]);
+  const shiftsByHome = new Map(rows.map(row => [row.home_id, row]));
   const overridesByHome = new Map(overrideRows.map(row => [row.home_id, row]));
-  return new Map(rows.map(row => {
-    const overrides = overridesByHome.get(row.home_id) || {};
+  return new Map(homeIds.map(homeId => {
+    const row = shiftsByHome.get(homeId) || {};
+    const overrides = overridesByHome.get(homeId) || {};
     const emergencyOverrides = Number(overrides.emergency_overrides_7d || 0);
+    const attempts7d = Number(overrides.attempts_7d || 0);
     const shifts7d = Number(row.shifts_7d || 0);
-    return [row.home_id, {
-      shifts_28d: row.shifts_28d,
+    const overrideDenominator = Math.max(shifts7d, attempts7d, emergencyOverrides);
+    return [homeId, {
+      shifts_28d: Number(row.shifts_28d || 0),
       shifts_7d: shifts7d,
+      agency_attempts_7d: attempts7d,
       cost_28d: Number(row.cost_28d || 0),
       emergency_overrides_7d: emergencyOverrides,
-      emergency_override_pct: shifts7d > 0 ? Math.round((emergencyOverrides / shifts7d) * 100) : 0,
+      linked_emergency_override_shifts_7d: Number(overrides.linked_emergency_override_shifts_7d || 0),
+      emergency_override_pct: overrideDenominator > 0 ? Math.round((emergencyOverrides / overrideDenominator) * 100) : 0,
     }];
   }));
 }
@@ -96,8 +102,10 @@ function withDefaultAgency(map, homeId) {
   return map.get(homeId) || {
     shifts_28d: 0,
     shifts_7d: 0,
+    agency_attempts_7d: 0,
     cost_28d: 0,
     emergency_overrides_7d: 0,
+    linked_emergency_override_shifts_7d: 0,
     emergency_override_pct: 0,
   };
 }
@@ -131,22 +139,106 @@ function ratePerResidentMonth(count, home, outcomes) {
   return Math.round((Number(count || 0) / residentMonths) * 1000) / 1000;
 }
 
+const MANUAL_OUTCOME_THRESHOLDS = Object.freeze({
+  prn_antipsychotic_pct: { direction: 'atMost', greenAtMost: 5, amberAtMost: 10 },
+  antibiotic_courses: { direction: 'atMost', greenAtMost: 5, amberAtMost: 10 },
+  pressure_sores_new: { direction: 'atMost', greenAtMost: 0, amberAtMost: 1 },
+  doc_contact_ratio: { direction: 'atLeast', greenAtLeast: 95, amberAtLeast: 90 },
+  staff_turnover_pct: { direction: 'atMost', greenAtMost: 8, amberAtMost: 12 },
+  occupancy_pct: { direction: 'atLeast', greenAtLeast: 90, amberAtLeast: 80 },
+});
+
+function manualMetricValue(metric) {
+  const numerator = metric?.numerator == null ? null : Number(metric.numerator);
+  const denominator = metric?.denominator == null ? null : Number(metric.denominator);
+  if (numerator == null || Number.isNaN(numerator)) return null;
+  const key = String(metric?.metric_key || '');
+  if (
+    denominator != null
+    && Number.isFinite(denominator)
+    && denominator > 0
+    && (key.endsWith('_pct') || key.endsWith('_ratio'))
+  ) {
+    return Math.round((numerator / denominator) * 1000) / 10;
+  }
+  return numerator;
+}
+
+function ragForManualMetric(metric, value) {
+  const thresholds = MANUAL_OUTCOME_THRESHOLDS[metric?.metric_key];
+  if (!thresholds || value == null) return null;
+  if (thresholds.direction === 'atLeast') return ragAtLeast(value, thresholds);
+  return ragAtMost(value, thresholds);
+}
+
+function latestManualOutcomeMetrics(outcomes) {
+  const rows = Array.isArray(outcomes?.manual_metrics) ? outcomes.manual_metrics : [];
+  const byKey = new Map();
+  for (const metric of rows) {
+    const key = metric?.metric_key;
+    if (!key) continue;
+    const current = byKey.get(key);
+    const currentDate = current?.period_end || current?.recorded_at || '';
+    const nextDate = metric.period_end || metric.recorded_at || '';
+    if (!current || String(nextDate).localeCompare(String(currentDate)) >= 0) {
+      byKey.set(key, metric);
+    }
+  }
+  return [...byKey.values()];
+}
+
+function buildManualOutcomeSignals(outcomes) {
+  const signals = latestManualOutcomeMetrics(outcomes)
+    .map((metric) => {
+      const value = manualMetricValue(metric);
+      const rag = ragForManualMetric(metric, value);
+      return {
+        key: metric.metric_key,
+        value,
+        numerator: metric.numerator,
+        denominator: metric.denominator,
+        period_start: metric.period_start,
+        period_end: metric.period_end,
+        rag,
+      };
+    })
+    .filter(signal => signal.rag);
+
+  return {
+    signals,
+    rag: signals.length > 0
+      ? overallRag(Object.fromEntries(signals.map(signal => [signal.key, signal.rag])))
+      : null,
+  };
+}
+
+function manualSignalValue(manualSignals, key) {
+  const signal = manualSignals.signals.find(item => item.key === key);
+  return signal?.value ?? null;
+}
+
 function buildOutcomeKpis(outcomes, home) {
   const incidents = outcomes?.incidents || {};
+  const manualSignals = buildManualOutcomeSignals(outcomes);
+  const pressureSoresNew = manualSignalValue(manualSignals, 'pressure_sores_new') ?? incidents.pressure_sores;
   const thresholds = PORTFOLIO_RAG_THRESHOLDS;
-  const rag = overallRag({
+  const ragInputs = {
     falls: ragAtMost(incidents.falls, thresholds.falls28d),
     infections: ragAtMost(incidents.infections, thresholds.infections28d),
-    pressure_sores: ragAtMost(incidents.pressure_sores, thresholds.pressureSores28d),
-  });
+    pressure_sores: ragAtMost(pressureSoresNew, thresholds.pressureSores28d),
+  };
+  if (manualSignals.rag) ragInputs.manual = manualSignals.rag;
+  const rag = overallRag(ragInputs);
   return {
     rag,
     falls_28d: incidents.falls ?? null,
     infections_28d: incidents.infections ?? null,
-    pressure_sores_new_28d: incidents.pressure_sores ?? null,
+    pressure_sores_new_28d: pressureSoresNew ?? null,
     complaints_28d: outcomes?.complaints?.complaints_total ?? null,
     incidents_per_resident_month: ratePerResidentMonth(incidents.incidents_total, home, outcomes),
     complaints_per_resident_month: ratePerResidentMonth(outcomes?.complaints?.complaints_total, home, outcomes),
+    manual_rag: manualSignals.rag,
+    manual_metrics: manualSignals.signals,
   };
 }
 
@@ -458,7 +550,9 @@ function agencyPressure(homes) {
       home_name: home.home_name,
       shifts_28d: home.agency?.shifts_28d || 0,
       shifts_7d: home.agency?.shifts_7d || 0,
+      agency_attempts_7d: home.agency?.agency_attempts_7d || 0,
       emergency_overrides_7d: home.agency?.emergency_overrides_7d || 0,
+      linked_emergency_override_shifts_7d: home.agency?.linked_emergency_override_shifts_7d || 0,
       emergency_override_pct: home.agency?.emergency_override_pct || 0,
       rag: home.rag?.agency || 'unknown',
     }))
@@ -527,12 +621,26 @@ function dataQualityIssues(homes) {
 
 export function buildPortfolioBoardPack(kpis, escalatedActions = []) {
   const homes = Array.isArray(kpis?.homes) ? kpis.homes : [];
+  const actionExceptions = Array.isArray(escalatedActions)
+    ? {
+      rows: escalatedActions,
+      total: escalatedActions.length,
+      omitted: 0,
+    }
+    : {
+      rows: Array.isArray(escalatedActions?.rows) ? escalatedActions.rows : [],
+      total: Number(escalatedActions?.total ?? escalatedActions?.rows?.length ?? 0),
+      omitted: Number(escalatedActions?.omitted ?? 0),
+    };
   return {
     generated_at: kpis?.generated_at || new Date().toISOString(),
     summary: buildPortfolioSummary(homes),
     homes,
     weakest_homes: weakestHomes(homes),
-    escalated_actions: escalatedActions,
+    escalated_actions: actionExceptions.rows,
+    action_exceptions: actionExceptions.rows,
+    action_exception_count: actionExceptions.total,
+    action_exception_omitted_count: actionExceptions.omitted,
     agency_pressure: agencyPressure(homes),
     training_gaps: trainingGaps(homes),
     cqc_evidence_gaps: cqcEvidenceGaps(homes),
@@ -554,10 +662,11 @@ export async function getPortfolioKpisForUser({ username, isPlatformAdmin = fals
   ]);
 
   const rows = await Promise.all(homes.map(async (home) => {
-    const [summary, readiness, outcomes, staffing] = await Promise.all([
+    const [summary, readiness, derivedOutcomes, manualMetrics, staffing] = await Promise.all([
       dashboardService.getDashboardSummary(home.id),
       computeCqcReadiness(home.id, 28).catch(() => null),
       outcomeMetricRepo.getDerivedMetrics(home.id).catch(() => null),
+      outcomeMetricRepo.findManualMetrics(home.id).catch(() => []),
       getStaffingPressure(home).catch(() => ({
         gaps_7d: null,
         planned_shift_slots_7d: null,
@@ -566,6 +675,9 @@ export async function getPortfolioKpisForUser({ username, isPlatformAdmin = fals
         fatigue_breaches: null,
       })),
     ]);
+    const outcomes = derivedOutcomes
+      ? { ...derivedOutcomes, manual_metrics: Array.isArray(manualMetrics) ? manualMetrics : [] }
+      : { manual_metrics: Array.isArray(manualMetrics) ? manualMetrics : [] };
     return buildHomeKpis(
       home,
       summary,
@@ -588,6 +700,6 @@ export async function getPortfolioKpisForUser({ username, isPlatformAdmin = fals
 export async function getPortfolioBoardPackForUser({ username, isPlatformAdmin = false } = {}) {
   const kpis = await getPortfolioKpisForUser({ username, isPlatformAdmin });
   const homeIds = (kpis.homes || []).map(home => home.home_id);
-  const escalatedActions = await actionItemRepo.findEscalatedByHomeIds(homeIds, 50);
-  return buildPortfolioBoardPack(kpis, escalatedActions);
+  const actionExceptions = await actionItemRepo.findBoardPackExceptionsByHomeIds(homeIds, 50);
+  return buildPortfolioBoardPack(kpis, actionExceptions);
 }

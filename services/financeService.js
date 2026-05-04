@@ -4,6 +4,10 @@ import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 import * as financeRepo from '../repositories/financeRepo.js';
 import * as bedRepo from '../repositories/bedRepo.js';
 
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 // ── Residents ─────────────────────────────────────────────────────────────────
 
 export async function findResidents(homeId, filters) {
@@ -259,11 +263,16 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
       if (!newResident) throw Object.assign(new Error('Resident not found in this home'), { statusCode: 400 });
     }
 
-    // Recalculate totals if lines provided
-    if (data.lines) {
-      await financeRepo.deleteInvoiceLines(id, homeId, client);
-      const lines = data.lines;
-      const subtotal = Math.round(lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) * 100) / 100;
+    const hasLineUpdates = hasOwn(data, 'lines');
+    const hasTotalInputs = hasLineUpdates || hasOwn(data, 'adjustments') || hasOwn(data, 'subtotal');
+
+    // Recalculate totals from lines/adjustments instead of trusting stale client totals.
+    if (hasTotalInputs) {
+      const lines = hasLineUpdates ? (data.lines || []) : null;
+      const subtotalSource = hasLineUpdates
+        ? lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0)
+        : parseFloat(data.subtotal ?? existing.subtotal) || 0;
+      const subtotal = Math.round(subtotalSource * 100) / 100;
       const adjustments = parseFloat(data.adjustments ?? existing.adjustments) || 0;
       const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
       if (totalAmount <= 0) throw Object.assign(new Error('Invoice total must be greater than zero after adjustments'), { statusCode: 400 });
@@ -277,8 +286,11 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
       data.subtotal = subtotal;
       data.total_amount = totalAmount;
       data.balance_due = Math.round((totalAmount - amountPaid) * 100) / 100;
-      for (const line of lines) {
-        await financeRepo.createInvoiceLine(id, homeId, line, client);
+      if (hasLineUpdates) {
+        await financeRepo.deleteInvoiceLines(id, homeId, client);
+        for (const line of lines) {
+          await financeRepo.createInvoiceLine(id, homeId, line, client);
+        }
       }
     }
 
