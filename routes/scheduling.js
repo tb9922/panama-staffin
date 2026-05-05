@@ -275,6 +275,10 @@ function canSeeOverrideReasons(roleId) {
   return roleId === 'home_manager' || roleId === 'deputy_manager';
 }
 
+function canEditDayNotes(roleId) {
+  return canSeeOverrideReasons(roleId);
+}
+
 function redactOverrideReasons(overrides = {}) {
   const redacted = {};
   for (const [date, entries] of Object.entries(overrides || {})) {
@@ -492,6 +496,9 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       overrides: overridesOut,
       hour_adjustments: hourAdjustmentsOut,
       day_notes: dayNotesOut,
+      permissions: {
+        can_edit_day_notes: canEditDayNotes(req.homeRole) && !isOwnDataOnly(req.homeRole, 'scheduling'),
+      },
       training: trainingOut,
       ...(onboardingOut !== undefined && { onboarding: onboardingOut }),
     });
@@ -600,7 +607,11 @@ router.delete('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     assertEditLock(req, req.home.config, [parsed.data.date]);
     await withTransaction(async (client) => {
-      await overrideRepo.deleteOne(req.home.id, parsed.data.date, parsed.data.staffId, client);
+      const existing = await overrideRepo.findOne(req.home.id, parsed.data.date, parsed.data.staffId, client, { forUpdate: true });
+      if (existing?.source === 'agency_tracker') {
+        throw new AppError('Agency Tracker coverage must be changed from Agency Tracker', 409, 'AGENCY_TRACKER_OVERRIDE_LOCKED');
+      }
+      await overrideRepo.deleteOne(req.home.id, parsed.data.date, parsed.data.staffId, client, { excludeSources: ['agency_tracker'] });
       await auditRepo.log('override_delete', req.home.slug, req.user.username, {
         date: parsed.data.date,
         staffId: parsed.data.staffId,
@@ -754,15 +765,17 @@ router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAcce
     if ((to - from) / 86400000 > 366) return res.status(400).json({ error: 'Date range exceeds 366 days' });
     assertEditLock(req, req.home.config, [fromDate]);
     const deleted = await withTransaction(async (client) => {
-      const rowCount = await overrideRepo.deleteForDateRange(req.home.id, fromDate, toDate, client);
+      const skippedAgencyTracker = await overrideRepo.countForDateRangeBySource(req.home.id, fromDate, toDate, 'agency_tracker', client);
+      const rowCount = await overrideRepo.deleteForDateRangeExcludingSources(req.home.id, fromDate, toDate, ['agency_tracker'], client);
       await auditRepo.log('override_month_revert', req.home.slug, req.user.username, {
         fromDate,
         toDate,
         deleted: rowCount,
+        skipped_agency_tracker: skippedAgencyTracker,
       }, client);
-      return rowCount;
+      return { rowCount, skippedAgencyTracker };
     });
-    res.json({ ok: true, deleted });
+    res.json({ ok: true, deleted: deleted.rowCount, skipped_agency_tracker: deleted.skippedAgencyTracker });
   } catch (err) {
     next(err);
   }
@@ -776,6 +789,9 @@ const dayNoteSchema = z.object({
 
 router.put('/day-notes', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
+    if (!canEditDayNotes(req.homeRole)) {
+      return res.status(403).json({ error: 'Home manager or deputy manager role required to edit day notes' });
+    }
     const parsed = dayNoteSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { date, note } = parsed.data;

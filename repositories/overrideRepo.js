@@ -126,6 +126,18 @@ export async function upsertOne(homeId, date, staffId, { shift, reason, source, 
   return rows[0];
 }
 
+export async function findOne(homeId, date, staffId, client, { forUpdate = false } = {}) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT date, staff_id, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours
+       FROM shift_overrides
+      WHERE home_id = $1 AND date = $2 AND staff_id = $3
+      ${forUpdate ? 'FOR UPDATE' : ''}`,
+    [homeId, date, staffId]
+  );
+  return rows[0] || null;
+}
+
 /**
  * Delete a single override row.
  * @param {number} homeId
@@ -133,11 +145,17 @@ export async function upsertOne(homeId, date, staffId, { shift, reason, source, 
  * @param {string} staffId
  * @returns {boolean} true if a row was deleted
  */
-export async function deleteOne(homeId, date, staffId, client) {
+export async function deleteOne(homeId, date, staffId, client, { excludeSources = [] } = {}) {
   const conn = client || pool;
+  const params = [homeId, date, staffId];
+  let sourceClause = '';
+  if (excludeSources.length > 0) {
+    params.push(excludeSources);
+    sourceClause = ` AND COALESCE(source, 'manual') <> ALL($${params.length}::text[])`;
+  }
   const { rowCount } = await conn.query(
-    `DELETE FROM shift_overrides WHERE home_id=$1 AND date=$2 AND staff_id=$3`,
-    [homeId, date, staffId]
+    `DELETE FROM shift_overrides WHERE home_id=$1 AND date=$2 AND staff_id=$3${sourceClause}`,
+    params
   );
   return rowCount > 0;
 }
@@ -193,4 +211,30 @@ export async function deleteForDateRange(homeId, fromDate, toDate, client) {
     [homeId, fromDate, toDate]
   );
   return rowCount;
+}
+
+export async function deleteForDateRangeExcludingSources(homeId, fromDate, toDate, excludedSources = [], client) {
+  const conn = client || pool;
+  const params = [homeId, fromDate, toDate];
+  let sourceClause = '';
+  if (excludedSources.length > 0) {
+    params.push(excludedSources);
+    sourceClause = ` AND COALESCE(source, 'manual') <> ALL($${params.length}::text[])`;
+  }
+  const { rowCount } = await conn.query(
+    `DELETE FROM shift_overrides WHERE home_id=$1 AND date >= $2 AND date <= $3${sourceClause}`,
+    params
+  );
+  return rowCount;
+}
+
+export async function countForDateRangeBySource(homeId, fromDate, toDate, source, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT COUNT(*)::int AS cnt
+       FROM shift_overrides
+      WHERE home_id = $1 AND date >= $2 AND date <= $3 AND source = $4`,
+    [homeId, fromDate, toDate, source]
+  );
+  return rows[0]?.cnt || 0;
 }

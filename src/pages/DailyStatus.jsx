@@ -119,6 +119,7 @@ export default function DailyStatus() {
   const canLogAgency = canWrite('payroll');
   const homeSlug = getCurrentHome();
   const isOwnDataDailyStatus = homeRole === 'staff_member';
+  const canEditDayNotes = canEdit && (schedData?.permissions?.can_edit_day_notes ?? ['home_manager', 'deputy_manager'].includes(homeRole));
 
   const loadData = useCallback(async () => {
     if (!homeSlug || isOwnDataDailyStatus) {
@@ -774,14 +775,14 @@ export default function DailyStatus() {
                     ? 'Saved'
                     : dayNoteState === 'dirty'
                       ? 'Unsaved changes'
-                      : 'Auto-saves after a pause'}
+                      : canEditDayNotes ? 'Auto-saves after a pause' : 'Manager-only'}
               </span>
             </div>
             <textarea
               value={schedData.day_notes?.[dateStr] || ''}
-              readOnly={isLocked || !canEdit}
+              readOnly={isLocked || !canEditDayNotes}
               onChange={e => {
-                if (isLocked || !canEdit) return;
+                if (isLocked || !canEditDayNotes) return;
                 const note = e.target.value;
                 setDayNoteState('dirty');
                 // Optimistic local update for responsive UI
@@ -808,7 +809,7 @@ export default function DailyStatus() {
                   }
                 }, 800);
               }}
-              placeholder={isLocked ? 'Unlock to edit notes' : !canEdit ? 'View only' : 'Operational reminders only - use Handover for clinical or safety notes'}
+              placeholder={isLocked ? 'Unlock to edit notes' : !canEditDayNotes ? 'Manager-only operational notes' : 'Operational reminders only - use Handover for clinical or safety notes'}
               className={`${INPUT.base} h-20 resize-y ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
             />
           </div>

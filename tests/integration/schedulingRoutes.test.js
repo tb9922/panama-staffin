@@ -271,11 +271,13 @@ describe('scheduling route hardening', () => {
     const managerRes = await authRequest('get', `/api/scheduling?home=${homeSlug}&from=${shiftDate}&to=${shiftDate}`).expect(200);
     expect(managerRes.body.overrides[shiftDate]['sched-route-s1'].reason).toMatch(/Migraine/i);
     expect(managerRes.body.day_notes[shiftDate]).toMatch(/Clinical staffing note/i);
+    expect(managerRes.body.permissions.can_edit_day_notes).toBe(true);
 
     const coordRes = await coordinatorRequest('get', `/api/scheduling?home=${homeSlug}&from=${shiftDate}&to=${shiftDate}`).expect(200);
     expect(coordRes.body.overrides[shiftDate]['sched-route-s1'].reason).toBeUndefined();
     expect(coordRes.body.overrides[shiftDate]['sched-route-s1'].reason_category).toBe('absence');
     expect(coordRes.body.day_notes).toEqual({});
+    expect(coordRes.body.permissions.can_edit_day_notes).toBe(false);
   });
 
   it('restricts staff override request review and decisions to managers', async () => {
@@ -339,6 +341,28 @@ describe('scheduling route hardening', () => {
     expect(res.body.error).toMatch(/edit PIN/i);
   });
 
+  it('blocks non-manager day-note edits without erasing hidden notes', async () => {
+    const noteDate = utcDateOffset(18);
+    await pool.query(
+      `INSERT INTO day_notes (home_id, date, note)
+       VALUES ($1, $2, 'Manager-only staffing note')`,
+      [homeId, noteDate],
+    );
+
+    const res = await coordinatorRequest('put', `/api/scheduling/day-notes?home=${homeSlug}`)
+      .send({ date: noteDate, note: 'Coordinator replacement note' });
+
+    expect(res.status).toBe(403);
+    const { rows: [saved] } = await pool.query(
+      `SELECT note FROM day_notes WHERE home_id = $1 AND date = $2`,
+      [homeId, noteDate],
+    );
+    expect(saved.note).toBe('Manager-only staffing note');
+
+    const coordRead = await coordinatorRequest('get', `/api/scheduling?home=${homeSlug}&from=${noteDate}&to=${noteDate}`).expect(200);
+    expect(coordRead.body.day_notes).toEqual({});
+  });
+
   it('rejects past-date bulk overrides without the edit lock PIN', async () => {
     const res = await authRequest('post', `/api/scheduling/overrides/bulk?home=${homeSlug}`)
       .send({
@@ -362,6 +386,35 @@ describe('scheduling route hardening', () => {
 
     const res = await authRequest('delete', `/api/scheduling/overrides/month?home=${homeSlug}&fromDate=${firstPastDate}&toDate=${secondPastDate}`);
     expect(res.status).toBe(423);
+  });
+
+  it('protects Agency Tracker coverage from scheduling deletes', async () => {
+    const agencyDate = utcDateOffset(23);
+    const manualDate = utcDateOffset(24);
+    await pool.query(
+      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, source)
+       VALUES ($1, $2, 'AG-9001', 'AG-E', 'agency_tracker'),
+              ($1, $3, 'sched-route-s1', 'SICK', 'manual')`,
+      [homeId, agencyDate, manualDate],
+    );
+
+    const single = await authRequest('delete', `/api/scheduling/overrides?home=${homeSlug}&date=${agencyDate}&staffId=AG-9001`);
+    expect(single.status).toBe(409);
+    expect(single.body.error).toMatch(/Agency Tracker/i);
+
+    const month = await authRequest('delete', `/api/scheduling/overrides/month?home=${homeSlug}&fromDate=${agencyDate}&toDate=${manualDate}`)
+      .expect(200);
+    expect(month.body.deleted).toBe(1);
+    expect(month.body.skipped_agency_tracker).toBe(1);
+
+    const { rows } = await pool.query(
+      `SELECT staff_id, source
+         FROM shift_overrides
+        WHERE home_id = $1 AND date IN ($2, $3)
+        ORDER BY staff_id`,
+      [homeId, agencyDate, manualDate],
+    );
+    expect(rows).toEqual([{ staff_id: 'AG-9001', source: 'agency_tracker' }]);
   });
 
   it('checks mandatory training against the target shift date, not today', async () => {
