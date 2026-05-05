@@ -25,6 +25,7 @@ export JWT_SECRET=ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxx
 export ADMIN_PASSWORD_HASH='$2b$12$placeholder_not_used_in_e2e_tests_xxxxxxxxxxxxxx'
 export VIEWER_PASSWORD_HASH='$2b$12$placeholder_not_used_in_e2e_tests_xxxxxxxxxxxxxx'
 export ALLOWED_ORIGIN="${E2E_BASE_URL:-http://localhost:5173}"
+export DISABLE_RATE_LIMITS="${DISABLE_RATE_LIMITS:-1}"
 
 echo "Running migrations..."
 node scripts/migrate.js
