@@ -22,10 +22,6 @@ const SHIFT_EDIT_OPTIONS = [
   { value: 'OC-L', label: 'OC-L - OT late' },
   { value: 'OC-EL', label: 'OC-EL - OT full day' },
   { value: 'OC-N', label: 'OC-N - OT night' },
-  { value: 'AG-E', label: 'AG-E - Agency early' },
-  { value: 'AG-L', label: 'AG-L - Agency late' },
-  { value: 'AG-EL', label: 'AG-EL - Agency full day' },
-  { value: 'AG-N', label: 'AG-N - Agency night' },
 ];
 
 function getTitle(modal) {
@@ -180,7 +176,6 @@ export default function DailyStatusModal({
             <option value="">Select shift type...</option>
             <option value="AG-E">Agency Early (AG-E)</option>
             <option value="AG-L">Agency Late (AG-L)</option>
-            <option value="AG-EL">Agency Full Day (AG-EL)</option>
             <option value="AG-N">Agency Night (AG-N)</option>
           </select>
           {agencyShiftType && (() => {
@@ -188,9 +183,7 @@ export default function DailyStatusModal({
               ? 'Early'
               : agencyShiftType === 'AG-L'
                 ? 'Late'
-                : agencyShiftType === 'AG-EL'
-                  ? 'Early + Late (full day)'
-                  : 'Night';
+                : 'Night';
             const agencyHours = getShiftHours(agencyShiftType, schedData.config);
             const isNight = agencyShiftType === 'AG-N';
             const agencyRate = isNight ? (schedData.config.agency_rate_night || 0) : (schedData.config.agency_rate_day || 0);
@@ -220,7 +213,7 @@ export default function DailyStatusModal({
               onClick={() => onHandleAgencyBooking(agencyShiftType, gapPanelAbsentStaffId)}
               className={`${BTN.danger} disabled:opacity-50`}
             >
-              {saving ? 'Booking...' : 'Book'}
+              {saving ? 'Opening...' : 'Open Agency Tracker'}
             </button>
           </div>
         </div>

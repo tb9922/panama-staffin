@@ -39,6 +39,16 @@ function renderAdmin() {
   });
 }
 
+function renderAdminWithAgencyRoute() {
+  api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  return renderWithProviders(<DailyStatus />, {
+    route: `/day/${FIXED_DATE}`,
+    path: '/day/:date',
+    routes: [{ path: '/payroll/agency', element: <div>Agency route</div> }],
+    user: { username: 'admin', role: 'admin' },
+  });
+}
+
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
@@ -169,6 +179,39 @@ describe('DailyStatus', () => {
     expect(screen.getByText('+AL')).toBeInTheDocument();
     expect(screen.getByText('+OT')).toBeInTheDocument();
     expect(screen.getByText('+Agency')).toBeInTheDocument();
+  });
+
+  it('agency quick action opens the registered Agency Tracker route', async () => {
+    const user = userEvent.setup();
+    const { router } = renderAdminWithAgencyRoute();
+    await screen.findByText('+Agency');
+
+    await user.click(screen.getByText('+Agency'));
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByRole('combobox'), 'AG-N');
+    await user.click(within(dialog).getByRole('button', { name: 'Open Agency Tracker' }));
+
+    expect(router.state.location.pathname).toBe('/payroll/agency');
+    expect(router.state.location.search).toContain('shift_code=AG-N');
+    expect(router.state.location.search).toContain(`date=${FIXED_DATE}`);
+  });
+
+  it('hides agency quick action when the user cannot write payroll', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: moduleId => moduleId === 'scheduling',
+      homeRole: 'shift_coordinator',
+      staffId: null,
+    });
+    renderWithProviders(<DailyStatus />, {
+      route: `/day/${FIXED_DATE}`,
+      path: '/day/:date',
+      user: { username: 'coord', role: 'viewer' },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('+Sick')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('+Agency')).not.toBeInTheDocument();
   });
 
   it('admin sees quick-action buttons (+Training, +Sleep In, +Swap, +No Show)', async () => {
@@ -327,12 +370,12 @@ describe('DailyStatus', () => {
     expect(within(shiftSelect).getByRole('option', { name: 'NS - No show' })).toBeInTheDocument();
   });
 
-  it('displays Handover Notes textarea', async () => {
+  it('displays operational day notes textarea', async () => {
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Handover Notes')).toBeInTheDocument();
+      expect(screen.getByText('Operational Day Notes')).toBeInTheDocument();
     });
-    expect(screen.getByPlaceholderText(/Add notes for handover/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Operational reminders only/i)).toBeInTheDocument();
   });
 
   it('displays Available Cover section', async () => {

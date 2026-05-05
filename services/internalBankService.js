@@ -10,6 +10,8 @@ import {
   checkWTRImpact,
   getActualShift,
   isWorkingShift,
+  addDays,
+  formatDate,
   parseDate,
 } from '../shared/rotation.js';
 
@@ -64,6 +66,7 @@ function shapeStaff(row) {
     active: row.active,
     wtr_opt_out: row.wtr_opt_out,
     start_date: row.start_date,
+    leaving_date: row.leaving_date,
     contract_hours: toNumber(row.contract_hours),
     willing_extras: row.willing_extras === true,
     willing_other_homes: row.willing_other_homes === true,
@@ -98,7 +101,7 @@ async function getAccessibleHomes(username, isPlatformAdmin, client = pool) {
   return rows.filter(row => hasModuleAccess(row.role_id, 'staff', 'read', { includeOwn: false }));
 }
 
-function onboardingBlockers(staff, onboardingByHome) {
+function onboardingBlockers(staff, onboardingByHome, effectiveDate) {
   const homeOnboarding = onboardingByHome.get(staff.home_id) || {};
   const record = homeOnboarding[staff.id] || {};
   const blockers = [];
@@ -109,11 +112,22 @@ function onboardingBlockers(staff, onboardingByHome) {
   const rtw = record.right_to_work;
   if (rtw && rtw.status !== 'completed') {
     blockers.push('Right to Work not verified');
-  } else if (rtw?.expiry_date && rtw.expiry_date < new Date().toISOString().slice(0, 10)) {
+  } else if (rtw?.expiry_date && rtw.expiry_date < effectiveDate) {
     blockers.push('Right to Work expired');
   }
 
   return blockers;
+}
+
+function weekRangeForDate(dateStr) {
+  const target = parseDate(dateStr);
+  const dayOfWeek = target.getUTCDay();
+  const daysFromMon = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = addDays(target, -daysFromMon);
+  return {
+    from: formatDate(monday),
+    to: formatDate(addDays(monday, 6)),
+  };
 }
 
 async function getTrainingRecordsByStaff(staffRows, client = pool) {
@@ -150,6 +164,56 @@ function rankCandidate(candidate, targetHomeId) {
   return score;
 }
 
+function sanitizeBlocker(blocker) {
+  const text = String(blocker || '').toLowerCase();
+  if (!text) return null;
+  if (text.includes('already rostered')) return 'Already rostered';
+  if (text.includes('top-up')) return 'Top-up limit exceeded';
+  if (text.includes('working time') || text.includes('projected')) return 'Working time limit would be exceeded';
+  if (text.includes('dbs') || text.includes('right to work')) return 'Onboarding/compliance requirement not met';
+  if (text.includes('training') || text.includes('expired') || text.includes('missing')) return 'Mandatory training requirement not met';
+  return 'Eligibility requirement not met';
+}
+
+function sanitizeWarning(warning) {
+  const text = String(warning || '');
+  if (!text) return null;
+  if (/travel distance/i.test(text)) return 'Travel distance not calculated yet';
+  if (/working time|projected|wtr/i.test(text)) return 'Working time close to limit';
+  return 'Eligibility warning';
+}
+
+function compactMessages(messages, sanitizer) {
+  return [...new Set((messages || []).map(sanitizer).filter(Boolean))];
+}
+
+function toCandidateDto(candidate) {
+  const blockers = compactMessages(candidate.blockers, sanitizeBlocker);
+  const warnings = compactMessages(candidate.warnings, sanitizeWarning);
+  return {
+    id: candidate.id,
+    home_id: candidate.home_id,
+    home_slug: candidate.home_slug,
+    home_name: candidate.home_name,
+    name: candidate.name,
+    role: candidate.role,
+    team: candidate.team,
+    availability: candidate.availability,
+    availability_detail: candidate.availability_detail,
+    same_home: candidate.same_home,
+    distance_status: candidate.distance_status,
+    internal_bank_status: candidate.internal_bank_status,
+    training_status: candidate.training_status,
+    fatigue_status: candidate.fatigue_status,
+    viable: candidate.viable,
+    score: candidate.score,
+    blocker_count: candidate.blockers?.length || 0,
+    warning_count: candidate.warnings?.length || 0,
+    blockers,
+    warnings,
+  };
+}
+
 export async function findCandidates({
   targetHomeId,
   username,
@@ -184,9 +248,10 @@ export async function findCandidates({
 
   const staffRows = rows.map(shapeStaff).filter(staff => roleMatches(staff.role, role));
   const homeIds = [...new Set(staffRows.map(staff => staff.home_id))];
+  const { from: weekFrom, to: weekTo } = weekRangeForDate(shiftDate);
   const overrideEntries = await Promise.all(homeIds.map(async (homeId) => [
     homeId,
-    await overrideRepo.findByHome(homeId, shiftDate, shiftDate),
+    await overrideRepo.findByHome(homeId, weekFrom, weekTo),
   ]));
   const onboardingEntries = await Promise.all(homeIds.map(async (homeId) => [
     homeId,
@@ -210,6 +275,7 @@ export async function findCandidates({
     );
     const available = !isWorkingShift(actual.shift) && !['AL', 'SICK', 'NS'].includes(actual.shift);
     const blockers = [];
+    if (staff.leaving_date && staff.leaving_date < shiftDate) blockers.push('Staff member has left before this shift date');
     if (!available) blockers.push(`Already rostered ${actual.shift}`);
     if (staff.max_weekly_hours_topup != null && requestedHours > staff.max_weekly_hours_topup) {
       blockers.push(`Requested ${requestedHours}h exceeds top-up limit ${staff.max_weekly_hours_topup}h`);
@@ -217,7 +283,7 @@ export async function findCandidates({
 
     const wtr = checkWTRImpact(staff, shiftDate, overrides, staff.home_config, proposedShift);
     if (wtr.ok === false) blockers.push(wtr.message || 'Working Time Regulations limit exceeded');
-    blockers.push(...onboardingBlockers(staff, onboardingByHome));
+    blockers.push(...onboardingBlockers(staff, onboardingByHome, shiftDate));
     const training = evaluateInternalBankTrainingEligibility({
       staff,
       recordsByType: trainingByStaff.get(`${staff.home_id}:${staff.id}`) || new Map(),
@@ -230,6 +296,7 @@ export async function findCandidates({
       ...staff,
       availability: available ? 'available' : 'unavailable',
       scheduled_shift: actual.shift,
+      availability_detail: available ? 'Not rostered' : 'Unavailable',
       same_home: sameHome,
       distance_status: sameHome ? 'same_home' : 'unknown',
       training_status: training.status,
@@ -242,10 +309,8 @@ export async function findCandidates({
       ].filter(Boolean),
       viable: blockers.length === 0,
     };
-    return {
-      ...candidate,
-      score: rankCandidate(candidate, targetHomeId),
-    };
+    candidate.score = rankCandidate(candidate, targetHomeId);
+    return toCandidateDto(candidate);
   }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
   return {

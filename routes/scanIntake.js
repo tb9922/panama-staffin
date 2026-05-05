@@ -63,6 +63,13 @@ const recordAttachmentConfirmSchema = z.object({
   description: z.string().max(500).nullable().optional(),
 });
 
+const HANDOVER_CATEGORY_MODULE = {
+  clinical: 'compliance',
+  safety: 'compliance',
+  operational: 'scheduling',
+  admin: 'scheduling',
+};
+
 const confirmBodySchema = z.object({
   target: z.enum(SCAN_INTAKE_TARGET_IDS),
   description: z.string().max(500).nullable().optional(),
@@ -177,9 +184,21 @@ function requireTargetWriteAccess(req, res, target, payload) {
     res.status(403).json({ error: 'That destination is disabled for this home' });
     return false;
   }
+  if (target === 'handover') return true;
   if (req.user?.is_platform_admin && req.homeRole != null) return true;
   if (!hasModuleAccess(req.homeRole, targetDef.permissionModule, 'write')) {
     res.status(403).json({ error: `Insufficient permissions for ${targetDef.permissionModule}` });
+    return false;
+  }
+  return true;
+}
+
+function requireHandoverCategoryWriteAccess(req, res, handover) {
+  const category = handover?.category;
+  const moduleId = HANDOVER_CATEGORY_MODULE[category] || 'scheduling';
+  if (req.user?.is_platform_admin && req.homeRole != null) return true;
+  if (!hasModuleAccess(req.homeRole, moduleId, 'write', { includeOwn: false })) {
+    res.status(403).json({ error: `Insufficient permissions for ${category || 'handover'} handover entries` });
     return false;
   }
   return true;
@@ -331,6 +350,7 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
       return res.status(400).json({ error: 'Handover confirm data is required' });
     }
     if (!requireTargetWriteAccess(req, res, parsed.data.target, parsed.data)) return;
+    if (parsed.data.target === 'handover' && !requireHandoverCategoryWriteAccess(req, res, parsed.data.handover)) return;
     const result = await scanIntakeService.confirmScanIntake(req.home.id, idParsed.data, parsed.data, req.user.username);
     await auditService.log('scan_intake_confirm', req.home.slug, req.user.username, {
       intakeId: idParsed.data,

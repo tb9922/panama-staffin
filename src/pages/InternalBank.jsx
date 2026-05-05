@@ -131,7 +131,7 @@ export default function InternalBank() {
                     <td className={TABLE.td}>{candidate.role}</td>
                     <td className={TABLE.td}>
                       <span className={statusBadge(candidate)}>{candidate.viable ? 'Viable' : candidate.availability}</span>
-                      <div className="mt-1 text-xs text-[var(--ink-3)]">Rostered: {candidate.scheduled_shift}</div>
+                      <div className="mt-1 text-xs text-[var(--ink-3)]">{candidate.availability_detail || 'Availability checked'}</div>
                     </td>
                     <td className={TABLE.td}><span className={trainingBadge(candidate.training_status)}>{candidate.training_status || 'unknown'}</span></td>
                     <td className={TABLE.td}>{candidate.fatigue_status}</td>

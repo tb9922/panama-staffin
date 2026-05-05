@@ -16,6 +16,7 @@ export function renderWithProviders(ui, {
   path = '*',
   user = { username: 'admin', role: 'admin' },
   canWrite = true,
+  routes = [],
   renderOptions = {},
 } = {}) {
   // Override DataContext mock based on canWrite option
@@ -29,11 +30,12 @@ export function renderWithProviders(ui, {
   }
   localStorage.setItem('user', JSON.stringify(user));
   const router = createMemoryRouter(
-    [{ path, element: ui }],
+    [{ path, element: ui }, ...routes],
     { initialEntries: [route] },
   );
   return {
     user,
+    router,
     ...render(<AuthProvider><RouterProvider router={router} /></AuthProvider>, renderOptions),
   };
 }

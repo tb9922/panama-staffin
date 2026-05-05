@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   formatDate, parseDate, addDays, getStaffForDay,
   isWorkingShift, isEarlyShift, isLateShift, isNightShift, isCareRole,
-  SHIFT_COLORS, countALOnDate,
+  SHIFT_COLORS, countALOnDate, getShiftHours,
 } from '../lib/rotation.js';
 import {
   getDayCoverageStatus, calculateDayCost, checkFatigueRisk,
@@ -116,6 +116,7 @@ export default function DailyStatus() {
 
   const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
+  const canLogAgency = canWrite('payroll');
   const homeSlug = getCurrentHome();
   const isOwnDataDailyStatus = homeRole === 'staff_member';
 
@@ -482,35 +483,18 @@ export default function DailyStatus() {
   }
 
   async function handleAgencyBooking(shiftType, replacesStaffId = null) {
-    const agencyId = `AG-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-    setSaving(true);
-    try {
-      await upsertOverride(
-        getCurrentHome(),
-        {
-          date: dateStr,
-          staffId: agencyId,
-          shift: shiftType,
-          reason: 'Agency',
-          source: 'agency',
-          replaces_staff_id: replacesStaffId || undefined,
-        },
-        getEditLockOptions(dateStr),
-      );
-      await loadData();
-      closeModal();
-    } catch (e) {
-      if (e.status === 423) {
-        handleLockedError(dateStr, () => {
-          setModal('agency');
-          setAgencyShiftType(shiftType);
-        });
-        return;
-      }
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
+    const absentStaff = replacesStaffId ? staffForDay.find(member => member.id === replacesStaffId) : null;
+    const params = new URLSearchParams({
+      date: dateStr,
+      shift_code: shiftType,
+      hours: String(getShiftHours(shiftType, schedData.config) || ''),
+      ...(absentStaff?.role ? { role_covered: absentStaff.role } : {}),
+      ...(absentStaff?.name ? { reason: `Cover for ${absentStaff.name} (${absentStaff.shift}) from Daily Status` } : {}),
+      ...(replacesStaffId ? { replaces_staff_id: replacesStaffId } : {}),
+    });
+    closeModal();
+    showNotice('Agency cover now needs Agency Tracker approval evidence before it is logged.', { variant: 'warning', duration: 7000 });
+    navigate(`/payroll/agency?${params.toString()}`);
   }
 
   // Wraps any write action with a past-date lock check
@@ -532,7 +516,7 @@ export default function DailyStatus() {
     ['+No Show', 'noshow', 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]'],
     ['+AL', 'al', 'border-[var(--caution)] bg-[var(--caution-soft)] text-[var(--caution)]'],
     ['+OT', 'ot', 'border-[var(--warn)] bg-[var(--warn-soft)] text-[var(--warn)]'],
-    ['+Agency', 'agency', 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]'],
+    ...(canLogAgency ? [['+Agency', 'agency', 'border-[var(--alert)] bg-[var(--alert-soft)] text-[var(--alert)]']] : []),
     ['+Training', 'training', 'border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]'],
     ['+Sleep In', 'sleepIn', 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'],
     ['+Swap', 'swap', 'border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]'],
@@ -777,7 +761,7 @@ export default function DailyStatus() {
           {/* Day Notes */}
           <div className="border-t border-[var(--line)] mt-3 pt-3">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-[var(--ink-3)] uppercase">Handover Notes</h3>
+              <h3 className="text-xs font-semibold text-[var(--ink-3)] uppercase">Operational Day Notes</h3>
               <span className={`text-[11px] ${
                 dayNoteState === 'saving' ? 'text-blue-600' :
                 dayNoteState === 'saved' ? 'text-emerald-600' :
@@ -824,7 +808,7 @@ export default function DailyStatus() {
                   }
                 }, 800);
               }}
-              placeholder={isLocked ? 'Unlock to edit notes' : !canEdit ? 'View only' : 'Add notes for handover, incidents, or reminders...'}
+              placeholder={isLocked ? 'Unlock to edit notes' : !canEdit ? 'View only' : 'Operational reminders only - use Handover for clinical or safety notes'}
               className={`${INPUT.base} h-20 resize-y ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
             />
           </div>
@@ -897,6 +881,10 @@ export default function DailyStatus() {
               onDismiss={() => setShowGapPanel(false)}
               onApplyOverride={applyOverride}
               onOpenAgencyBooking={() => {
+                if (!canLogAgency) {
+                  showNotice('Agency cover must be logged by a user with payroll/agency permissions.', { variant: 'warning', duration: 7000 });
+                  return;
+                }
                 setShowGapPanel(false);
                 setModal('agency');
               }}

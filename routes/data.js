@@ -42,7 +42,8 @@ const overrideEntrySchema = z.object({
 const dataBodySchema = z.object({
   config: homeConfigSchema,
   staff: z.array(staffItemSchema).max(2000),
-  overrides: z.record(z.string(), z.record(z.string(), overrideEntrySchema)),
+  overrides: z.record(z.string(), z.record(z.string(), overrideEntrySchema)).optional(),
+  day_notes: z.record(z.string(), z.string().max(5000)).optional(),
   _clientUpdatedAt: z.string().nullish(),
 }).strip().refine(
   obj => JSON.stringify(obj).length < MAX_PAYLOAD_SIZE,
@@ -87,15 +88,30 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const body = parsed.data;
     const homeSlug = req.home.slug;
 
+    if (body.overrides && Object.keys(body.overrides).length > 0) {
+      return res.status(400).json({
+        error: 'Legacy /api/data no longer accepts rota overrides. Use /api/scheduling so edit-lock, agency guard, fatigue, and audit checks run.',
+      });
+    }
+    if (body.day_notes && Object.keys(body.day_notes).length > 0) {
+      return res.status(400).json({
+        error: 'Legacy /api/data no longer accepts day notes. Use /api/scheduling/day-notes so edit-lock and audit checks run.',
+      });
+    }
+
     const criticalErrors = detectCriticalErrors(body);
     if (criticalErrors.length > 0) {
       return res.status(400).json({ error: 'Data integrity check failed', errors: criticalErrors });
     }
 
     const username = req.user?.username || 'unknown';
-    const warnings = validateAll(body);
+    const validationBody = { ...body, overrides: {}, day_notes: {} };
+    const warnings = validateAll(validationBody);
     const clientUpdatedAt = body._clientUpdatedAt || null;
-    const result = await homeService.saveData(homeSlug, body, username, clientUpdatedAt, {
+    const safeBody = { ...body };
+    delete safeBody.overrides;
+    delete safeBody.day_notes;
+    const result = await homeService.saveData(homeSlug, safeBody, username, clientUpdatedAt, {
       staffCount: body.staff.length,
       warningCount: warnings.length,
     });

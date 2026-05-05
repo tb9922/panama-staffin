@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate, getALDeductionHours } from '../lib/rotation.js';
+import { useNavigate } from 'react-router-dom';
+import { formatDate, addDays, isCareRole, isAgencyShift, getScheduledShift, getCycleDay, parseDate, countALOnDate, getALDeductionHours, getShiftHours } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { generateCoverPlan } from '../lib/rotationAnalysis.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
@@ -49,6 +50,8 @@ function getCenteredSchedulingRange(date, radiusDays = 200) {
 export default function AnnualLeave() {
   const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
+  const canLogAgency = canWrite('payroll');
+  const navigate = useNavigate();
   const { confirm, ConfirmDialog } = useConfirm();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -247,18 +250,35 @@ export default function AnnualLeave() {
     if (!selectedAssignments?.length) { setCoverPlan(null); return; }
     setCoverPlanSaving(true);
     try {
-      const rows = selectedAssignments.map(a => ({
+      const agencyAssignments = selectedAssignments.filter(a => a.kind === 'agency' || isAgencyShift(a.shift));
+      const rows = selectedAssignments.filter(a => !(a.kind === 'agency' || isAgencyShift(a.shift))).map(a => ({
         date: a.date,
         staffId: a.staffId,
         shift: a.shift,
-        reason: a.kind === 'float' ? `Float deployed (AL cover)` : a.kind === 'ot' ? `OT called in (AL cover)` : 'Agency (AL cover)',
+        reason: a.kind === 'float' ? `Float deployed (AL cover)` : `OT called in (AL cover)`,
         source: a.source,
       }));
-      const lockDates = [...new Set(rows.map(r => r.date))];
-      await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+      if (rows.length > 0) {
+        const lockDates = [...new Set(rows.map(r => r.date))];
+        await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+      }
       await loadData();
       setCoverPlan(null);
-      setBookingMsg(`${rows.length} cover assignments saved.`);
+      if (agencyAssignments.length > 0 && canLogAgency) {
+        const firstAgency = agencyAssignments[0];
+        const params = new URLSearchParams({
+          date: firstAgency.date,
+          shift_code: firstAgency.shift,
+          hours: String(getShiftHours(firstAgency.shift, schedData.config) || ''),
+          reason: `Annual leave cover proposal for ${bookingStaff || 'staff'}`,
+        });
+        setBookingMsg(`${rows.length} cover assignments saved. Opening Agency Tracker for ${agencyAssignments.length} agency proposal${agencyAssignments.length === 1 ? '' : 's'}.`);
+        navigate(`/payroll/agency?${params.toString()}`);
+      } else {
+        setBookingMsg(agencyAssignments.length > 0
+          ? `${rows.length} cover assignments saved. ${agencyAssignments.length} agency proposal${agencyAssignments.length === 1 ? '' : 's'} need a payroll/agency user to log approval evidence.`
+          : `${rows.length} cover assignments saved.`);
+      }
     } catch (e) {
       setBookingError(e.message || 'Cover plan save failed');
     } finally {

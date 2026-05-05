@@ -13,6 +13,7 @@ import {
   formatDate,
   getStaffForDay,
   isCareRole,
+  isAgencyShift,
   isEarlyShift,
   isLateShift,
   isNightShift,
@@ -58,11 +59,15 @@ async function getAgencyByHome(homeIds) {
     pool.query(
     `SELECT home_id,
             COUNT(*)::int AS shifts_28d,
-            COUNT(*) FILTER (WHERE date >= CURRENT_DATE - INTERVAL '7 days')::int AS shifts_7d,
+            COUNT(*) FILTER (
+              WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+                AND date <= CURRENT_DATE
+            )::int AS shifts_7d,
             COALESCE(SUM(total_cost), 0)::numeric AS cost_28d
        FROM agency_shifts
       WHERE home_id = ANY($1::int[])
         AND date >= CURRENT_DATE - INTERVAL '28 days'
+        AND date <= CURRENT_DATE
       GROUP BY home_id`,
     [homeIds]
     ),
@@ -74,17 +79,18 @@ async function getAgencyByHome(homeIds) {
     const row = shiftsByHome.get(homeId) || {};
     const overrides = overridesByHome.get(homeId) || {};
     const emergencyOverrides = Number(overrides.emergency_overrides_7d || 0);
+    const linkedEmergencyOverrides = Number(overrides.linked_emergency_override_shifts_7d || 0);
     const attempts7d = Number(overrides.attempts_7d || 0);
     const shifts7d = Number(row.shifts_7d || 0);
-    const overrideDenominator = Math.max(shifts7d, attempts7d, emergencyOverrides);
+    const overrideDenominator = Math.max(shifts7d, linkedEmergencyOverrides);
     return [homeId, {
       shifts_28d: Number(row.shifts_28d || 0),
       shifts_7d: shifts7d,
       agency_attempts_7d: attempts7d,
       cost_28d: Number(row.cost_28d || 0),
       emergency_overrides_7d: emergencyOverrides,
-      linked_emergency_override_shifts_7d: Number(overrides.linked_emergency_override_shifts_7d || 0),
-      emergency_override_pct: overrideDenominator > 0 ? Math.round((emergencyOverrides / overrideDenominator) * 100) : 0,
+      linked_emergency_override_shifts_7d: linkedEmergencyOverrides,
+      emergency_override_pct: overrideDenominator > 0 ? Math.round((linkedEmergencyOverrides / overrideDenominator) * 100) : 0,
     }];
   }));
 }
@@ -366,6 +372,51 @@ function dateRange(days = 7) {
   return dates;
 }
 
+function mergeOverrideMaps(base = {}, overlay = {}) {
+  const merged = { ...(base || {}) };
+  for (const [date, entries] of Object.entries(overlay || {})) {
+    merged[date] = {
+      ...(merged[date] || {}),
+      ...(entries || {}),
+    };
+  }
+  return merged;
+}
+
+function isoDate(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  return value.toISOString().slice(0, 10);
+}
+
+function hasAgencyOverrideForShift(overrides, date, shift) {
+  return Object.values(overrides?.[date] || {}).some(entry => entry?.shift === shift && isAgencyShift(entry.shift));
+}
+
+async function findAgencyShiftOverrides(homeId, from, to, existingOverrides = {}) {
+  const { rows } = await pool.query(
+    `SELECT id, date, shift_code
+       FROM agency_shifts
+      WHERE home_id = $1
+        AND date >= $2
+        AND date <= $3
+      ORDER BY date, id`,
+    [homeId, from, to],
+  );
+  const agencyOverrides = {};
+  for (const row of rows) {
+    const date = isoDate(row.date);
+    const shift = row.shift_code;
+    if (!date || !shift || hasAgencyOverrideForShift(existingOverrides, date, shift)) continue;
+    if (!agencyOverrides[date]) agencyOverrides[date] = {};
+    agencyOverrides[date][`agency-shift-${row.id}`] = {
+      shift,
+      source: 'agency-tracker',
+    };
+  }
+  return agencyOverrides;
+}
+
 export async function getStaffingPressure(home, days = 7) {
   const dates = dateRange(days);
   const from = formatDate(dates[0]);
@@ -374,13 +425,17 @@ export async function getStaffingPressure(home, days = 7) {
     staffRepo.findByHome(home.id, { limit: 1000 }),
     overrideRepo.findByHome(home.id, from, to),
   ]);
+  const staffingOverrides = mergeOverrideMaps(
+    overrides || {},
+    await findAgencyShiftOverrides(home.id, from, to, overrides || {}),
+  );
   const staff = staffResult.rows || [];
   let plannedSlots = 0;
   let gapSlots = 0;
   let shortfallPeriods = 0;
 
   for (const date of dates) {
-    const staffForDay = getStaffForDay(staff, date, overrides || {}, home.config || {});
+    const staffForDay = getStaffForDay(staff, date, staffingOverrides, home.config || {});
     for (const period of ['early', 'late', 'night']) {
       const coverage = calculatePeriodCoverage(staffForDay, period, home.config || {});
       plannedSlots += coverage.required_heads;

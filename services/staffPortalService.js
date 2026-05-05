@@ -217,6 +217,9 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
     const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
+    if (home.config?.edit_lock_pin && date < todayLocalISO()) {
+      throw new AppError('Past dates are locked. Ask a manager to record this through Scheduling with the edit PIN.', 423, 'SCHEDULING_EDIT_LOCKED');
+    }
 
     // Idempotency guard: if SICK is already recorded for this date, return early
     // without re-emitting webhook + audit. Otherwise repeated submits (double-click,

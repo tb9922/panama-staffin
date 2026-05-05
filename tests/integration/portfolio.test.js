@@ -129,6 +129,22 @@ beforeAll(async () => {
      )`,
     [homeAId]
   );
+  await pool.query(
+    `INSERT INTO agency_shifts (home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, role_covered)
+     VALUES ($1, $2, CURRENT_DATE + INTERVAL '14 days', 'AG-E', 8, 22, 176, 'Care Assistant')`,
+    [homeAId, provider.id]
+  );
+  await pool.query(
+    `INSERT INTO agency_approval_attempts (
+       home_id, gap_date, shift_code, role_needed, reason, internal_bank_checked,
+       internal_bank_candidate_count, viable_internal_candidate_count, emergency_override,
+       emergency_override_reason, outcome
+     ) VALUES (
+       $1, CURRENT_DATE + INTERVAL '14 days', 'AG-N', 'Care Assistant', 'Future emergency test',
+       true, 1, 1, true, 'Future booking should not count as current pressure', 'emergency_agency'
+     )`,
+    [homeAId]
+  );
 
   const login = await request(app).post('/api/login').send({ username: MANAGER, password: PASSWORD }).expect(200);
   managerToken = login.body.token;
@@ -155,8 +171,8 @@ describe('portfolio KPI API', () => {
     const homeA = res.body.homes.find(home => home.home_slug === HOME_A);
     expect(homeA.manager_actions.open).toBe(1);
     expect(homeA.manager_actions.overdue).toBe(1);
-    expect(homeA.staffing.gaps_7d).toBe(7);
-    expect(homeA.staffing.gaps_per_100_planned_shifts).toBe(100);
+    expect(homeA.staffing.gaps_7d).toBe(6);
+    expect(homeA.staffing.gaps_per_100_planned_shifts).toBe(85.7);
     expect(homeA.rag.staffing).toBe('red');
     expect(homeA.agency.shifts_28d).toBe(1);
     expect(homeA.agency.agency_attempts_7d).toBe(2);

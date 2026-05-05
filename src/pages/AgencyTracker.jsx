@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
@@ -81,7 +82,7 @@ function ProviderModal({ existing, onSave, onClose }) {
           <label className={INPUT.label}>Contact (optional)</label>
           <input className={INPUT.base} value={form.contact || ''} onChange={e => set('contact', e.target.value)} placeholder="Email or phone" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={INPUT.label}>Day Rate (£/hr)</label>
             <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.rate_day} onChange={e => set('rate_day', e.target.value)} placeholder="e.g. 18.50" />
@@ -108,12 +109,45 @@ function ProviderModal({ existing, onSave, onClose }) {
 
 // ── Shift Log Modal ────────────────────────────────────────────────────────────
 
-function ShiftModal({ providers, existing, onSave, onClose }) {
+function ShiftModal({ providers, existing, initialDraft, onSave, onClose }) {
   const today  = todayLocalISO();
-  const blank  = { agency_id: providers[0]?.id || '', date: today, shift_code: 'AG-E', hours: '', hourly_rate: '', worker_name: '', invoice_ref: '', role_covered: '', reconciled: false };
+  const initialShiftCode = SHIFT_OPTIONS.includes(initialDraft?.shift_code) ? initialDraft.shift_code : 'AG-E';
+  const activeProviders = providers.filter(provider => provider.active !== false);
+  const initialProvider = existing
+    ? providers.find(provider => provider.id === existing.agency_id)
+    : (activeProviders[0] || providers[0]);
+  const initialRate = initialProvider
+    ? (initialShiftCode === 'AG-N' ? initialProvider.rate_night : initialProvider.rate_day)
+    : null;
+  const ids = {
+    provider: useId(),
+    date: useId(),
+    shift: useId(),
+    hours: useId(),
+    rate: useId(),
+    worker: useId(),
+    role: useId(),
+    reason: useId(),
+    candidates: useId(),
+    viable: useId(),
+    emergencyReason: useId(),
+    invoice: useId(),
+    reconciled: useId(),
+  };
+  const blank  = {
+    agency_id: initialProvider?.id || '',
+    date: initialDraft?.date || today,
+    shift_code: initialShiftCode,
+    hours: initialDraft?.hours || '',
+    hourly_rate: initialDraft?.hourly_rate || (initialRate != null ? String(initialRate) : ''),
+    worker_name: '',
+    invoice_ref: '',
+    role_covered: initialDraft?.role_covered || '',
+    reconciled: false,
+  };
   const [form, setForm]   = useState(existing || blank);
   const [attempt, setAttempt] = useState({
-    reason: '',
+    reason: initialDraft?.reason || '',
     overtime_offered: false,
     overtime_accepted: false,
     overtime_refused: false,
@@ -131,6 +165,18 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
   const homeSlug = getCurrentHome();
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  useEffect(() => {
+    if (existing || form.agency_id || providers.length === 0) return;
+    const provider = providers.find(item => item.active !== false) || providers[0];
+    if (!provider) return;
+    const rate = form.shift_code === 'AG-N' ? provider.rate_night : provider.rate_day;
+    setForm(current => ({
+      ...current,
+      agency_id: provider.id,
+      hourly_rate: current.hourly_rate || (rate != null ? String(rate) : ''),
+    }));
+  }, [existing, form.agency_id, form.shift_code, providers]);
 
   // Auto-fill rate from provider
   function handleProviderChange(id) {
@@ -234,6 +280,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
           viable_internal_candidate_count: attempt.viable_internal_candidate_count,
           emergency_override: attempt.emergency_override,
           emergency_override_reason: attempt.emergency_override ? attempt.emergency_override_reason.trim() : null,
+          notes: initialDraft?.replaces_staff_id ? `Scheduling handoff replaces_staff_id: ${initialDraft.replaces_staff_id}` : null,
         });
         await createAgencyShift(homeSlug, { ...payload, agency_attempt_id: createdAttempt.id });
       }
@@ -249,44 +296,44 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Agency Shift' : 'Log Agency Shift'} size="lg">
       {err && <InlineNotice variant="error" className="mb-3" role="alert">{err}</InlineNotice>}
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={INPUT.label}>Provider *</label>
-            <select className={INPUT.select} value={form.agency_id} onChange={e => handleProviderChange(e.target.value)}>
+            <label htmlFor={ids.provider} className={INPUT.label}>Provider *</label>
+            <select id={ids.provider} className={INPUT.select} value={form.agency_id} onChange={e => handleProviderChange(e.target.value)}>
               {providers.filter(p => p.active).map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Date *</label>
-            <input type="date" className={INPUT.base} value={form.date} onChange={e => set('date', e.target.value)} />
+            <label htmlFor={ids.date} className={INPUT.label}>Date *</label>
+            <input id={ids.date} type="date" className={INPUT.base} value={form.date} onChange={e => set('date', e.target.value)} />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <label className={INPUT.label}>Shift Code *</label>
-            <select className={INPUT.select} value={form.shift_code} onChange={e => handleShiftChange(e.target.value)}>
+            <label htmlFor={ids.shift} className={INPUT.label}>Shift Code *</label>
+            <select id={ids.shift} className={INPUT.select} value={form.shift_code} onChange={e => handleShiftChange(e.target.value)}>
               {SHIFT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Hours *</label>
-            <input type="number" step="0.5" inputMode="decimal" className={INPUT.base} value={form.hours} onChange={e => set('hours', e.target.value)} placeholder="e.g. 12" />
+            <label htmlFor={ids.hours} className={INPUT.label}>Hours *</label>
+            <input id={ids.hours} type="number" step="0.5" inputMode="decimal" className={INPUT.base} value={form.hours} onChange={e => set('hours', e.target.value)} placeholder="e.g. 12" />
           </div>
           <div>
-            <label className={INPUT.label}>Rate (£/hr) *</label>
-            <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} placeholder="e.g. 20.00" />
+            <label htmlFor={ids.rate} className={INPUT.label}>Rate (£/hr) *</label>
+            <input id={ids.rate} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} placeholder="e.g. 20.00" />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={INPUT.label}>Worker Name (optional)</label>
-            <input className={INPUT.base} value={form.worker_name || ''} onChange={e => set('worker_name', e.target.value)} placeholder="e.g. John Smith" />
+            <label htmlFor={ids.worker} className={INPUT.label}>Worker Name (optional)</label>
+            <input id={ids.worker} className={INPUT.base} value={form.worker_name || ''} onChange={e => set('worker_name', e.target.value)} placeholder="e.g. John Smith" />
           </div>
           <div>
-            <label className={INPUT.label}>Role Covered (optional)</label>
-            <input className={INPUT.base} value={form.role_covered || ''} onChange={e => set('role_covered', e.target.value)} placeholder="e.g. Senior Carer" />
+            <label htmlFor={ids.role} className={INPUT.label}>Role Covered (optional)</label>
+            <input id={ids.role} className={INPUT.base} value={form.role_covered || ''} onChange={e => set('role_covered', e.target.value)} placeholder="e.g. Senior Carer" />
           </div>
         </div>
         {!existing && (
@@ -302,8 +349,9 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
             </div>
             <div className="space-y-3">
               <div>
-                <label className={INPUT.label}>Reason agency is needed *</label>
+                <label htmlFor={ids.reason} className={INPUT.label}>Reason agency is needed *</label>
                 <textarea
+                  id={ids.reason}
                   className={INPUT.base}
                   rows={2}
                   value={attempt.reason}
@@ -327,12 +375,12 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Candidates checked</label>
-                  <input type="number" min="0" className={INPUT.base} value={attempt.internal_bank_candidate_count} onChange={e => setAttemptField('internal_bank_candidate_count', parseInt(e.target.value, 10) || 0)} />
+                  <label htmlFor={ids.candidates} className={INPUT.label}>Candidates checked</label>
+                  <input id={ids.candidates} type="number" min="0" className={INPUT.base} value={attempt.internal_bank_candidate_count} onChange={e => setAttemptField('internal_bank_candidate_count', parseInt(e.target.value, 10) || 0)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Viable candidates</label>
-                  <input type="number" min="0" className={INPUT.base} value={attempt.viable_internal_candidate_count} onChange={e => setAttemptField('viable_internal_candidate_count', parseInt(e.target.value, 10) || 0)} />
+                  <label htmlFor={ids.viable} className={INPUT.label}>Viable candidates</label>
+                  <input id={ids.viable} type="number" min="0" className={INPUT.base} value={attempt.viable_internal_candidate_count} onChange={e => setAttemptField('viable_internal_candidate_count', parseInt(e.target.value, 10) || 0)} />
                 </div>
               </div>
               {candidatePreview && (
@@ -346,8 +394,9 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
               </label>
               {attempt.emergency_override && (
                 <div>
-                  <label className={INPUT.label}>Emergency override reason *</label>
+                  <label htmlFor={ids.emergencyReason} className={INPUT.label}>Emergency override reason *</label>
                   <textarea
+                    id={ids.emergencyReason}
                     className={INPUT.base}
                     rows={2}
                     value={attempt.emergency_override_reason}
@@ -358,15 +407,15 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
             </div>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={INPUT.label}>Invoice Ref (optional)</label>
-            <input className={INPUT.base} value={form.invoice_ref || ''} onChange={e => set('invoice_ref', e.target.value)} placeholder="e.g. INV-2026-042" />
+            <label htmlFor={ids.invoice} className={INPUT.label}>Invoice Ref (optional)</label>
+            <input id={ids.invoice} className={INPUT.base} value={form.invoice_ref || ''} onChange={e => set('invoice_ref', e.target.value)} placeholder="e.g. INV-2026-042" />
           </div>
           <div className="flex items-end pb-2">
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="shift-reconciled" checked={!!form.reconciled} onChange={e => set('reconciled', e.target.checked)} />
-              <label htmlFor="shift-reconciled" className="text-sm text-gray-700">Reconciled</label>
+              <input type="checkbox" id={ids.reconciled} checked={!!form.reconciled} onChange={e => set('reconciled', e.target.checked)} />
+              <label htmlFor={ids.reconciled} className="text-sm text-gray-700">Reconciled</label>
             </div>
           </div>
         </div>
@@ -390,6 +439,7 @@ export default function AgencyTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Default last 12 weeks
   const defaultEnd = todayLocalISO();
@@ -407,6 +457,7 @@ export default function AgencyTracker() {
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [editProvider, setEditProvider]   = useState(null);
   const [editShift, setEditShift]         = useState(null);
+  const [shiftDraft, setShiftDraft]       = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showProvModal || showShiftModal);
 
@@ -447,6 +498,43 @@ export default function AgencyTracker() {
     if (!loading) loadShifts().catch(e => setError(e.message));
   }, [dateStart, dateEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const launchDate = searchParams.get('date');
+    const launchShift = searchParams.get('shift_code');
+    if (!canEdit || (!launchDate && !launchShift)) return;
+
+    if (launchDate) {
+      if (launchDate < dateStart) setDateStart(addDaysLocalISO(launchDate, -7));
+      if (launchDate > dateEnd) setDateEnd(addDaysLocalISO(launchDate, 7));
+    }
+
+    setEditShift(null);
+    setShiftDraft({
+      date: launchDate || undefined,
+      shift_code: SHIFT_OPTIONS.includes(launchShift) ? launchShift : undefined,
+      hours: searchParams.get('hours') || undefined,
+      hourly_rate: searchParams.get('hourly_rate') || undefined,
+      role_covered: searchParams.get('role_covered') || undefined,
+      reason: searchParams.get('reason') || (
+        searchParams.get('replaces_staff_id')
+          ? `Cover for staff ${searchParams.get('replaces_staff_id')}`
+          : undefined
+      ),
+      replaces_staff_id: searchParams.get('replaces_staff_id') || undefined,
+    });
+    setShowShiftModal(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('date');
+    next.delete('shift_code');
+    next.delete('hours');
+    next.delete('hourly_rate');
+    next.delete('role_covered');
+    next.delete('reason');
+    next.delete('replaces_staff_id');
+    setSearchParams(next, { replace: true });
+  }, [canEdit, dateEnd, dateStart, searchParams, setSearchParams]);
+
   function providerName(id) {
     return providers.find(p => p.id === id)?.name || `Provider ${id}`;
   }
@@ -466,7 +554,7 @@ export default function AgencyTracker() {
             <button className={BTN.secondary} onClick={() => { setEditProvider(null); setShowProvModal(true); }}>
               + Provider
             </button>
-            <button className={BTN.primary} onClick={() => { setEditShift(null); setShowShiftModal(true); }}>
+            <button className={BTN.primary} onClick={() => { setEditShift(null); setShiftDraft(null); setShowShiftModal(true); }}>
               + Log Shift
             </button>
           </div>
@@ -546,7 +634,7 @@ export default function AgencyTracker() {
                             title="No agency shifts logged for this period"
                             description={canEdit ? 'Try widening the date range or log a new agency shift.' : 'Try widening the date range to see earlier cover.'}
                             actionLabel={canEdit ? 'Log Shift' : undefined}
-                            onAction={canEdit ? () => { setEditShift(null); setShowShiftModal(true); } : undefined}
+                            onAction={canEdit ? () => { setEditShift(null); setShiftDraft(null); setShowShiftModal(true); } : undefined}
                             compact
                           />
                         </td>
@@ -571,7 +659,7 @@ export default function AgencyTracker() {
                         </td>
                         {canEdit && (
                           <td className={TABLE.td}>
-                            <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditShift(sh); setShowShiftModal(true); }}>
+                            <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditShift(sh); setShiftDraft(null); setShowShiftModal(true); }}>
                               Edit
                             </button>
                           </td>
@@ -702,18 +790,20 @@ export default function AgencyTracker() {
         <ShiftModal
           providers={providers}
           existing={editShift}
+          initialDraft={shiftDraft}
           onSave={async () => {
             const wasEditing = !!editShift;
             setShowShiftModal(false);
             setEditShift(null);
+            setShiftDraft(null);
             await Promise.all([loadShifts(), loadMetrics()]);
             showNotice(wasEditing ? 'Agency shift updated.' : 'Agency shift logged.');
           }}
-          onClose={() => { setShowShiftModal(false); setEditShift(null); }}
+          onClose={() => { setShowShiftModal(false); setEditShift(null); setShiftDraft(null); }}
         />
       )}
 
-      <Modal isOpen={showShiftModal && providers.filter(p => p.active).length === 0} onClose={() => setShowShiftModal(false)} title="No Active Providers">
+      <Modal isOpen={showShiftModal && providers.filter(p => p.active).length === 0} onClose={() => { setShowShiftModal(false); setShiftDraft(null); }} title="No Active Providers">
         <p className="text-sm text-gray-600 mb-4">Add at least one active agency provider before logging shifts.</p>
         <div className={MODAL.footer}>
           <button className={BTN.primary} onClick={() => { setShowShiftModal(false); setTab('providers'); setShowProvModal(true); }}>Add Provider</button>

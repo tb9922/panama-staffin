@@ -222,11 +222,16 @@ describe('staff_member: GET /api/scheduling', () => {
     // Should have S001's overrides
     expect(overrides['2099-06-01']).toBeDefined();
     expect(overrides['2099-06-01']['S001']).toBeDefined();
+    expect(overrides['2099-06-01']['S001'].reason).toBeUndefined();
+    expect(overrides['2099-06-01']['S001'].reason_category).toBe('absence');
     // Should NOT have S002's overrides
     expect(overrides['2099-06-01']['S002']).toBeUndefined();
     // S001's second override
     expect(overrides['2099-06-02']).toBeDefined();
     expect(overrides['2099-06-02']['S001']).toBeDefined();
+    expect(overrides['2099-06-02']['S001'].reason).toBeUndefined();
+    expect(overrides['2099-06-02']['S001'].reason_category).toBe('rota_change');
+    expect(res.body.day_notes).toEqual({});
   });
 
   it('omits training data', async () => {

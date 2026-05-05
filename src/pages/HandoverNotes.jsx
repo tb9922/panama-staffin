@@ -36,7 +36,7 @@ const PRIORITIES = [
   { id: 'action', label: 'Action Required', badge: 'amber' },
   { id: 'info', label: 'Info', badge: 'gray' },
 ];
-const EMPTY_FORM = { shift: 'E', category: 'clinical', priority: 'info', content: '', incident_id: '' };
+const EMPTY_FORM = { shift: 'E', category: 'operational', priority: 'info', content: '', incident_id: '' };
 
 const shiftLabel = (id) => SHIFTS.find((s) => s.id === id)?.label || id;
 const dayLabel = (dateStr) => parseDate(dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -70,6 +70,12 @@ export default function HandoverNotes() {
   useDirtyGuard(!!modal);
   const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('scheduling');
+  const writableCategories = useMemo(() => CATEGORIES.filter((category) => (
+    category.id === 'clinical' || category.id === 'safety'
+      ? canWrite('compliance')
+      : canWrite('scheduling')
+  )), [canWrite]);
+  const defaultCategory = writableCategories[0]?.id || 'operational';
   const { confirm, ConfirmDialog } = useConfirm();
   const { showToast } = useToast();
   const slug = getCurrentHome();
@@ -82,6 +88,11 @@ export default function HandoverNotes() {
     getIncidents(slug, { signal: controller.signal }).then((res) => !cancel && setIncidents(res.incidents || [])).catch((e) => { if (!cancel && !isAbortLikeError(e, controller.signal)) setIncidents([]); });
     return () => { cancel = true; controller.abort(); };
   }, [slug]);
+  useEffect(() => {
+    if (modal !== 'add') return;
+    if (writableCategories.some((category) => category.id === form.category)) return;
+    setForm((current) => ({ ...current, category: defaultCategory }));
+  }, [defaultCategory, form.category, modal, writableCategories]);
 
   const incidentMap = useMemo(() => Object.fromEntries(incidents.map((i) => [i.id, i])), [incidents]);
   const todayIncidents = useMemo(() => incidents.filter((i) => i.date === dateStr), [incidents, dateStr]);
@@ -99,8 +110,8 @@ export default function HandoverNotes() {
   const carryQueue = useMemo(() => recentEntries.filter((e) => e.entry_date !== dateStr && !e.acknowledged_by && e.priority !== 'info').sort((a, b) => (b.entry_date || '').localeCompare(a.entry_date || '')).slice(0, 6), [recentEntries, dateStr]);
 
   const goDay = (delta) => setDateStr(formatDate(addDays(parseDate(dateStr), delta)));
-  const closeModal = () => { setModal(null); setForm(EMPTY_FORM); setEditId(null); };
-  const openAdd = (shift) => { setForm({ ...EMPTY_FORM, shift }); setEditId(null); setModal('add'); };
+  const closeModal = () => { setModal(null); setForm({ ...EMPTY_FORM, category: defaultCategory }); setEditId(null); };
+  const openAdd = (shift) => { setForm({ ...EMPTY_FORM, shift, category: defaultCategory }); setEditId(null); setModal('add'); };
   const openEdit = (entry) => { setForm({ shift: entry.shift, category: entry.category, priority: entry.priority, content: entry.content, incident_id: entry.incident_id || '', _version: entry.version }); setEditId(entry.id); setModal('edit'); };
 
   async function saveEntry() {
@@ -108,7 +119,8 @@ export default function HandoverNotes() {
     setSaving(true);
     try {
       if (modal === 'add') {
-        const created = await createHandoverEntry(slug, { entry_date: dateStr, shift: form.shift, category: form.category, priority: form.priority, content: form.content.trim(), incident_id: form.incident_id || null });
+        const category = writableCategories.some((item) => item.id === form.category) ? form.category : defaultCategory;
+        const created = await createHandoverEntry(slug, { entry_date: dateStr, shift: form.shift, category, priority: form.priority, content: form.content.trim(), incident_id: form.incident_id || null });
         setEntries((prev) => [...prev, created].sort(sortEntries));
         showToast({ title: 'Handover entry added', message: shiftLabel(form.shift) });
       } else {

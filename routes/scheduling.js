@@ -13,9 +13,9 @@ import * as auditRepo from '../repositories/auditRepo.js';
 import { dispatchEvent } from '../services/webhookService.js';
 import { AppError } from '../errors.js';
 import {
-  getCycleDay, getScheduledShift, isOTShift, isAgencyShift,
+  getActualShift, getCycleDay, getScheduledShift, isOTShift, isAgencyShift, isWorkingShift,
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
-  checkWTRImpact, formatDate, parseDate, addDays,
+  checkWTRImpact, formatDate, parseDate, addDays, getShiftHours,
 } from '../shared/rotation.js';
 import { isOwnDataOnly } from '../shared/roles.js';
 import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
@@ -271,30 +271,118 @@ function buildOverrideMap(rows = []) {
   return map;
 }
 
+function canSeeOverrideReasons(roleId) {
+  return roleId === 'home_manager' || roleId === 'deputy_manager';
+}
+
+function redactOverrideReasons(overrides = {}) {
+  const redacted = {};
+  for (const [date, entries] of Object.entries(overrides || {})) {
+    redacted[date] = {};
+    for (const [staffId, override] of Object.entries(entries || {})) {
+      if (!override || typeof override !== 'object') continue;
+      const { reason, ...safeOverride } = override;
+      if (reason) {
+        safeOverride.reason_category = ['AL', 'SICK', 'NS'].includes(safeOverride.shift)
+          ? 'absence'
+          : 'rota_change';
+      }
+      redacted[date][staffId] = safeOverride;
+    }
+  }
+  return redacted;
+}
+
+function rejectRawAgencyOverride(res, date = null, staffId = null) {
+  const suffix = date && staffId ? ` (${date} / ${staffId})` : '';
+  return res.status(400).json({
+    error: `Agency cover must be logged through Agency Tracker so approval evidence is attached${suffix}`,
+  });
+}
+
+function checkFatigueImpact(staff, dateStr, overrides, config, proposedShift) {
+  const maxConsecutiveDays = Number(config?.max_consecutive_days || 0);
+  if (!staff || !maxConsecutiveDays || !isWorkingShift(proposedShift) || isAgencyShift(proposedShift)) {
+    return { exceeded: false, consecutive: 0 };
+  }
+
+  const targetDate = parseDate(dateStr);
+  const tempOverrides = mergeOverrideMaps(overrides, {
+    [dateStr]: {
+      [staff.id]: { ...(overrides?.[dateStr]?.[staff.id] || {}), shift: proposedShift },
+    },
+  });
+  const scanRadius = Math.max(maxConsecutiveDays + 3, 14);
+  let backward = 0;
+  let checkDate = targetDate;
+
+  for (let i = 0; i < scanRadius; i += 1) {
+    checkDate = addDays(checkDate, -1);
+    const actual = getActualShift(staff, checkDate, tempOverrides, config?.cycle_start_date, config);
+    if (!isWorkingShift(actual.shift) || isAgencyShift(actual.shift)) break;
+    backward += 1;
+  }
+
+  let forward = 0;
+  checkDate = targetDate;
+  const todayActual = getActualShift(staff, checkDate, tempOverrides, config?.cycle_start_date, config);
+  if (isWorkingShift(todayActual.shift) && !isAgencyShift(todayActual.shift)) {
+    forward = 1;
+    for (let i = 0; i < scanRadius; i += 1) {
+      checkDate = addDays(checkDate, 1);
+      const actual = getActualShift(staff, checkDate, tempOverrides, config?.cycle_start_date, config);
+      if (!isWorkingShift(actual.shift) || isAgencyShift(actual.shift)) break;
+      forward += 1;
+    }
+  }
+
+  const consecutive = backward + forward;
+  return {
+    consecutive,
+    exceeded: consecutive > maxConsecutiveDays,
+  };
+}
+
+function getWorkedHoursForActual(staff, date, actual, config) {
+  const shift = actual?.shift;
+  if (!isWorkingShift(shift) || isAgencyShift(shift)) return 0;
+  if ((shift === 'TRN' || shift === 'ADM') && actual.override_hours != null) {
+    const parsed = Number(actual.override_hours);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (shift === 'TRN' || shift === 'ADM') {
+    const cycleDay = getCycleDay(date, config?.cycle_start_date);
+    const scheduled = getScheduledShift(staff, cycleDay, date, config);
+    if (isWorkingShift(scheduled)) return getShiftHours(scheduled, config);
+  }
+  return getShiftHours(shift, config);
+}
+
 /**
- * Server-side WTR 48h limit enforcement for OT assignments.
+ * Server-side WTR 48h and fatigue enforcement for added working shifts.
  * Runs the identical `checkWTRImpact` the client uses — but from DB state, so
  * it can't be bypassed by a manipulated client request. Returns a blocking
  * error message if projected weekly hours exceed 48h AND the staff hasn't
- * opted out. Returns null (allow) for opted-out staff, non-working/agency
- * proposed shifts, or within-limit projections. Advisory (>44h) is client-only.
+ * opted out, or if max consecutive days would be exceeded. Returns null for
+ * non-working/agency proposed shifts or within-limit projections.
  */
-async function checkWTRBlockingForOverride(homeId, staffId, shift, config, effectiveDate, client, batchOverrides = null, weekCache = null) {
+async function checkWTRBlockingForOverride(homeId, staffId, shift, config, effectiveDate, client, batchOverrides = null, weekCache = null, overrideHours = undefined) {
   // Fast-exit — checkWTRImpact will exit on these too, but avoid loading DB state
-  if (!isOTShift(shift)) return null; // only OT triggers WTR block server-side; other working shifts are pattern-driven
+  if (!isWorkingShift(shift) || isAgencyShift(shift)) return null;
 
   const staff = await staffRepo.findById(homeId, staffId, client);
   if (!staff) return null;
-  if (staff.wtr_opt_out) return null;
 
   // Load the Mon–Sun week around the target date
   const targetDate = parseDate(effectiveDate);
+  const maxConsecutiveDays = Number(config?.max_consecutive_days || 0);
+  const fatigueRadius = maxConsecutiveDays > 0 ? Math.max(maxConsecutiveDays + 3, 14) : 0;
   const dayOfWeek = targetDate.getUTCDay();
   const daysFromMon = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const monday = addDays(targetDate, -daysFromMon);
   const sunday = addDays(monday, 6);
-  const fromDate = formatDate(monday);
-  const toDate = formatDate(sunday);
+  const fromDate = formatDate(fatigueRadius > 0 ? addDays(targetDate, -fatigueRadius) : monday);
+  const toDate = formatDate(fatigueRadius > 0 ? addDays(targetDate, fatigueRadius) : sunday);
   const cacheKey = `${fromDate}|${toDate}`;
   let weekOverrides = weekCache?.get(cacheKey);
   if (!weekOverrides) {
@@ -302,9 +390,31 @@ async function checkWTRBlockingForOverride(homeId, staffId, shift, config, effec
     weekCache?.set(cacheKey, weekOverrides);
   }
   const effectiveOverrides = batchOverrides ? mergeOverrideMaps(weekOverrides, batchOverrides) : weekOverrides;
+  const proposedEntry = {
+    ...(effectiveOverrides?.[effectiveDate]?.[staffId] || {}),
+    shift,
+    ...(overrideHours != null && overrideHours !== '' ? { override_hours: overrideHours } : {}),
+  };
+  const proposedOverrides = mergeOverrideMaps(effectiveOverrides, {
+    [effectiveDate]: {
+      [staffId]: proposedEntry,
+    },
+  });
 
-  const impact = checkWTRImpact(staff, effectiveDate, effectiveOverrides, config, shift);
-  return impact.ok ? null : impact.message;
+  const currentActual = getActualShift(staff, targetDate, weekOverrides, config?.cycle_start_date, config);
+  const proposedActual = getActualShift(staff, targetDate, proposedOverrides, config?.cycle_start_date, config);
+  const currentHours = getWorkedHoursForActual(staff, targetDate, currentActual, config);
+  const proposedHours = getWorkedHoursForActual(staff, targetDate, proposedActual, config);
+  if (currentHours > 0 && proposedHours <= currentHours + 0.01) return null;
+
+  const impact = checkWTRImpact(staff, effectiveDate, proposedOverrides, config, shift);
+  if (!impact.ok) return impact.message;
+
+  const fatigue = checkFatigueImpact(staff, effectiveDate, proposedOverrides, config, shift);
+  if (fatigue.exceeded) {
+    return `Fatigue risk: ${fatigue.consecutive} consecutive working days exceeds max ${Number(config.max_consecutive_days)}.`;
+  }
+  return null;
 }
 
 // GET /api/scheduling?home=X — full scheduling bundle
@@ -341,8 +451,9 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const training = trainingResult.rows;
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
-    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = dayNotes;
-    if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
+    const rawOverrides = overrides;
+    let staffOut, onboardingOut, overridesOut = canSeeOverrideReasons(req.homeRole) ? rawOverrides : redactOverrideReasons(rawOverrides), trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = dayNotes;
+    if (!canSeeOverrideReasons(req.homeRole)) {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
       onboardingOut = undefined;
@@ -360,7 +471,8 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
         .map(({ id, name, role, team, pref, default_shift, start_date, active }) => ({ id, name, role, team, pref, default_shift, start_date, active }));
       overridesOut = {};
       hourAdjustmentsOut = {};
-      for (const [date, entries] of Object.entries(overrides)) {
+      const visibleOverrides = canSeeOverrideReasons(req.homeRole) ? rawOverrides : redactOverrideReasons(rawOverrides);
+      for (const [date, entries] of Object.entries(visibleOverrides)) {
         if (entries[req.staffId]) overridesOut[date] = { [req.staffId]: entries[req.staffId] };
       }
       for (const [date, entries] of Object.entries(hourAdjustments)) {
@@ -408,13 +520,15 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     const { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours } = parsed.data;
     assertEditLock(req, req.home.config, [date]);
 
+    if (isAgencyShift(shift)) return rejectRawAgencyOverride(res);
+
     // Validate replaces_staff_id constraints
     if (replaces_staff_id) {
       if (replaces_staff_id === staffId) {
         return res.status(400).json({ error: 'Staff cannot cover themselves' });
       }
-      if (!isOTShift(shift) && !isAgencyShift(shift)) {
-        return res.status(400).json({ error: 'Cover link only valid for OC/AG shifts' });
+      if (!isOTShift(shift)) {
+        return res.status(400).json({ error: 'Cover link only valid for OC shifts' });
       }
     }
 
@@ -442,7 +556,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     } else {
       // Non-AL shifts: WTR + training check + upsert in one transaction (prevents TOCTOU)
       await withTransaction(async (client) => {
-        const wtrBlock = await checkWTRBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client);
+        const wtrBlock = await checkWTRBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client, null, null, override_hours);
         if (wtrBlock) {
           const err = new Error(wtrBlock);
           err.isWTRBlock = true;
@@ -521,12 +635,13 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
 
     // Validate replaces_staff_id constraints on all rows before opening DB transaction
     for (const o of parsed.data.overrides) {
+      if (isAgencyShift(o.shift)) return rejectRawAgencyOverride(res, o.date, o.staffId);
       if (o.replaces_staff_id) {
         if (o.replaces_staff_id === o.staffId) {
           return res.status(400).json({ error: `Staff ${o.staffId} cannot cover themselves on ${o.date}` });
         }
-        if (!isOTShift(o.shift) && !isAgencyShift(o.shift)) {
-          return res.status(400).json({ error: `Cover link only valid for OC/AG shifts (${o.date} / ${o.staffId})` });
+        if (!isOTShift(o.shift)) {
+          return res.status(400).json({ error: `Cover link only valid for OC shifts (${o.date} / ${o.staffId})` });
         }
       }
     }
@@ -549,6 +664,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
           client,
           batchOverrideMap,
           wtrWeekCache,
+          o.override_hours,
         );
         if (wtrBlock) {
           const err = new Error(wtrBlock);
@@ -597,6 +713,13 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       const totalALHours = overrides.reduce((sum, o) => sum + (o.shift === 'AL' ? (o.al_hours ?? 0) : 0), 0);
       await auditRepo.log('override_bulk_upsert', req.home.slug, req.user.username, {
         count: parsed.data.overrides.length,
+        targets: overrides.map(({ date, staffId, shift, source, replaces_staff_id }) => ({
+          date,
+          staff_id: staffId,
+          shift,
+          source: source || 'manual',
+          ...(replaces_staff_id && { replaces_staff_id }),
+        })),
         ...(alCount > 0 && { al_count: alCount, al_hours_total: totalALHours }),
       }, client);
     });

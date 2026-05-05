@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import HandoverNotes from '../HandoverNotes.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 
 vi.mock('../../lib/api.js', async () => {
   const actual = await vi.importActual('../../lib/api.js');
@@ -71,6 +72,14 @@ describe('HandoverNotes', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    useData.mockReturnValue({
+      activeHome: 'test-home',
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'home_manager',
+      staffId: null,
+      isScanTargetEnabled: () => false,
+    });
     api.getHandoverEntries.mockResolvedValue(MOCK_ENTRIES);
     api.getHandoverEntriesByRange.mockResolvedValue({
       rows: [
@@ -146,6 +155,38 @@ describe('HandoverNotes', () => {
     // Priority radio buttons appear in the modal (may also appear on existing entries)
     expect(screen.getAllByText('Urgent').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Action Required').length).toBeGreaterThan(0);
+  });
+
+  it('defaults new scheduling-only entries to operational handover', async () => {
+    const user = userEvent.setup();
+    useData.mockReturnValue({
+      activeHome: 'test-home',
+      canRead: () => true,
+      canWrite: (moduleId) => moduleId === 'scheduling',
+      homeRole: 'shift_coordinator',
+      staffId: null,
+      isScanTargetEnabled: () => false,
+    });
+    renderWithProviders(<HandoverNotes />, {
+      user: { username: 'shift-coordinator', role: 'viewer' },
+    });
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /add entry/i }).length).toBeGreaterThan(0));
+    await user.click(screen.getAllByRole('button', { name: /add entry/i })[0]);
+    const dialog = screen.getByRole('dialog');
+    const categorySelect = within(dialog).getAllByRole('combobox')[1];
+    expect(categorySelect).toHaveValue('operational');
+    await user.type(
+      within(dialog).getByPlaceholderText('Describe the situation, actions taken, or information to hand over'),
+      'Operational handover from scheduling coordinator.'
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(api.createHandoverEntry).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        category: 'operational',
+      }));
+    });
   });
 
   it('shows the handover evidence panel when editing an entry', async () => {

@@ -14,6 +14,28 @@ function getSchedulingWindow(anchorDate = new Date()) {
   };
 }
 
+function canSeeOverrideReasons(userRole) {
+  return ['admin', 'home_manager', 'deputy_manager'].includes(userRole);
+}
+
+function redactOverrideReasons(overrides = {}) {
+  const redacted = {};
+  for (const [date, entries] of Object.entries(overrides || {})) {
+    redacted[date] = {};
+    for (const [staffId, override] of Object.entries(entries || {})) {
+      if (!override || typeof override !== 'object') continue;
+      const { reason, ...safeOverride } = override;
+      if (reason) {
+        safeOverride.reason_category = ['AL', 'SICK', 'NS'].includes(safeOverride.shift)
+          ? 'absence'
+          : 'rota_change';
+      }
+      redacted[date][staffId] = safeOverride;
+    }
+  }
+  return redacted;
+}
+
 export async function listHomes() {
   return homeRepo.listAll();
 }
@@ -42,8 +64,8 @@ export async function assembleData(homeSlug, userRole) {
     config: home.config,
     annual_leave: home.annual_leave,
     staff,
-    overrides,
-    day_notes: dayNotes,
+    overrides: canSeeOverrideReasons(userRole) ? overrides : redactOverrideReasons(overrides),
+    day_notes: canSeeOverrideReasons(userRole) ? dayNotes : {},
   };
 
   // edit_lock_pin: home_manager only (and legacy 'admin' string used by tests).

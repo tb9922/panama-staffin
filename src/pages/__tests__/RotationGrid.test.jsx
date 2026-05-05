@@ -43,7 +43,23 @@ import * as api from '../../lib/api.js';
 import { generateHorizonRoster } from '../../lib/rotationAnalysis.js';
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
+  generateHorizonRoster.mockReturnValue({
+    assignments: [],
+    totalCost: 0,
+    residualGaps: 0,
+    summary: {
+      gapSlotsTotal: 0,
+      gapSlotsFilled: 0,
+      coverageFillPct: 1,
+      floatShifts: 0,
+      otShifts: 0,
+      agencyShifts: 0,
+      wtrWarnings: 0,
+      totalCost: 0,
+    },
+  });
 });
 
 function renderAdmin() {
@@ -175,6 +191,7 @@ describe('RotationGrid', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
     expect(screen.getByText('Change shift to:')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).queryByText(/Agency Early/i)).not.toBeInTheDocument();
   });
 
   it('Revert All button opens confirmation modal', async () => {
@@ -273,6 +290,45 @@ describe('RotationGrid', () => {
       expect(screen.getByText(/2 residual gaps remain and no automatic cover could be proposed/i)).toBeInTheDocument();
     }, { timeout: 20_000 });
     expect(screen.queryByText(/Coverage is already fully met/i)).not.toBeInTheDocument();
+  }, 30000);
+
+  it('does not save auto-roster agency proposals through rota overrides', async () => {
+    generateHorizonRoster.mockReturnValue({
+      assignments: [
+        { date: '2026-05-10', staffId: 'S002', staffName: 'Bob Jones', shift: 'OC-E', kind: 'ot', source: 'auto-roster', period: 'early', cost: 30 },
+        { date: '2026-05-10', staffId: 'AG-AUTO', staffName: 'Agency', shift: 'AG-L', kind: 'agency', source: 'auto-roster', period: 'late', cost: 160 },
+      ],
+      totalCost: 190,
+      residualGaps: 0,
+      summary: {
+        gapSlotsTotal: 2,
+        gapSlotsFilled: 2,
+        coverageFillPct: 1,
+        floatShifts: 0,
+        otShifts: 1,
+        agencyShifts: 1,
+        wtrWarnings: 0,
+        totalCost: 190,
+      },
+    });
+    api.bulkUpsertOverrides.mockResolvedValueOnce({ ok: true });
+
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Auto-Roster/i })).toBeInTheDocument();
+    }, { timeout: 20_000 });
+    fireEvent.click(screen.getByRole('button', { name: /Auto-Roster/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Accept 2 assignments/i }));
+
+    await waitFor(() => {
+      expect(api.bulkUpsertOverrides).toHaveBeenCalledTimes(1);
+    });
+    const [, rows] = api.bulkUpsertOverrides.mock.calls[0];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(expect.objectContaining({ staffId: 'S002', shift: 'OC-E' }));
+    expect(rows.some(row => row.shift.startsWith('AG-'))).toBe(false);
   }, 30000);
 
   it('renders custom night rotation patterns in the main monthly grid', async () => {

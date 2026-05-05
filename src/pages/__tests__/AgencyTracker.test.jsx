@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import AgencyTracker from '../AgencyTracker.jsx';
 
@@ -15,6 +16,7 @@ vi.mock('../../lib/api.js', async () => {
     getAgencyShifts: vi.fn(),
     createAgencyShift: vi.fn(),
     updateAgencyShift: vi.fn(),
+    createAgencyAttempt: vi.fn(),
     getAgencyMetrics: vi.fn(),
     getRecordAttachments: vi.fn(),
     uploadRecordAttachment: vi.fn(),
@@ -68,10 +70,11 @@ function setupMocks() {
   api.getRecordAttachments.mockResolvedValue([]);
 }
 
-function renderAdmin() {
+function renderAdmin(route = '/') {
   setupMocks();
   return renderWithProviders(<AgencyTracker />, {
     user: { username: 'admin', role: 'admin' },
+    route,
   });
 }
 
@@ -89,6 +92,8 @@ describe('AgencyTracker', () => {
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
     api.getRecordAttachments.mockResolvedValue([]);
+    api.createAgencyAttempt.mockResolvedValue({ id: 77 });
+    api.createAgencyShift.mockResolvedValue({ id: 88 });
   });
 
   it('smoke test — renders without crashing', async () => {
@@ -142,6 +147,44 @@ describe('AgencyTracker', () => {
       expect(screen.getByRole('button', { name: '+ Provider' })).toBeInTheDocument()
     );
     expect(screen.getByRole('button', { name: '+ Log Shift' })).toBeInTheDocument();
+  });
+
+  it('opens Log Shift from scheduling handoff params on the registered route', async () => {
+    renderAdmin('/payroll/agency?date=2026-05-17&shift_code=AG-N&role_covered=Carer&reason=Cover%20for%20Pat');
+    const dialog = await screen.findByRole('dialog', { name: 'Log Agency Shift' });
+
+    expect(within(dialog).getByDisplayValue('2026-05-17')).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue('AG-N')).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue('Carer')).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue('Cover for Pat')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.getAgencyShifts.mock.calls.some(([, start, end]) =>
+        start <= '2026-05-17' && end >= '2026-05-17'
+      )).toBe(true);
+    });
+  });
+
+  it('keeps scheduling handoff cover attribution on the agency attempt', async () => {
+    const user = userEvent.setup();
+    renderAdmin('/payroll/agency?date=2026-05-17&shift_code=AG-N&hours=10&role_covered=Carer&replaces_staff_id=S001');
+    const dialog = await screen.findByRole('dialog', { name: 'Log Agency Shift' });
+
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Provider *')).toHaveValue('1');
+    });
+    await user.click(within(dialog).getByLabelText('Emergency override'));
+    await user.type(within(dialog).getByLabelText(/Emergency override reason/i), 'Short-notice sickness');
+    await user.click(within(dialog).getByRole('button', { name: 'Save Shift' }));
+
+    await waitFor(() => {
+      expect(api.createAgencyAttempt).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        reason: 'Cover for staff S001',
+        notes: 'Scheduling handoff replaces_staff_id: S001',
+      }));
+    });
+    expect(api.createAgencyShift).toHaveBeenCalledWith('test-home', expect.objectContaining({
+      agency_attempt_id: 77,
+    }));
   });
 
   it('hides + Provider and + Log Shift buttons for viewer', async () => {

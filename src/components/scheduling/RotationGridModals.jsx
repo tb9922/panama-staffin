@@ -1,6 +1,6 @@
 import Modal from '../Modal.jsx';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
-import { SHIFT_COLORS, getScheduledShift, getCycleDay, isOTShift, isAgencyShift } from '../../lib/rotation.js';
+import { SHIFT_COLORS, getScheduledShift, getCycleDay, isOTShift } from '../../lib/rotation.js';
 
 const SHIFT_OPTIONS = [
   { value: 'E', label: 'E - Early', group: 'Standard' },
@@ -18,16 +18,27 @@ const SHIFT_OPTIONS = [
   { value: 'OC-L', label: 'OC-L - OT Late', group: 'Overtime' },
   { value: 'OC-EL', label: 'OC-EL - OT Full', group: 'Overtime' },
   { value: 'OC-N', label: 'OC-N - OT Night', group: 'Overtime' },
-  { value: 'AG-E', label: 'AG-E - Agency Early', group: 'Agency' },
-  { value: 'AG-L', label: 'AG-L - Agency Late', group: 'Agency' },
-  { value: 'AG-N', label: 'AG-N - Agency Night', group: 'Agency' },
   { value: 'BH-D', label: 'BH-D - Bank Hol Day', group: 'Bank Hol' },
   { value: 'BH-N', label: 'BH-N - Bank Hol Night', group: 'Bank Hol' },
 ];
 
+const COVERABLE_ABSENCE_SHIFTS = new Set(['AL', 'SICK', 'NS', 'ADM', 'TRN']);
+
 function parseLocalDate(value) {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day));
+}
+
+function isCoverableRole(role) {
+  const normalized = String(role || '').toLowerCase();
+  return normalized.includes('carer') || normalized.includes('nurse') || normalized.includes('team lead');
+}
+
+function actualShiftForStaff(staff, dateStr, schedData) {
+  const override = schedData?.overrides?.[dateStr]?.[staff.id]?.shift;
+  if (override) return override;
+  const date = parseLocalDate(dateStr);
+  return getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date, schedData.config);
 }
 
 function CoverageRow({ label, before, after }) {
@@ -101,7 +112,7 @@ export default function RotationGridModals({
                     setEditing({
                       ...editing,
                       proposedShift: newShift,
-                      ...(!(isOTShift(newShift) || isAgencyShift(newShift)) && { replacesStaffId: null }),
+                      ...(!isOTShift(newShift) && { replacesStaffId: null }),
                     });
                   }}
                   className={`${INPUT.select} font-medium`}
@@ -121,11 +132,6 @@ export default function RotationGridModals({
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </optgroup>
-                  <optgroup label="Agency">
-                    {SHIFT_OPTIONS.filter(option => option.group === 'Agency').map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </optgroup>
                   <optgroup label="Bank Holiday">
                     {SHIFT_OPTIONS.filter(option => option.group === 'Bank Hol').map(option => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -134,7 +140,7 @@ export default function RotationGridModals({
                 </select>
               </div>
 
-              {(isOTShift(editing.proposedShift) || isAgencyShift(editing.proposedShift)) && (
+              {isOTShift(editing.proposedShift) && (
                 <div className="mb-4">
                   <label className={INPUT.label}>Covers for (optional):</label>
                   <select
@@ -147,9 +153,8 @@ export default function RotationGridModals({
                       .filter(staff => {
                         if (staff.id === editing.staffId) return false;
                         if (staff.active === false) return false;
-                        if (!['carer', 'senior_carer', 'nurse'].includes(staff.role)) return false;
-                        const shift = staff.shift_override?.[editing.dateStr] || null;
-                        return shift ? ['AL', 'SICK', 'NS', 'ADM', 'TRN'].includes(shift) : true;
+                        if (!isCoverableRole(staff.role)) return false;
+                        return COVERABLE_ABSENCE_SHIFTS.has(actualShiftForStaff(staff, editing.dateStr, schedData));
                       })
                       .sort((a, b) => a.name.localeCompare(b.name))
                       .map(staff => (

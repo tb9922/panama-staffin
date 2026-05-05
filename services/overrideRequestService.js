@@ -9,6 +9,7 @@ import * as auditService from './auditService.js';
 import { dispatchEvent } from './webhookService.js';
 import { calculateAccrual } from '../src/lib/accrual.js';
 import { getALDeductionHours, getLeaveYear } from '../shared/rotation.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 export async function submitALRequest({ homeId, staffId, date, reason }) {
   return withTransaction(async (client) => {
@@ -100,6 +101,32 @@ export async function decideRequest({ homeId, id, status, decidedBy, decisionNot
     }
 
     if (status === 'approved' && existing.requestType === 'AL') {
+      if (home.config?.edit_lock_pin && existing.date < todayLocalISO()) {
+        throw new AppError('Past dates are locked. Approve this through Scheduling with the edit PIN.', 423, 'SCHEDULING_EDIT_LOCKED');
+      }
+      const maxAL = home.config?.max_al_same_day ?? 2;
+      const { rows: countRows } = await client.query(
+        `SELECT COUNT(*)::int AS cnt
+           FROM shift_overrides
+          WHERE home_id = $1
+            AND date = $2
+            AND shift = 'AL'
+            AND staff_id <> $3`,
+        [homeId, existing.date, existing.staffId],
+      );
+      if ((countRows[0]?.cnt || 0) >= maxAL) {
+        throw new AppError(`Max AL per day (${maxAL}) already reached on ${existing.date}`, 400, 'AL_MAX_PER_DAY');
+      }
+      const staff = await staffRepo.findById(homeId, existing.staffId, client);
+      if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
+      const overrides = await overrideRepo.findByHome(homeId, undefined, undefined, client);
+      const leaveYear = getLeaveYear(existing.date, home.config?.leave_year_start);
+      const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, leaveYear.startStr, leaveYear.endStr, existing.staffId, client);
+      const accrual = calculateAccrual(staff, home.config || {}, overrides, existing.date, hourAdjustments);
+      const alHours = Number(existing.alHours) || 0;
+      if (alHours <= 0 || accrual.remainingHours < alHours - 0.05) {
+        throw new AppError('Annual leave balance is no longer sufficient for this request', 400, 'AL_BALANCE_EXCEEDED');
+      }
       await overrideRepo.upsertOne(homeId, existing.date, existing.staffId, {
         shift: 'AL',
         source: 'al_request',

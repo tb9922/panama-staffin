@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
   getScheduledShift, isCareRole, isAgencyShift, isOTShift,
@@ -79,6 +80,8 @@ function getMonthSchedulingRange(monthDates, radiusDays = 200) {
 export default function RotationGrid() {
   const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
+  const canLogAgency = canWrite('payroll');
+  const navigate = useNavigate();
   const { confirm, ConfirmDialog } = useConfirm();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -339,11 +342,11 @@ export default function RotationGrid() {
     const date = parseLocalDate(dateStr);
     const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date, schedData.config);
 
-    // Guard: only persist cover link for OC/AG shifts.
+    // Guard: only persist cover link for OC shifts.
     // Without this, changing from OC-EL → E could save a stale replaces_staff_id
     // because not all editor mutation paths clear it (e.g. "Revert to Scheduled").
     const replacesId = editing.replacesStaffId
-      && (isOTShift(proposedShift) || isAgencyShift(proposedShift))
+      && isOTShift(proposedShift)
       ? editing.replacesStaffId : undefined;
 
     setSaving(true);
@@ -458,18 +461,37 @@ export default function RotationGrid() {
     if (!selectedAssignments?.length) { setAutoPlan(null); return; }
     setAutoPlanSaving(true);
     try {
-      const rows = selectedAssignments.map(a => ({
+      const agencyAssignments = selectedAssignments.filter(a => a.kind === 'agency' || isAgencyShift(a.shift));
+      const rows = selectedAssignments.filter(a => !(a.kind === 'agency' || isAgencyShift(a.shift))).map(a => ({
         date: a.date,
         staffId: a.staffId,
         shift: a.shift,
-        reason: a.kind === 'float' ? 'Float deployed (auto-roster)' : a.kind === 'ot' ? 'OT called in (auto-roster)' : 'Agency (auto-roster)',
+        reason: a.kind === 'float' ? 'Float deployed (auto-roster)' : 'OT called in (auto-roster)',
         source: a.source,
       }));
-      const lockDates = [...new Set(rows.map(r => r.date))];
-      await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+      if (rows.length > 0) {
+        const lockDates = [...new Set(rows.map(r => r.date))];
+        await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+      }
       await loadData();
       setAutoPlan(null);
-      showNotice(`${rows.length} cover assignments saved from auto-roster.`, { variant: 'success', duration: 4000 });
+      if (agencyAssignments.length > 0) {
+        const firstAgency = agencyAssignments[0];
+        if (canLogAgency && firstAgency) {
+          const params = new URLSearchParams({
+            date: firstAgency.date,
+            shift_code: firstAgency.shift,
+            hours: String(getShiftHours(firstAgency.shift, schedData.config) || ''),
+            reason: `Auto-roster agency proposal for ${monthLabel}`,
+          });
+          showNotice(`${rows.length} cover assignments saved. Opening Agency Tracker for ${agencyAssignments.length} agency proposal${agencyAssignments.length === 1 ? '' : 's'}.`, { variant: 'warning', duration: 5000 });
+          navigate(`/payroll/agency?${params.toString()}`);
+        } else {
+          showNotice(`${rows.length} cover assignments saved. ${agencyAssignments.length} agency proposal${agencyAssignments.length === 1 ? '' : 's'} need a payroll/agency user to log approval evidence.`, { variant: rows.length > 0 ? 'warning' : 'error', duration: 7000 });
+        }
+      } else {
+        showNotice(`${rows.length} cover assignments saved from auto-roster.`, { variant: 'success', duration: 4000 });
+      }
     } catch (e) {
       setError(e.message || 'Auto-roster save failed');
     } finally {
