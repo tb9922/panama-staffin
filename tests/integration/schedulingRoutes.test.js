@@ -195,6 +195,34 @@ describe('scheduling route hardening', () => {
     expect(res.body.error).toMatch(/Agency Tracker/i);
   });
 
+  it('rejects client-supplied agency tracker sources on scheduling writes', async () => {
+    const singleDate = utcDateOffset(8);
+    const single = await authRequest('put', `/api/scheduling/overrides?home=${homeSlug}`)
+      .send({ date: singleDate, staffId: 'sched-route-s1', shift: 'SICK', source: 'agency_tracker' });
+    expect(single.status).toBe(400);
+    expect(single.body.error).toMatch(/server-owned override source/i);
+
+    const bulkDate = utcDateOffset(9);
+    const bulk = await authRequest('post', `/api/scheduling/overrides/bulk?home=${homeSlug}`)
+      .send({
+        overrides: [
+          { date: bulkDate, staffId: 'sched-route-s1', shift: 'SICK', source: 'agency_tracker' },
+        ],
+      });
+    expect(bulk.status).toBe(400);
+    expect(bulk.body.error).toMatch(/server-owned override source/i);
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS cnt
+         FROM shift_overrides
+        WHERE home_id = $1 AND source = 'agency_tracker'
+          AND staff_id = 'sched-route-s1'
+          AND date IN ($2, $3)`,
+      [homeId, singleDate, bulkDate],
+    );
+    expect(rows[0].cnt).toBe(0);
+  });
+
   it('rejects legacy /api/data scheduling override writes', async () => {
     const shiftDate = utcDateOffset(10);
     const res = await authRequest('post', `/api/data?home=${homeSlug}`)

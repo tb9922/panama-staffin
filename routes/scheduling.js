@@ -304,6 +304,17 @@ function rejectRawAgencyOverride(res, date = null, staffId = null) {
   });
 }
 
+function isReservedOverrideSource(source) {
+  return String(source || '').trim().toLowerCase() === 'agency_tracker';
+}
+
+function rejectReservedOverrideSource(res, date = null, staffId = null) {
+  const suffix = date && staffId ? ` (${date} / ${staffId})` : '';
+  return res.status(400).json({
+    error: `agency_tracker is a server-owned override source; log agency cover through Agency Tracker${suffix}`,
+  });
+}
+
 async function assertNotAgencyTrackerOverride(homeId, date, staffId, client) {
   const existing = await overrideRepo.findOne(homeId, date, staffId, client, { forUpdate: true });
   if (existing?.source === 'agency_tracker') {
@@ -535,6 +546,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     assertEditLock(req, req.home.config, [date]);
 
     if (isAgencyShift(shift)) return rejectRawAgencyOverride(res);
+    if (isReservedOverrideSource(source)) return rejectReservedOverrideSource(res, date, staffId);
 
     // Validate replaces_staff_id constraints
     if (replaces_staff_id) {
@@ -656,6 +668,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
     // Validate replaces_staff_id constraints on all rows before opening DB transaction
     for (const o of parsed.data.overrides) {
       if (isAgencyShift(o.shift)) return rejectRawAgencyOverride(res, o.date, o.staffId);
+      if (isReservedOverrideSource(o.source)) return rejectReservedOverrideSource(res, o.date, o.staffId);
       if (o.replaces_staff_id) {
         if (o.replaces_staff_id === o.staffId) {
           return res.status(400).json({ error: `Staff ${o.staffId} cannot cover themselves on ${o.date}` });
