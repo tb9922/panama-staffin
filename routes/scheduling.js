@@ -304,6 +304,13 @@ function rejectRawAgencyOverride(res, date = null, staffId = null) {
   });
 }
 
+async function assertNotAgencyTrackerOverride(homeId, date, staffId, client) {
+  const existing = await overrideRepo.findOne(homeId, date, staffId, client, { forUpdate: true });
+  if (existing?.source === 'agency_tracker') {
+    throw new AppError('Agency Tracker coverage must be changed from Agency Tracker', 409, 'AGENCY_TRACKER_OVERRIDE_LOCKED');
+  }
+}
+
 function checkFatigueImpact(staff, dateStr, overrides, config, proposedShift) {
   const maxConsecutiveDays = Number(config?.max_consecutive_days || 0);
   if (!staff || !maxConsecutiveDays || !isWorkingShift(proposedShift) || isAgencyShift(proposedShift)) {
@@ -543,6 +550,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
       await withTransaction(async (client) => {
+        await assertNotAgencyTrackerOverride(req.home.id, date, staffId, client);
         const result = await validateALOverride(req.home.id, req.home.config, date, staffId, null, client);
         if (result.error) {
           const err = new Error(result.error);
@@ -563,6 +571,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     } else {
       // Non-AL shifts: WTR + training check + upsert in one transaction (prevents TOCTOU)
       await withTransaction(async (client) => {
+        await assertNotAgencyTrackerOverride(req.home.id, date, staffId, client);
         const wtrBlock = await checkWTRBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client, null, null, override_hours);
         if (wtrBlock) {
           const err = new Error(wtrBlock);
@@ -666,6 +675,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       const batchOverrideMap = buildOverrideMap(overrides);
       const wtrWeekCache = new Map();
       for (const o of overrides) {
+        await assertNotAgencyTrackerOverride(req.home.id, o.date, o.staffId, client);
         const wtrBlock = await checkWTRBlockingForOverride(
           req.home.id,
           o.staffId,

@@ -398,6 +398,20 @@ describe('scheduling route hardening', () => {
       [homeId, agencyDate, manualDate],
     );
 
+    const overwrite = await authRequest('put', `/api/scheduling/overrides?home=${homeSlug}`)
+      .send({ date: agencyDate, staffId: 'AG-9001', shift: 'OFF', reason: 'Manual revert attempt' });
+    expect(overwrite.status).toBe(409);
+    expect(overwrite.body.error).toMatch(/Agency Tracker/i);
+
+    const bulkOverwrite = await authRequest('post', `/api/scheduling/overrides/bulk?home=${homeSlug}`)
+      .send({
+        overrides: [
+          { date: agencyDate, staffId: 'AG-9001', shift: 'OFF', reason: 'Bulk revert attempt' },
+        ],
+      });
+    expect(bulkOverwrite.status).toBe(409);
+    expect(bulkOverwrite.body.error).toMatch(/Agency Tracker/i);
+
     const single = await authRequest('delete', `/api/scheduling/overrides?home=${homeSlug}&date=${agencyDate}&staffId=AG-9001`);
     expect(single.status).toBe(409);
     expect(single.body.error).toMatch(/Agency Tracker/i);
