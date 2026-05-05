@@ -24,7 +24,7 @@ export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
     `SELECT id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at,
             COUNT(*) OVER() AS _total
      FROM supervisions WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY staff_id, date LIMIT $2 OFFSET $3`,
+     ORDER BY staff_id, date, id LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 2000), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;

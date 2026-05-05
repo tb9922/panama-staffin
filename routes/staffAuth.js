@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { config } from '../config.js';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import {
   tokenCookieOptions,
@@ -57,7 +57,7 @@ function requireStaffToken(req, res, next) {
 router.get('/invite/:token', readRateLimiter, ensureStaffPortalEnabled, async (req, res, next) => {
   try {
     const invite = await staffAuthRepo.findInviteToken(req.params.token);
-    if (!invite || invite.consumedAt || new Date(invite.expiresAt) <= new Date()) {
+    if (!invite || !invite.staffActive || invite.consumedAt || new Date(invite.expiresAt) <= new Date()) {
       return res.status(404).json({ error: 'Invite token is not valid' });
     }
     res.json({
@@ -83,7 +83,7 @@ router.post('/invite/consume', writeRateLimiter, ensureStaffPortalEnabled, async
   }
 });
 
-router.post('/invite', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireModule('staff', 'write'), async (req, res, next) => {
+router.post('/invite', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
   try {
     const body = inviteBodySchema.parse(req.body);
     const invite = await staffAuthService.createInvite({
@@ -113,7 +113,7 @@ router.post('/change-password', writeRateLimiter, ensureStaffPortalEnabled, requ
   }
 });
 
-router.post('/revoke', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireModule('staff', 'write'), async (req, res, next) => {
+router.post('/revoke', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
   try {
     const body = revokeBodySchema.parse(req.body);
     await staffAuthService.revokeStaffSessions({

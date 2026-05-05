@@ -103,16 +103,22 @@ async function getAccessibleHomes(username, isPlatformAdmin, client = pool) {
 
 function onboardingBlockers(staff, onboardingByHome, effectiveDate) {
   const homeOnboarding = onboardingByHome.get(staff.home_id) || {};
-  const record = homeOnboarding[staff.id] || {};
+  const record = homeOnboarding[staff.id];
   const blockers = [];
+  if (!record || Object.keys(record).length === 0) {
+    blockers.push('DBS check not completed');
+    blockers.push('Right to Work not verified');
+    return blockers;
+  }
 
   const dbs = record.dbs_check;
-  if (dbs && dbs.status !== 'completed') blockers.push('DBS check not completed');
+  if (!dbs || dbs.status !== 'completed') blockers.push('DBS check not completed');
 
   const rtw = record.right_to_work;
-  if (rtw && rtw.status !== 'completed') {
+  const rtwExpiry = rtw?.expiry || rtw?.expiry_date;
+  if (!rtw || rtw.status !== 'completed') {
     blockers.push('Right to Work not verified');
-  } else if (rtw?.expiry_date && rtw.expiry_date < effectiveDate) {
+  } else if (rtwExpiry && rtwExpiry < effectiveDate) {
     blockers.push('Right to Work expired');
   }
 

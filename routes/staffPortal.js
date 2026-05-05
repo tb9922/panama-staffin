@@ -63,6 +63,27 @@ function upcomingWeekWindow() {
   };
 }
 
+const MAX_SCHEDULE_WINDOW_DAYS = 93;
+
+function parseISODateOnly(value) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+  return date;
+}
+
+function validateScheduleWindow(from, to) {
+  const start = parseISODateOnly(from);
+  const end = parseISODateOnly(to);
+  if (!start || !end || end < start) {
+    return { ok: false, error: 'Invalid schedule date range' };
+  }
+  const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+  if (days > MAX_SCHEDULE_WINDOW_DAYS) {
+    return { ok: false, error: `Schedule range cannot exceed ${MAX_SCHEDULE_WINDOW_DAYS} days` };
+  }
+  return { ok: true };
+}
+
 const staffReadChain = [readRateLimiter, requireAuth, ensureStaffPortalEnabled, requireHomeAccess, requireStaffSelf];
 const staffWriteChain = [writeRateLimiter, requireAuth, ensureStaffPortalEnabled, requireHomeAccess, requireStaffSelf];
 
@@ -91,11 +112,15 @@ router.get('/schedule', ...staffReadChain, async (req, res, next) => {
   try {
     const parsed = scheduleQuerySchema.parse(req.query || {});
     const range = currentMonthWindow();
+    const from = parsed.from || range.from;
+    const to = parsed.to || range.to;
+    const windowCheck = validateScheduleWindow(from, to);
+    if (!windowCheck.ok) return res.status(400).json({ error: windowCheck.error });
     const data = await staffPortalService.getStaffScheduleWindow({
       homeId: req.home.id,
       staffId: req.staffId,
-      from: parsed.from || range.from,
-      to: parsed.to || range.to,
+      from,
+      to,
     });
     res.json(data);
   } catch (err) {

@@ -17,7 +17,6 @@ import * as appraisalRepo from '../repositories/appraisalRepo.js';
 import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
-import { paginationSchema } from '../lib/pagination.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
@@ -144,20 +143,43 @@ const attachmentUpload = multer({
   limits: { fileSize: config.upload.maxFileSize },
 });
 
+const TRAINING_MATRIX_PAGE_SIZE = 500;
+
+async function loadAllForMatrix(repo, homeId) {
+  const rows = {};
+  let offset = 0;
+  let total = Infinity;
+  while (offset < total) {
+    const result = await repo.findByHome(homeId, { limit: TRAINING_MATRIX_PAGE_SIZE, offset });
+    const pageRows = result.rows || {};
+    let pageCount = 0;
+    for (const [staffId, value] of Object.entries(pageRows)) {
+      if (Array.isArray(value)) {
+        rows[staffId] = [...(rows[staffId] || []), ...value];
+        pageCount += value.length;
+      } else {
+        rows[staffId] = { ...(rows[staffId] || {}), ...(value || {}) };
+        pageCount += Object.keys(value || {}).length;
+      }
+    }
+    const loadedCount = offset + pageCount;
+    total = Number.isFinite(Number(result.total)) ? Number(result.total) : loadedCount;
+    if (pageCount === 0 || loadedCount >= total) break;
+    offset = loadedCount;
+  }
+  return rows;
+}
+
 // GET /api/training?home=X — one-shot load for TrainingMatrix
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
-    const pg = paginationSchema.parse(req.query);
-    const [trainingResult, supervisionsResult, appraisalsResult, fireDrills, staffResult] = await Promise.all([
-      trainingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
-      supervisionRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
-      appraisalRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+    const [training, supervisions, appraisals, fireDrills, staffResult] = await Promise.all([
+      loadAllForMatrix(trainingRepo, req.home.id),
+      loadAllForMatrix(supervisionRepo, req.home.id),
+      loadAllForMatrix(appraisalRepo, req.home.id),
       fireDrillRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
-    const training = trainingResult.rows;
-    const supervisions = supervisionsResult.rows;
-    const appraisals = appraisalsResult.rows;
     const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
     const trainingTypes = getTrainingTypes(req.home.config);
     const supervisionConfig = {
@@ -325,7 +347,7 @@ router.get('/:staffId/:typeId/files', readRateLimiter, requireAuth, requireHomeA
     const staffParsed = staffIdSchema.safeParse(req.params.staffId);
     const typeParsed = typeIdSchema.safeParse(req.params.typeId);
     if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
-    const staff = await staffRepo.findById(req.home.id, staffParsed.data);
+    const staff = await staffRepo.findByIdIncludingDeleted(req.home.id, staffParsed.data);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const files = await trainingAttachmentsRepo.findAttachments(req.home.id, staffParsed.data, typeParsed.data);
     res.json(files);

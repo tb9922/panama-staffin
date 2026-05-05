@@ -145,20 +145,24 @@ describe('attachment download safety', () => {
     }
   });
 
-  it('hides attachment metadata and deletes after the parent is soft-deleted', async () => {
+  it('retains regulated staff evidence but hides deleted parent record attachments', async () => {
     await pool.query(`UPDATE staff SET deleted_at = NOW() WHERE home_id = $1 AND id = $2`, [homeId, STAFF_ID]);
     await pool.query(`UPDATE hr_disciplinary_cases SET deleted_at = NOW() WHERE home_id = $1`, [homeId]);
     await pool.query(`UPDATE cqc_evidence SET deleted_at = NOW() WHERE home_id = $1`, [homeId]);
 
-    await request(app)
+    const onboardingRes = await request(app)
       .get(`/api/onboarding/${STAFF_ID}/dbs_check/files?home=${HOME_SLUG}`)
       .set('Authorization', `Bearer ${token}`)
-      .expect(404);
+      .expect(200);
+    expect(onboardingRes.body).toHaveLength(1);
+    expect(onboardingRes.body[0].original_name).toBe('onboarding.pdf');
 
-    await request(app)
+    const trainingRes = await request(app)
       .get(`/api/training/${STAFF_ID}/safeguarding/files?home=${HOME_SLUG}`)
       .set('Authorization', `Bearer ${token}`)
-      .expect(404);
+      .expect(200);
+    expect(trainingRes.body).toHaveLength(1);
+    expect(trainingRes.body[0].original_name).toBe('training.pdf');
 
     await request(app)
       .delete(`/api/hr/attachments/${hrAttachmentId}?home=${HOME_SLUG}`)

@@ -46,14 +46,22 @@ export async function submitALRequest({ homeId, staffId, date, reason }) {
       );
     }
 
-    const request = await overrideRequestRepo.create({
-      homeId,
-      staffId,
-      requestType: 'AL',
-      date,
-      alHours,
-      reason: reason || null,
-    }, client);
+    let request;
+    try {
+      request = await overrideRequestRepo.create({
+        homeId,
+        staffId,
+        requestType: 'AL',
+        date,
+        alHours,
+        reason: reason || null,
+      }, client);
+    } catch (err) {
+      if (err.code === '23505' && String(err.constraint || '').includes('override_requests_pending_al_unique')) {
+        throw new ConflictError('A pending annual leave request already exists for that date', 'AL_REQUEST_EXISTS');
+      }
+      throw err;
+    }
 
     await auditService.log('al_request_submitted', home.slug, staff.name, {
       request_id: request.id,

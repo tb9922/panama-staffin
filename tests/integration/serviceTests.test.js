@@ -253,6 +253,10 @@ describe('homeService', () => {
       expect(staff).not.toHaveProperty('hourly_rate');
       expect(staff).not.toHaveProperty('ni_number');
       expect(staff).not.toHaveProperty('date_of_birth');
+      expect(staff).not.toHaveProperty('contract_hours');
+      expect(staff).not.toHaveProperty('wtr_opt_out');
+      expect(staff).not.toHaveProperty('al_entitlement');
+      expect(staff).not.toHaveProperty('al_carryover');
       // But should see scheduling-relevant fields
       expect(staff).toHaveProperty('id');
       expect(staff).toHaveProperty('name');
@@ -267,6 +271,10 @@ describe('homeService', () => {
       expect(staff).not.toHaveProperty('hourly_rate');
       expect(staff).not.toHaveProperty('ni_number');
       expect(staff).not.toHaveProperty('date_of_birth');
+      expect(staff).not.toHaveProperty('contract_hours');
+      expect(staff).not.toHaveProperty('wtr_opt_out');
+      expect(staff).not.toHaveProperty('al_entitlement');
+      expect(staff).not.toHaveProperty('al_carryover');
       expect(staff).toHaveProperty('id');
       expect(staff).toHaveProperty('name');
     });
@@ -304,6 +312,29 @@ describe('homeService', () => {
           config: { home_name: 'Stale Save' },
         }, 'test-admin', currentTimestamp),
       ).rejects.toThrow('modified by someone else');
+    });
+
+    it('does not soft-delete staff omitted from legacy staff payloads', async () => {
+      await pool.query(
+        `INSERT INTO staff (id, home_id, name, role, team, skill, hourly_rate, active)
+         VALUES ('svc-S002', $1, 'Omitted Staffer', 'Carer', 'Day B', 1, 13.25, true)
+         ON CONFLICT (home_id, id) DO UPDATE SET deleted_at = NULL, active = true`,
+        [homeId],
+      );
+
+      await homeService.saveData(SLUG, {
+        staff: [{ id: 'svc-S001', name: 'Updated Test Staffer' }],
+      }, 'test-admin', null);
+
+      const { rows } = await pool.query(
+        `SELECT name, deleted_at FROM staff WHERE home_id = $1 AND id IN ('svc-S001', 'svc-S002') ORDER BY id`,
+        [homeId],
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows[0].name).toBe('Updated Test Staffer');
+      expect(rows[1].deleted_at).toBeNull();
+
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = 'svc-S002'`, [homeId]);
     });
 
     it('throws NotFoundError for nonexistent home', async () => {

@@ -266,6 +266,10 @@ describe('scheduling route hardening', () => {
     expect(res.body.staff[0].hourly_rate).toBeUndefined();
     expect(res.body.staff[0].date_of_birth).toBeUndefined();
     expect(res.body.staff[0].ni_number).toBeUndefined();
+    expect(res.body.staff[0].contract_hours).toBeUndefined();
+    expect(res.body.staff[0].wtr_opt_out).toBeUndefined();
+    expect(res.body.staff[0].al_entitlement).toBeUndefined();
+    expect(res.body.staff[0].al_carryover).toBeUndefined();
     expect(res.body.overrides[shiftDate]['sched-route-s1'].reason).toBeUndefined();
     expect(res.body.overrides[shiftDate]['sched-route-s1'].reason_category).toBe('absence');
   });

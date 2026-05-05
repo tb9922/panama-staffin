@@ -502,7 +502,7 @@ describe('diffFields', () => {
     const changes = diffFields(before, after);
     expect(changes).toEqual([
       { field: 'outcome', old: 'warning_given', new: undefined },
-      { field: 'notes', old: 'old notes', new: undefined },
+      { field: 'notes', old: '[REDACTED]', new: '[REDACTED]' },
     ]);
   });
 

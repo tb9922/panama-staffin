@@ -40,6 +40,9 @@ const staffBodySchema = z.object({
   al_entitlement:  z.number().min(0).max(2000).nullable().optional(),
   al_carryover:    z.number().min(0).max(500).optional(),
   leaving_date:    optDate,
+  phone:           z.string().max(20).nullable().optional(),
+  address:         z.string().max(500).nullable().optional(),
+  emergency_contact: z.string().max(200).nullable().optional(),
   willing_extras:  z.boolean().optional(),
   willing_other_homes: z.boolean().optional(),
   max_weekly_hours_topup: z.number().min(0).max(80).nullable().optional(),
@@ -47,6 +50,7 @@ const staffBodySchema = z.object({
   home_postcode:   z.string().trim().max(20).nullable().optional(),
   internal_bank_status: z.enum(INTERNAL_BANK_STATUSES).optional(),
   internal_bank_notes: z.string().max(1000).nullable().optional(),
+  notes:           z.string().max(1000).nullable().optional(),
 });
 const staffUpdateSchema = staffBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
@@ -63,6 +67,59 @@ function normalizeStaffPayload(payload) {
   return normalized;
 }
 
+const SENSITIVE_STAFF_FIELDS = new Set([
+  'hourly_rate',
+  'contract_hours',
+  'date_of_birth',
+  'ni_number',
+  'active',
+  'al_entitlement',
+  'al_carryover',
+  'phone',
+  'address',
+  'emergency_contact',
+  'wtr_opt_out',
+  'willing_extras',
+  'willing_other_homes',
+  'max_weekly_hours_topup',
+  'max_travel_radius_km',
+  'home_postcode',
+  'internal_bank_status',
+  'internal_bank_notes',
+  'notes',
+]);
+const SENSITIVE_STAFF_ROLES = new Set(['home_manager', 'deputy_manager', 'hr_officer']);
+
+function canManageSensitiveStaffFields(req) {
+  if (req.user?.is_platform_admin && req.homeRole != null) return true;
+  return SENSITIVE_STAFF_ROLES.has(req.homeRole);
+}
+
+function assertSensitiveStaffFieldAccess(req, res, payload) {
+  const requested = Object.keys(payload || {}).filter((key) => SENSITIVE_STAFF_FIELDS.has(key));
+  if (requested.length > 0 && !canManageSensitiveStaffFields(req)) {
+    return res.status(403).json({
+      error: 'Home manager, deputy manager, or HR officer role required for sensitive staff fields',
+      fields: requested,
+    });
+  }
+  return null;
+}
+
+function assertStaffCreateAccess(req, res) {
+  if (!canManageSensitiveStaffFields(req)) {
+    return res.status(403).json({ error: 'Home manager, deputy manager, or HR officer role required to create staff records' });
+  }
+  return null;
+}
+
+function assertStaffDeleteAccess(req, res) {
+  if (!canManageSensitiveStaffFields(req)) {
+    return res.status(403).json({ error: 'Home manager, deputy manager, or HR officer role required to remove staff records' });
+  }
+  return null;
+}
+
 // POST /api/staff?home=X — create a new staff member
 // Server generates the ID inside a transaction to prevent concurrent collisions.
 // Client-provided IDs are allowed for imports/backfills, but POST must never
@@ -71,6 +128,10 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = staffBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    const createAccessError = assertStaffCreateAccess(req, res);
+    if (createAccessError) return createAccessError;
+    const fieldAccessError = assertSensitiveStaffFieldAccess(req, res, parsed.data);
+    if (fieldAccessError) return fieldAccessError;
     const data = normalizeStaffPayload(parsed.data);
     const staff = await withTransaction(async (client) => {
       if (!data.id) {
@@ -93,6 +154,8 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
     const parsed = staffUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    const fieldAccessError = assertSensitiveStaffFieldAccess(req, res, parsed.data);
+    if (fieldAccessError) return fieldAccessError;
     const existing = await staffRepo.findById(req.home.id, idParsed.data);
     if (!existing) return res.status(404).json({ error: 'Staff member not found' });
     const { version } = splitVersion(parsed.data);
@@ -114,6 +177,8 @@ router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, req
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
+    const deleteAccessError = assertStaffDeleteAccess(req, res);
+    if (deleteAccessError) return deleteAccessError;
     await withTransaction(async (client) => {
       const deleted = await staffRepo.softDeleteOne(req.home.id, idParsed.data, client);
       if (!deleted) throw Object.assign(new Error('Staff member not found'), { status: 404 });

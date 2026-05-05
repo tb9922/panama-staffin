@@ -27,8 +27,43 @@ const sectionSchema = z.enum([
 ]);
 const dateSchema = nullableDateInput;
 
+const SENSITIVE_ONBOARDING_SECTIONS = new Set([
+  'dbs_check',
+  'right_to_work',
+  'references',
+  'identity_check',
+  'health_declaration',
+  'contract',
+  'employment_history',
+]);
+const SENSITIVE_ONBOARDING_ROLES = new Set(['home_manager', 'deputy_manager', 'hr_officer']);
+
 function safePath(segment) {
   return String(segment || '').replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function canAccessSensitiveOnboarding(req) {
+  if (req.user?.is_platform_admin && req.homeRole != null) return true;
+  return SENSITIVE_ONBOARDING_ROLES.has(req.homeRole);
+}
+
+function requireOnboardingSectionAccess(req, res, section) {
+  if (SENSITIVE_ONBOARDING_SECTIONS.has(section) && !canAccessSensitiveOnboarding(req)) {
+    return res.status(403).json({ error: 'HR or home management role required for this onboarding evidence' });
+  }
+  return null;
+}
+
+function redactOnboardingForRole(req, onboarding) {
+  if (canAccessSensitiveOnboarding(req)) return onboarding;
+  const redacted = {};
+  for (const [staffId, sections] of Object.entries(onboarding || {})) {
+    redacted[staffId] = {};
+    for (const [section, value] of Object.entries(sections || {})) {
+      if (!SENSITIVE_ONBOARDING_SECTIONS.has(section)) redacted[staffId][section] = value;
+    }
+  }
+  return redacted;
 }
 
 const storage = multer.diskStorage({
@@ -70,7 +105,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       staffRepo.findByHome(req.home.id),
     ]);
     const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
-    res.json({ onboarding, staff });
+    res.json({ onboarding: redactOnboardingForRole(req, onboarding), staff });
   } catch (err) { next(err); }
 });
 
@@ -82,12 +117,22 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
     if (!staffIdParsed.success || !sectionParsed.success) {
       return res.status(400).json({ error: 'Invalid staffId or section' });
     }
+    const accessError = requireOnboardingSectionAccess(req, res, sectionParsed.data);
+    if (accessError) return accessError;
     const bodyParsed = onboardingSectionSchema.safeParse(req.body);
     if (!bodyParsed.success) return zodError(res, bodyParsed);
+    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const existingOnboarding = await onboardingRepo.findByStaffId(req.home.id, staffIdParsed.data);
     const beforeSection = existingOnboarding?.[sectionParsed.data] ?? null;
     const result = await onboardingRepo.upsertSection(req.home.id, staffIdParsed.data, sectionParsed.data, bodyParsed.data);
-    const changes = diffFields(beforeSection, bodyParsed.data);
+    const changedKeys = new Set([
+      ...Object.keys(beforeSection || {}),
+      ...Object.keys(bodyParsed.data || {}),
+    ]);
+    const changes = diffFields(beforeSection, bodyParsed.data, {
+      extraSensitive: SENSITIVE_ONBOARDING_SECTIONS.has(sectionParsed.data) ? changedKeys : undefined,
+    });
     await auditService.log('onboarding_update', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data, changes });
     res.json(result);
   } catch (err) { next(err); }
@@ -101,6 +146,10 @@ router.delete('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAc
     if (!staffIdParsed.success || !sectionParsed.success) {
       return res.status(400).json({ error: 'Invalid staffId or section' });
     }
+    const accessError = requireOnboardingSectionAccess(req, res, sectionParsed.data);
+    if (accessError) return accessError;
+    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     await onboardingRepo.clearSection(req.home.id, staffIdParsed.data, sectionParsed.data);
     await auditService.log('onboarding_clear', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data });
     res.json({ ok: true });
@@ -115,6 +164,8 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
     const att = await onboardingAttachmentsRepo.findById(id, req.home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    const accessError = requireOnboardingSectionAccess(req, res, att.section);
+    if (accessError) return accessError;
     const uploadRoot = path.resolve(config.upload.dir);
     const filePath = path.resolve(path.join(
       config.upload.dir,
@@ -136,6 +187,10 @@ router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const existing = await onboardingAttachmentsRepo.findById(id, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Attachment not found' });
+    const accessError = requireOnboardingSectionAccess(req, res, existing.section);
+    if (accessError) return accessError;
     const deleted = await onboardingAttachmentsRepo.softDelete(id, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Attachment not found' });
     await auditService.log('onboarding_attachment_delete', req.home.slug, req.user.username, {
@@ -156,7 +211,9 @@ router.get('/:staffId/:section/files', readRateLimiter, requireAuth, requireHome
     if (!staffIdParsed.success || !sectionParsed.success) {
       return res.status(400).json({ error: 'Invalid staffId or section' });
     }
-    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
+    const accessError = requireOnboardingSectionAccess(req, res, sectionParsed.data);
+    if (accessError) return accessError;
+    const staff = await staffRepo.findByIdIncludingDeleted(req.home.id, staffIdParsed.data);
     if (!staff) {
       return res.status(404).json({ error: 'Staff member not found' });
     }
@@ -172,6 +229,8 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
     if (!staffIdParsed.success || !sectionParsed.success) {
       return res.status(400).json({ error: 'Invalid staffId or section' });
     }
+    const accessError = requireOnboardingSectionAccess(req, res, sectionParsed.data);
+    if (accessError) return accessError;
     const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
     if (!staff) {
       return res.status(404).json({ error: 'Staff member not found' });

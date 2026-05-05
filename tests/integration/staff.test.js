@@ -19,10 +19,12 @@ const PREFIX = 'staff-test';
 const BCRYPT_ROUNDS = 4;
 const ADMIN_USER = `${PREFIX}-admin`;
 const VIEWER_USER = `${PREFIX}-viewer`;
+const TRAINING_USER = `${PREFIX}-training`;
 const ADMIN_PW = 'StaffTestAdmin!2025';
 const VIEWER_PW = 'StaffTestViewer!2025';
+const TRAINING_PW = 'StaffTestTraining!2025';
 
-let adminToken, viewerToken;
+let adminToken, viewerToken, trainingToken;
 let homeAId, homeBId;
 let homeASlug, homeBSlug;
 
@@ -52,6 +54,7 @@ beforeAll(async () => {
   // Create test users
   const adminHash = await bcrypt.hash(ADMIN_PW, BCRYPT_ROUNDS);
   const viewerHash = await bcrypt.hash(VIEWER_PW, BCRYPT_ROUNDS);
+  const trainingHash = await bcrypt.hash(TRAINING_PW, BCRYPT_ROUNDS);
   await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'admin', true, 'Staff Test Admin', 'test-setup')`,
@@ -62,6 +65,11 @@ beforeAll(async () => {
      VALUES ($1, $2, 'viewer', true, 'Staff Test Viewer', 'test-setup')`,
     [VIEWER_USER, viewerHash]
   );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'Staff Test Training Lead', 'test-setup')`,
+    [TRAINING_USER, trainingHash]
+  );
 
   // Grant access: admin → both homes, viewer → home A only
   await pool.query(
@@ -71,6 +79,10 @@ beforeAll(async () => {
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'viewer', 'test-setup')`,
     [VIEWER_USER, homeAId]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'training_lead', 'test-setup')`,
+    [TRAINING_USER, homeAId]
   );
 
   // Login both users
@@ -85,6 +97,12 @@ beforeAll(async () => {
     .send({ username: VIEWER_USER, password: VIEWER_PW })
     .expect(200);
   viewerToken = viewerRes.body.token;
+
+  const trainingRes = await request(app)
+    .post('/api/login')
+    .send({ username: TRAINING_USER, password: TRAINING_PW })
+    .expect(200);
+  trainingToken = trainingRes.body.token;
 }, 30000);
 
 afterAll(async () => {
@@ -125,7 +143,7 @@ describe('POST /api/staff — create', () => {
   afterAll(async () => {
     // Clean up created staff for this block
     await pool.query(
-      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004')`,
+      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004', 'ST005')`,
       [homeAId]
     );
   });
@@ -186,6 +204,20 @@ describe('POST /api/staff — create', () => {
       .query({ home: homeASlug })
       .set('Authorization', `Bearer ${viewerToken}`)
       .send(staff)
+      .expect(403);
+  });
+
+  it('training lead cannot create staff records or set sensitive staff fields', async () => {
+    await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${trainingToken}`)
+      .send({
+        id: 'ST005',
+        name: 'Training Lead Created',
+        role: 'Carer',
+        team: 'Day A',
+      })
       .expect(403);
   });
 
@@ -273,6 +305,33 @@ describe('PUT /api/staff/:id — update', () => {
       .expect(200);
 
     expect(res.body.skill).toBe(4);
+  });
+
+  it('persists manager notes on staff records', async () => {
+    const res = await request(app)
+      .put('/api/staff/ST010')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ notes: 'Prefers dementia wing shifts' })
+      .expect(200);
+
+    expect(res.body.notes).toBe('Prefers dementia wing shifts');
+    const { rows } = await pool.query(
+      `SELECT notes FROM staff WHERE home_id = $1 AND id = 'ST010'`,
+      [homeAId],
+    );
+    expect(rows[0].notes).toBe('Prefers dementia wing shifts');
+  });
+
+  it('blocks training leads from mutating pay, GDPR, and internal-bank fields', async () => {
+    const res = await request(app)
+      .put('/api/staff/ST010')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${trainingToken}`)
+      .send({ hourly_rate: 20, date_of_birth: '1991-01-01', willing_extras: true, active: false })
+      .expect(403);
+
+    expect(res.body.fields).toEqual(expect.arrayContaining(['hourly_rate', 'date_of_birth', 'willing_extras', 'active']));
   });
 
   it('returns 404 for nonexistent staff', async () => {
@@ -365,6 +424,14 @@ describe('DELETE /api/staff/:id — soft delete', () => {
       .set('Authorization', `Bearer ${viewerToken}`)
       .expect(403);
   });
+
+  it('training lead cannot delete staff records', async () => {
+    await request(app)
+      .delete('/api/staff/ST020')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${trainingToken}`)
+      .expect(403);
+  });
 });
 
 // ── PII Filtering ───────────────────────────────────────────────────────────
@@ -412,6 +479,10 @@ describe('GET /api/scheduling — PII filtering', () => {
     expect(staff.hourly_rate).toBeUndefined();
     expect(staff.date_of_birth).toBeUndefined();
     expect(staff.ni_number).toBeUndefined();
+    expect(staff.contract_hours).toBeUndefined();
+    expect(staff.wtr_opt_out).toBeUndefined();
+    expect(staff.al_entitlement).toBeUndefined();
+    expect(staff.al_carryover).toBeUndefined();
   });
 
   it('viewer does NOT see onboarding data', async () => {

@@ -616,8 +616,7 @@ describe('homeService: assembleData PII filtering (S3)', () => {
     const staff = data.staff[0];
     const allowedKeys = new Set([
       'id', 'name', 'role', 'team', 'pref', 'skill', 'active',
-      'start_date', 'contract_hours', 'wtr_opt_out',
-      'al_entitlement', 'al_carryover', 'leaving_date',
+      'start_date', 'leaving_date',
     ]);
     for (const key of Object.keys(staff)) {
       expect(allowedKeys.has(key)).toBe(true);

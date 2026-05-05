@@ -297,6 +297,10 @@ describe('dashboard and export routes', () => {
     expect(dataStaff).not.toHaveProperty('hourly_rate');
     expect(dataStaff).not.toHaveProperty('ni_number');
     expect(dataStaff).not.toHaveProperty('date_of_birth');
+    expect(dataStaff).not.toHaveProperty('contract_hours');
+    expect(dataStaff).not.toHaveProperty('wtr_opt_out');
+    expect(dataStaff).not.toHaveProperty('al_entitlement');
+    expect(dataStaff).not.toHaveProperty('al_carryover');
   });
 });
 

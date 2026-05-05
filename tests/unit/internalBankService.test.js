@@ -163,6 +163,46 @@ describe('internalBankService candidate DTO', () => {
     expect(result.candidates[0].blockers).toContain('Working time limit would be exceeded');
   });
 
+  it('blocks candidates with no onboarding record from being viable', async () => {
+    pool.query.mockReset();
+    overrideRepo.findByHome.mockReset();
+    onboardingRepo.findByHome.mockReset();
+    trainingEligibility.evaluateInternalBankTrainingEligibility.mockReturnValue({ status: 'ok', blockers: [] });
+    rotation.checkWTRImpact.mockReturnValue({ ok: true, warn: false, projectedHours: 40, message: null });
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 10, slug: 'home-a', name: 'Home A', config: {}, role_id: 'home_manager' }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'staff-no-onboarding',
+          home_id: 10,
+          home_slug: 'home-a',
+          home_name: 'Home A',
+          home_config: { cycle_start_date: '2026-01-01' },
+          name: 'No Onboarding Candidate',
+          role: 'Carer',
+          active: true,
+          willing_extras: true,
+          willing_other_homes: false,
+          internal_bank_status: 'available',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    overrideRepo.findByHome.mockResolvedValue({});
+    onboardingRepo.findByHome.mockResolvedValue({});
+
+    const result = await findCandidates({
+      targetHomeId: 10,
+      username: 'manager',
+      role: 'Carer',
+      shiftDate: '2026-05-07',
+      shiftCode: 'AG-E',
+      hours: 8,
+    });
+
+    expect(result.candidates[0].viable).toBe(false);
+    expect(result.candidates[0].blockers).toContain('Onboarding/compliance requirement not met');
+  });
+
   it('checks Right to Work expiry against the requested shift date', async () => {
     pool.query.mockReset();
     overrideRepo.findByHome.mockReset();

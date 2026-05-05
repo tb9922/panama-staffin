@@ -66,18 +66,16 @@ export async function sync(homeId, onboardingObj, client) {
 export async function upsertSection(homeId, staffId, section, sectionData) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      'SELECT data FROM onboarding WHERE home_id=$1 AND staff_id=$2 FOR UPDATE',
-      [homeId, staffId]
-    );
-    const existing = rows[0]?.data ?? {};
-    const merged = { ...existing, [section]: sectionData };
-    await client.query(
       `INSERT INTO onboarding (home_id, staff_id, data, updated_at)
-       VALUES ($1,$2,$3,NOW())
-       ON CONFLICT (home_id, staff_id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()`,
-      [homeId, staffId, JSON.stringify(merged)]
+       VALUES ($1, $2, jsonb_build_object($3::text, $4::jsonb), NOW())
+       ON CONFLICT (home_id, staff_id) DO UPDATE SET
+         data = COALESCE(onboarding.data, '{}'::jsonb) || jsonb_build_object($3::text, $4::jsonb),
+         updated_at = NOW(),
+         deleted_at = NULL
+       RETURNING data`,
+      [homeId, staffId, section, JSON.stringify(sectionData ?? {})]
     );
-    return merged;
+    return rows[0]?.data ?? {};
   });
 }
 

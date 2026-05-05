@@ -36,6 +36,11 @@ function redactOverrideReasons(overrides = {}) {
   return redacted;
 }
 
+function staffSummaryForBroadReaders(staff) {
+  return staff.map(({ id, name, role, team, pref, skill, active, start_date, leaving_date }) =>
+    ({ id, name, role, team, pref, skill, active, start_date, leaving_date }));
+}
+
 export async function listHomes() {
   return homeRepo.listAll();
 }
@@ -82,8 +87,7 @@ export async function assembleData(homeSlug, userRole) {
   // Roles excluded: training_lead, shift_coordinator, viewer, staff_member (and any unknown role).
   const PII_ROLES = new Set(['admin', 'home_manager', 'deputy_manager', 'hr_officer', 'finance_officer']);
   if (!PII_ROLES.has(userRole)) {
-    payload.staff = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
-      ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
+    payload.staff = staffSummaryForBroadReaders(staff);
   }
 
   return payload;
@@ -118,7 +122,15 @@ export async function saveData(homeSlug, body, username, clientUpdatedAt, auditD
     const { from, to } = getSchedulingWindow(windowAnchor);
 
     if (body.config) await homeRepo.updateConfig(home.id, body.config, client);
-    if (body.staff) await staffRepo.sync(home.id, body.staff, client);
+    if (body.staff) {
+      const existingStaff = await staffRepo.findAllByHome(home.id, client);
+      const mergedById = new Map(existingStaff.map((staff) => [staff.id, staff]));
+      for (const staff of body.staff) {
+        mergedById.set(staff.id, mergedById.has(staff.id) ? { ...mergedById.get(staff.id), ...staff } : staff);
+      }
+      const mergedStaff = [...mergedById.values()];
+      await staffRepo.sync(home.id, mergedStaff, client);
+    }
     if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client, from, to);
     if (body.day_notes) await dayNoteRepo.replace(home.id, body.day_notes, client, from, to);
     if (body.annual_leave != null) await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);

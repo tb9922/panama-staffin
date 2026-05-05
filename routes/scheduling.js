@@ -476,8 +476,8 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const rawOverrides = overrides;
     let staffOut, onboardingOut, overridesOut = canSeeOverrideReasons(req.homeRole) ? rawOverrides : redactOverrideReasons(rawOverrides), trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = canSeeOverrideReasons(req.homeRole) ? dayNotes : {};
     if (!canSeeOverrideReasons(req.homeRole)) {
-      staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
-        ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
+      staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, leaving_date }) =>
+        ({ id, name, role, team, pref, skill, active, start_date, leaving_date }));
       onboardingOut = undefined;
     } else {
       staffOut = staff;

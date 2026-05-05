@@ -25,6 +25,17 @@ const staffItemSchema = z.object({
   al_entitlement: z.number().nullish(),
   al_carryover: z.number().nullish(),
   leaving_date: z.string().max(20).nullish(),
+  phone: z.string().max(20).nullish(),
+  address: z.string().max(500).nullish(),
+  emergency_contact: z.string().max(200).nullish(),
+  willing_extras: z.boolean().optional(),
+  willing_other_homes: z.boolean().optional(),
+  max_weekly_hours_topup: z.number().nullish(),
+  max_travel_radius_km: z.number().nullish(),
+  home_postcode: z.string().max(20).nullish(),
+  internal_bank_status: z.string().max(50).nullish(),
+  internal_bank_notes: z.string().max(1000).nullish(),
+  notes: z.string().max(1000).nullish(),
 }).strip();
 
 const MAX_PAYLOAD_SIZE = 5_000_000; // 5MB cap

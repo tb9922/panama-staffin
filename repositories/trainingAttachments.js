@@ -45,7 +45,6 @@ export async function findAttachments(homeId, staffId, trainingType, client) {
        INNER JOIN staff s
                ON s.home_id = f.home_id
               AND s.id = f.staff_id
-              AND s.deleted_at IS NULL
       WHERE f.home_id = $1
         AND f.staff_id = $2
         AND f.training_type = $3
@@ -75,7 +74,6 @@ export async function findById(id, homeId, client) {
        INNER JOIN staff s
                ON s.home_id = f.home_id
               AND s.id = f.staff_id
-              AND s.deleted_at IS NULL
       WHERE f.id = $1
         AND f.home_id = $2
         AND f.deleted_at IS NULL`,
@@ -116,10 +114,9 @@ export async function softDelete(id, homeId, client) {
         AND f.deleted_at IS NULL
         AND EXISTS (
           SELECT 1
-            FROM staff s
-           WHERE s.home_id = f.home_id
+           FROM staff s
+          WHERE s.home_id = f.home_id
              AND s.id = f.staff_id
-             AND s.deleted_at IS NULL
         )
     RETURNING ${QUALIFIED_COLS}`,
     [id, homeId]
