@@ -56,6 +56,7 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE $1`, [`${PREFIX}-%`]);
   await pool.query(`DELETE FROM training_records WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
   await pool.query(`DELETE FROM audit_log WHERE home_slug = $1`, [`${PREFIX}-home`]).catch(() => {});
+  await pool.query(`DELETE FROM override_requests WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
   await pool.query(`DELETE FROM day_notes WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
@@ -120,6 +121,7 @@ afterEach(async () => {
   await pool.query(`DELETE FROM day_notes WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM audit_log WHERE home_slug = $1`, [homeSlug]).catch(() => {});
+  await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`UPDATE homes SET config = $2::jsonb WHERE id = $1`, [homeId, JSON.stringify(BASE_CONFIG)]).catch(() => {});
 });
 
@@ -130,6 +132,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM day_notes WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM audit_log WHERE home_slug = $1`, [homeSlug]).catch(() => {});
+  await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE $1`, [`${PREFIX}-%`]).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE id = $1`, [homeId]).catch(() => {});
@@ -259,13 +262,39 @@ describe('scheduling route hardening', () => {
        VALUES ($1, $2, 'sched-route-s1', 'SICK', 'Migraine and medication side effects', 'manual')`,
       [homeId, shiftDate],
     );
+    await pool.query(
+      `INSERT INTO day_notes (home_id, date, note)
+       VALUES ($1, $2, 'Clinical staffing note for managers only')`,
+      [homeId, shiftDate],
+    );
 
     const managerRes = await authRequest('get', `/api/scheduling?home=${homeSlug}&from=${shiftDate}&to=${shiftDate}`).expect(200);
     expect(managerRes.body.overrides[shiftDate]['sched-route-s1'].reason).toMatch(/Migraine/i);
+    expect(managerRes.body.day_notes[shiftDate]).toMatch(/Clinical staffing note/i);
 
     const coordRes = await coordinatorRequest('get', `/api/scheduling?home=${homeSlug}&from=${shiftDate}&to=${shiftDate}`).expect(200);
     expect(coordRes.body.overrides[shiftDate]['sched-route-s1'].reason).toBeUndefined();
     expect(coordRes.body.overrides[shiftDate]['sched-route-s1'].reason_category).toBe('absence');
+    expect(coordRes.body.day_notes).toEqual({});
+  });
+
+  it('restricts staff override request review and decisions to managers', async () => {
+    const { rows: [requestRow] } = await pool.query(
+      `INSERT INTO override_requests (home_id, staff_id, request_type, date, requested_shift, reason)
+       VALUES ($1, 'sched-route-s1', 'OTHER', $2, 'L', 'Hospital appointment detail')
+       RETURNING id, version`,
+      [homeId, utcDateOffset(13)],
+    );
+
+    const managerList = await authRequest('get', `/api/staff/override-requests?home=${homeSlug}`).expect(200);
+    expect(managerList.body[0].reason).toMatch(/Hospital appointment/i);
+
+    const coordinatorList = await coordinatorRequest('get', `/api/staff/override-requests?home=${homeSlug}`);
+    expect(coordinatorList.status).toBe(403);
+
+    const coordinatorDecision = await coordinatorRequest('post', `/api/staff/override-requests/${requestRow.id}/decision?home=${homeSlug}`)
+      .send({ status: 'approved', decisionNote: 'not allowed', expectedVersion: requestRow.version });
+    expect(coordinatorDecision.status).toBe(403);
   });
 
   it('allows OC cover links and rejects stale cover links on non-OC shifts', async () => {

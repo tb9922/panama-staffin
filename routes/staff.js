@@ -128,7 +128,14 @@ router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, req
 });
 
 // GET /api/staff/override-requests?home=X — pending staff self-service requests for manager review
-router.get('/override-requests', requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+function requireOverrideRequestReviewer(req, res, next) {
+  if (!['home_manager', 'deputy_manager'].includes(req.homeRole)) {
+    return res.status(403).json({ error: 'Home manager or deputy manager role required' });
+  }
+  next();
+}
+
+router.get('/override-requests', requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), requireOverrideRequestReviewer, async (req, res, next) => {
   try {
     const rows = await overrideRequestService.findPending({ homeId: req.home.id });
     res.json(rows);
@@ -138,7 +145,7 @@ router.get('/override-requests', requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/staff/override-requests/:id/decision?home=X — approve / reject a pending request
-router.post('/override-requests/:id/decision', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.post('/override-requests/:id/decision', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), requireOverrideRequestReviewer, async (req, res, next) => {
   try {
     const id = staffIdSchema.transform((value) => Number.parseInt(value, 10)).safeParse(req.params.id);
     if (!id.success || !Number.isInteger(id.data) || id.data <= 0) {

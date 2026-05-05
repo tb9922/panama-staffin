@@ -452,7 +452,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
     const rawOverrides = overrides;
-    let staffOut, onboardingOut, overridesOut = canSeeOverrideReasons(req.homeRole) ? rawOverrides : redactOverrideReasons(rawOverrides), trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = dayNotes;
+    let staffOut, onboardingOut, overridesOut = canSeeOverrideReasons(req.homeRole) ? rawOverrides : redactOverrideReasons(rawOverrides), trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = canSeeOverrideReasons(req.homeRole) ? dayNotes : {};
     if (!canSeeOverrideReasons(req.homeRole)) {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
