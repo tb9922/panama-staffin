@@ -930,6 +930,17 @@ describe('Agency — /agency', () => {
       expect(parseFloat(res.body.total_cost)).toBe(176); // 8 * 22
       shiftId = res.body.id;
       shiftVersion = res.body.version;
+      const { rows: [override] } = await pool.query(
+        `SELECT shift, source, override_hours
+           FROM shift_overrides
+          WHERE home_id = $1 AND date = $2 AND staff_id = $3`,
+        [homeAId, '2099-06-01', `AG-${shiftId}`],
+      );
+      expect(override).toMatchObject({ shift: 'AG-E', source: 'agency_tracker' });
+      expect(parseFloat(override.override_hours)).toBe(8);
+
+      const scheduling = await adminGetApi(`/scheduling?home=${homeASlug}&from=2099-06-01&to=2099-06-01`).expect(200);
+      expect(scheduling.body.overrides['2099-06-01'][`AG-${shiftId}`].shift).toBe('AG-E');
     });
 
     it('PUT preserves inferred outcome from the full agency attempt state', async () => {
@@ -1121,6 +1132,14 @@ describe('Agency — /agency', () => {
       );
       expect(oldAttempt.linked_agency_shift_id).toBeNull();
       expect(newAttempt.linked_agency_shift_id).toBe(shiftId);
+      const { rows: [override] } = await pool.query(
+        `SELECT shift, source, override_hours
+           FROM shift_overrides
+          WHERE home_id = $1 AND date = $2 AND staff_id = $3`,
+        [homeAId, '2099-06-01', `AG-${shiftId}`],
+      );
+      expect(override).toMatchObject({ shift: 'AG-L', source: 'agency_tracker' });
+      expect(parseFloat(override.override_hours)).toBe(8);
       shiftAttemptId = attemptId;
       shiftVersion = res.body.version;
     });

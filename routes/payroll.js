@@ -263,6 +263,24 @@ function agencyAttemptErrorForShift(attempt, shiftData, existingShiftId = null) 
   return null;
 }
 
+function agencyOverrideStaffId(agencyShiftId) {
+  return `AG-${agencyShiftId}`;
+}
+
+async function syncAgencySchedulingOverride(homeId, agencyShift, client, previousShift = null) {
+  const staffId = agencyOverrideStaffId(agencyShift.id);
+  if (previousShift?.date && previousShift.date !== agencyShift.date) {
+    await overrideRepo.deleteOne(homeId, previousShift.date, staffId, client);
+  }
+  await overrideRepo.upsertOne(homeId, agencyShift.date, staffId, {
+    shift: agencyShift.shift_code,
+    reason: 'Agency cover logged in Agency Tracker',
+    source: 'agency_tracker',
+    sleep_in: false,
+    override_hours: agencyShift.hours ?? null,
+  }, client);
+}
+
 async function getHourAdjustmentContext(home, staffId, date, client, payableHoursOverride = undefined) {
   const staff = await staffRepo.findById(home.id, staffId, client);
   const overrides = await overrideRepo.findByHome(home.id, date, date, client);
@@ -903,6 +921,7 @@ router.post('/agency/shifts', writeRateLimiter, requireAuth, requireHomeAccess, 
       if (!linked) {
         throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });
       }
+      await syncAgencySchedulingOverride(req.home.id, created, client);
       await ensureAgencyOverrideAction(req.home.id, linked, { actorId: actorId(req) }, client);
       return created;
     });
@@ -969,6 +988,9 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
           throw Object.assign(new Error('Agency attempt could not be linked to shift'), { status: 409 });
         }
         await ensureAgencyOverrideAction(req.home.id, linked, { actorId: actorId(req) }, client);
+      }
+      if (updated) {
+        await syncAgencySchedulingOverride(req.home.id, updated, client, existing);
       }
       return updated;
     });
