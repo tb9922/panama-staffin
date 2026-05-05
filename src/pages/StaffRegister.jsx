@@ -432,7 +432,7 @@ export default function StaffRegister() {
       </div>
 
       {/* Add Staff Modal */}
-      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setRowError(null); setRowWarning(null); }} title="Add New Staff" size="md">
+      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setRowError(null); setRowWarning(null); }} title="Add New Staff" size="wide">
             {rowError?.id === 'add' && (
               <div id="add-staff-error" className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm mb-3" role="alert">
                 {rowError.msg}
@@ -443,7 +443,8 @@ export default function StaffRegister() {
                 {rowWarning.msgs.join(' | ')}
               </div>
             )}
-            <div className="space-y-3">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="space-y-3">
               <div>
                 <label htmlFor="staff-register-new-name" className={INPUT.label}>Name</label>
                 <input id="staff-register-new-name" type="text" value={newStaff.name} onChange={e => setNewStaff({ ...newStaff, name: e.target.value })}
@@ -517,6 +518,8 @@ export default function StaffRegister() {
                   WTR Opt-Out
                 </label>
               </div>
+              </div>
+              <div className="space-y-3">
               <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-2)] p-3">
                 <h3 className="mb-3 text-sm font-semibold text-[var(--ink)]">Internal bank</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -591,6 +594,7 @@ export default function StaffRegister() {
                     className={INPUT.base} />
                   <p className="text-xs text-gray-600 mt-0.5">From previous year</p>
                 </div>
+              </div>
               </div>
             </div>
             <div className={MODAL.footer}>

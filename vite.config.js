@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 const apiTarget = process.env.VITE_DEV_API_TARGET || 'http://localhost:3001';
+const allowedHosts = (process.env.VITE_ALLOWED_HOSTS || '')
+  .split(',')
+  .map(host => host.trim())
+  .filter(Boolean);
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -11,6 +15,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000, // ExcelJS (937KB) is lazy-loaded on export - not a perf concern
   },
   server: {
+    ...(allowedHosts.length ? { allowedHosts } : {}),
     proxy: {
       '/api': apiTarget,
     },
