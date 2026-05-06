@@ -399,7 +399,7 @@ export default function AppLayout() {
           })}
         </nav>
         {sidebarOpen && (
-          <div className="shrink-0 border-t border-[var(--line)] p-3">
+          <div className="shrink-0 border-t border-[var(--line)] p-3 md:hidden">
             <div className="flex items-center justify-between">
               <div className="text-xs leading-relaxed text-[var(--ink-3)]">
                 <span className="font-medium text-[var(--ink)]">{user.displayName || user.username}</span> ({isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role})<br />
@@ -446,6 +446,13 @@ export default function AppLayout() {
               onClick={() => setChangePwOpen(true)}
             >
               Change password
+            </button>
+            <button
+              type="button"
+              className={BTN.secondary}
+              onClick={() => { void logout(); }}
+            >
+              Logout
             </button>
             <button
               type="button"
