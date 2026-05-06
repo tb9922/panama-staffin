@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import { perUserKey, readRateLimiter } from '../../lib/rateLimiter.js';
 import { PostgresRateLimitStore } from '../../lib/postgresRateLimitStore.js';
 import * as staffRepo from '../../repositories/staffRepo.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
+import * as actionItemRepo from '../../repositories/actionItemRepo.js';
 import * as auditService from '../../services/auditService.js';
+import { withTransaction } from '../../db.js';
+import { calculateEscalationLevel } from '../../lib/actionItems.js';
 import { definedWithoutVersion, splitVersion } from '../../lib/versionedPayload.js';
 import {
   mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
@@ -37,6 +41,51 @@ import statsRouter from './stats.js';
 import gdprRouter from './gdpr.js';
 
 const router = Router();
+
+const EDI_AUDIT_SENSITIVE_FIELDS = [
+  'harassment_category',
+  'respondent_name',
+  'reasonable_steps_evidence',
+  'condition_description',
+  'adjustments',
+  'access_to_work_reference',
+  'description',
+  'outcome',
+  'notes',
+  'category',
+];
+
+function actorId(req) {
+  return req.authDbUser?.id || null;
+}
+
+function normalizeActionItemStatus(status) {
+  return status === 'completed' ? 'completed' : 'open';
+}
+
+async function syncGrievanceActionItem(req, grievanceId, action, client) {
+  if (!action?.due_date) return null;
+  const status = normalizeActionItemStatus(action.status);
+  const priority = 'medium';
+  const { item } = await actionItemRepo.syncBySource(req.home.id, {
+    source_type: 'hr_grievance',
+    source_id: String(grievanceId),
+    source_action_key: `grievance_action:${action.id}`,
+    title: action.description,
+    description: action.description,
+    category: 'hr',
+    priority,
+    owner_name: action.responsible || null,
+    due_date: action.due_date,
+    status,
+    escalation_level: calculateEscalationLevel({ dueDate: action.due_date, status, priority }),
+  }, actorId(req), client);
+
+  if (item && status === 'completed' && item.status !== 'completed') {
+    return actionItemRepo.update(item.id, req.home.id, { status: 'completed', escalation_level: 0 }, null, actorId(req), client);
+  }
+  return item;
+}
 
 // Staff picker data is used by many pages during normal SPA navigation. Keep it
 // protected by the shared read limiter without burning the stricter HR case bucket.
@@ -89,6 +138,8 @@ router.get('/cases/grievance/:id/actions', requireAuth, requireHomeAccess, requi
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
+    const grievance = await hrRepo.findGrievanceById(idP.data, req.home.id);
+    if (!grievance) return res.status(404).json({ error: 'Grievance case not found' });
     res.json(await hrRepo.findGrievanceActions(idP.data, req.home.id));
   } catch (err) { next(err); }
 });
@@ -100,7 +151,14 @@ router.post('/cases/grievance/:id/actions', requireAuth, requireHomeAccess, requ
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceActionBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrRepo.createGrievanceAction(idP.data, req.home.id, parsed.data);
+    if (!parsed.data.due_date) return res.status(400).json({ error: 'Due date is required for accountable actions' });
+    const result = await withTransaction(async (client) => {
+      const action = await hrRepo.createGrievanceAction(idP.data, req.home.id, parsed.data, client);
+      if (!action) return null;
+      await syncGrievanceActionItem(req, idP.data, action, client);
+      return action;
+    });
+    if (!result) return res.status(404).json({ error: 'Grievance case not found' });
     await auditService.log('hr_grievance_action_create', req.home.slug, req.user.username, { id: result.id });
     res.status(201).json(result);
   } catch (err) { next(err); }
@@ -111,10 +169,15 @@ router.put('/grievance-actions/:id', requireAuth, requireHomeAccess, requireModu
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });
-    const parsed = grievanceActionUpdateSchema.safeParse(req.body);
+    const parsed = grievanceActionUpdateSchema.extend({ _version: z.number().int().positive() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { version } = splitVersion(parsed.data);
-    const result = await hrRepo.updateGrievanceAction(idP.data, req.home.id, definedWithoutVersion(parsed.data), null, version);
+    const result = await withTransaction(async (client) => {
+      const action = await hrRepo.updateGrievanceAction(idP.data, req.home.id, definedWithoutVersion(parsed.data), client, version);
+      if (!action) return null;
+      await syncGrievanceActionItem(req, action.grievance_id, action, client);
+      return action;
+    });
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
     await auditService.log('hr_grievance_action_update', req.home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -160,9 +223,9 @@ registerCaseRoutes(router, {
   type: 'contract', path: '/contracts',
   bodySchema: contractBodySchema, updateSchema: contractUpdateSchema,
   mapFields: mapContractFields,
-  filters: { staff_id: 'staffId', status: 'status' },
   repoFind: hrRepo.findContracts, repoFindById: hrRepo.findContractById,
   repoCreate: hrRepo.createContract, repoUpdate: hrRepo.updateContract,
+  filters: { staff_id: 'staffId', status: 'status', contract_type: 'contractType' },
   table: 'hr_contracts',
 });
 
@@ -194,6 +257,7 @@ registerCaseRoutes(router, {
   filters: { record_type: 'recordType', staff_id: 'staffId' },
   repoFind: hrRepo.findEdi, repoFindById: hrRepo.findEdiById,
   repoCreate: hrRepo.createEdi, repoUpdate: hrRepo.updateEdi,
+  auditSensitiveFields: EDI_AUDIT_SENSITIVE_FIELDS,
   table: 'hr_edi_records',
 });
 

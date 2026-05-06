@@ -135,7 +135,17 @@ const shapeGrvAction = createShaper({
 export async function findGrievanceActions(grievanceId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE grievance_id = $1 AND home_id = $2 ORDER BY created_at`,
+    `SELECT ${ACTION_COLS}
+       FROM hr_grievance_actions a
+      WHERE a.grievance_id = $1
+        AND a.home_id = $2
+        AND EXISTS (
+          SELECT 1 FROM hr_grievance_cases g
+           WHERE g.id = a.grievance_id
+             AND g.home_id = a.home_id
+             AND g.deleted_at IS NULL
+        )
+      ORDER BY created_at`,
     [grievanceId, homeId]);
   return rows.map(shapeGrvAction);
 }
@@ -143,7 +153,16 @@ export async function findGrievanceActions(grievanceId, homeId, client) {
 export async function findGrievanceActionById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE id = $1 AND home_id = $2`,
+    `SELECT ${ACTION_COLS}
+       FROM hr_grievance_actions a
+      WHERE a.id = $1
+        AND a.home_id = $2
+        AND EXISTS (
+          SELECT 1 FROM hr_grievance_cases g
+           WHERE g.id = a.grievance_id
+             AND g.home_id = a.home_id
+             AND g.deleted_at IS NULL
+        )`,
     [id, homeId]
   );
   return shapeGrvAction(rows[0]);
@@ -151,6 +170,11 @@ export async function findGrievanceActionById(id, homeId, client) {
 
 export async function createGrievanceAction(grievanceId, homeId, data, client) {
   const conn = client || pool;
+  const { rows: parentRows } = await conn.query(
+    `SELECT 1 FROM hr_grievance_cases WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [grievanceId, homeId]
+  );
+  if (parentRows.length === 0) return null;
   const { rows } = await conn.query(
     `INSERT INTO hr_grievance_actions (grievance_id, home_id, description, responsible, due_date, status)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING ${ACTION_COLS}`,
@@ -171,7 +195,16 @@ export async function updateGrievanceAction(id, homeId, data, client, version) {
   if (fields.length === 0) return findGrievanceActionById(id, homeId, client);
   fields.push('version = version + 1');
   fields.push('updated_at = NOW()');
-  let sql = `UPDATE hr_grievance_actions SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2`;
+  let sql = `UPDATE hr_grievance_actions a
+                SET ${fields.join(', ')}
+              WHERE a.id = $1
+                AND a.home_id = $2
+                AND EXISTS (
+                  SELECT 1 FROM hr_grievance_cases g
+                   WHERE g.id = a.grievance_id
+                     AND g.home_id = a.home_id
+                     AND g.deleted_at IS NULL
+                )`;
   if (version != null) {
     params.push(version);
     sql += ` AND version = $${params.length}`;

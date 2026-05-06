@@ -18,6 +18,19 @@ const SOURCE_QUERIES = {
     FROM hr_file_attachments
     WHERE home_id = $1
       AND deleted_at IS NULL
+      AND (
+        (case_type = 'disciplinary' AND EXISTS (SELECT 1 FROM hr_disciplinary_cases p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'grievance' AND EXISTS (SELECT 1 FROM hr_grievance_cases p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'performance' AND EXISTS (SELECT 1 FROM hr_performance_cases p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'rtw_interview' AND EXISTS (SELECT 1 FROM hr_rtw_interviews p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'oh_referral' AND EXISTS (SELECT 1 FROM hr_oh_referrals p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'contract' AND EXISTS (SELECT 1 FROM hr_contracts p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'family_leave' AND EXISTS (SELECT 1 FROM hr_family_leave p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'flexible_working' AND EXISTS (SELECT 1 FROM hr_flexible_working p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'edi' AND EXISTS (SELECT 1 FROM hr_edi_records p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'tupe' AND EXISTS (SELECT 1 FROM hr_tupe_transfers p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+        OR (case_type = 'renewal' AND EXISTS (SELECT 1 FROM hr_rtw_dbs_renewals p WHERE p.home_id = hr_file_attachments.home_id AND p.id = hr_file_attachments.case_id AND p.deleted_at IS NULL))
+      )
       AND ($2::TEXT IS NULL OR original_name ILIKE $2 OR COALESCE(description, '') ILIKE $2)
       AND ($3::TEXT IS NULL OR uploaded_by = $3)
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)

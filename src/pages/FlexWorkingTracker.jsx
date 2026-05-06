@@ -195,7 +195,7 @@ export default function FlexWorkingTracker() {
       load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
-        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
       } else { setError(e.message); }
     } finally {

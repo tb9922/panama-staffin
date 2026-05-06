@@ -158,7 +158,10 @@ export async function exportHrByHome(homeSlug, from, to) {
   const { rows } = await pool.query(
     `SELECT id, ts, action, home_slug, user_name, details
        FROM audit_log
-      WHERE home_slug = $1 AND action LIKE 'hr_%' AND ts >= $2 AND ts <= $3
+      WHERE home_slug = $1
+        AND action LIKE 'hr_%'
+        AND ts >= $2::date
+        AND ts < ($3::date + INTERVAL '1 day')
       ORDER BY ts DESC
       LIMIT 50000`,
     [homeSlug, from, to]
@@ -184,8 +187,8 @@ export async function exportHrByHomeChunk(homeSlug, from, to, { limit = 1000, cu
        FROM audit_log
       WHERE home_slug = $1
         AND action LIKE 'hr_%'
-        AND ts >= $2
-        AND ts <= $3${cursorSql}
+        AND ts >= $2::date
+        AND ts < ($3::date + INTERVAL '1 day')${cursorSql}
       ORDER BY ts DESC, id DESC
       LIMIT ${limitParam}`,
     params

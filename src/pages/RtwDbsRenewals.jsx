@@ -185,7 +185,7 @@ export default function RtwDbsRenewals() {
       load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
-        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
       } else { setError(e.message); }
     } finally {
@@ -195,13 +195,25 @@ export default function RtwDbsRenewals() {
 
   async function handleExport() {
     const { downloadXLSX } = await import('../lib/excel.js');
+    const filters = { limit: 500, offset: 0 };
+    if (filterStaff) filters.staffId = filterStaff;
+    if (filterType) filters.checkType = filterType;
+    if (filterStatus) filters.status = filterStatus;
+    const allRows = [];
+    let nextOffset = 0;
+    for (;;) {
+      const res = await getHrRenewals(home, { ...filters, offset: nextOffset });
+      const rows = res?.rows || [];
+      allRows.push(...rows);
+      if (rows.length < filters.limit || allRows.length >= (res?.total || rows.length)) break;
+      nextOffset += filters.limit;
+    }
     downloadXLSX('rtw_dbs_renewals', [{
       name: 'Renewals',
-      headers: ['Staff ID', 'Check Type', 'Last Checked', 'Expiry Date', 'Status', 'Checked By', 'Certificate No', 'Document Type', 'Notes'],
-      rows: items.map(i => [
+      headers: ['Staff ID', 'Check Type', 'Last Checked', 'Expiry Date', 'Status', 'Checked By', 'Document Type'],
+      rows: allRows.map(i => [
         i.staff_id, checkTypeName(i.check_type), i.last_checked || '', i.expiry_date || '',
-        statusName(i.status), i.checked_by || '',
-        i.certificate_number || '', i.document_type || '', i.notes || '',
+        statusName(i.status), i.checked_by || '', i.document_type || '',
       ]),
     }]);
   }

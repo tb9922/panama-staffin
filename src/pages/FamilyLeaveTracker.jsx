@@ -146,7 +146,7 @@ export default function FamilyLeaveTracker() {
       load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
-        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
       } else { setError(e.message); }
     } finally {
@@ -221,7 +221,7 @@ export default function FamilyLeaveTracker() {
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={TABLE.empty}>
+                  <td colSpan={canEdit ? 7 : 6} className={TABLE.empty}>
                     <EmptyState
                       title="No family leave records yet"
                       description={canEdit ? 'Create the first record to track leave periods, return dates, and statutory pay.' : 'Family leave records will appear here once they have been recorded.'}
@@ -259,11 +259,11 @@ export default function FamilyLeaveTracker() {
       {showModal && (
         <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Family Leave' : 'New Family Leave Record'} size="xl">
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <StaffPicker value={form.staff_id || ''} onChange={val => set('staff_id', val)} label="Staff Member" required />
                 <div>
-                  <label className={INPUT.label}>Leave Type *</label>
-                  <select className={INPUT.select} value={form.leave_type} onChange={e => set('leave_type', e.target.value)}>
+                  <label htmlFor="family-leave-type" className={INPUT.label}>Leave Type *</label>
+                  <select id="family-leave-type" className={INPUT.select} value={form.leave_type} onChange={e => set('leave_type', e.target.value)}>
                     {FAMILY_LEAVE_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
@@ -275,7 +275,7 @@ export default function FamilyLeaveTracker() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="family-leave-start-date" className={INPUT.label}>Start Date *</label>
                   <input id="family-leave-start-date" type="date" className={INPUT.base} value={form.start_date} onChange={e => set('start_date', e.target.value)} />
@@ -285,7 +285,7 @@ export default function FamilyLeaveTracker() {
                   <input id="family-leave-end-date" type="date" className={INPUT.base} value={form.end_date} onChange={e => set('end_date', e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="family-leave-status" className={INPUT.label}>Status</label>
                   <select id="family-leave-status" className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
@@ -297,7 +297,7 @@ export default function FamilyLeaveTracker() {
                   <input id="family-leave-expected-return" type="date" className={INPUT.base} value={form.expected_return} onChange={e => set('expected_return', e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="family-leave-actual-return" className={INPUT.label}>Actual Return</label>
                   <input id="family-leave-actual-return" type="date" className={INPUT.base} value={form.actual_return} onChange={e => set('actual_return', e.target.value)} />

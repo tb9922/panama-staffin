@@ -44,7 +44,7 @@ router.put('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
-    const versionedSchema = meetingBodySchema.partial().extend({ _version: z.number().int().nonnegative().optional() });
+    const versionedSchema = meetingBodySchema.partial().extend({ _version: z.number().int().nonnegative() });
     const parsed = versionedSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { version } = splitVersion(parsed.data);

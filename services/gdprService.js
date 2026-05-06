@@ -23,6 +23,56 @@ function normaliseMatchValues(values) {
     .filter(Boolean))];
 }
 
+const HR_STAFF_CASE_LINKS = Object.freeze([
+  ['disciplinary', 'hr_disciplinary_cases'],
+  ['grievance', 'hr_grievance_cases'],
+  ['performance', 'hr_performance_cases'],
+  ['rtw_interview', 'hr_rtw_interviews'],
+  ['oh_referral', 'hr_oh_referrals'],
+  ['contract', 'hr_contracts'],
+  ['family_leave', 'hr_family_leave'],
+  ['flexible_working', 'hr_flexible_working'],
+  ['edi', 'hr_edi_records'],
+  ['renewal', 'hr_rtw_dbs_renewals'],
+]);
+
+function hrTupeEmployeeSubjectPredicate(tableAlias = 't', staffNameParam = '$3') {
+  return `EXISTS (
+    SELECT 1
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(${tableAlias}.employees) = 'array' THEN ${tableAlias}.employees
+          ELSE '[]'::jsonb
+        END
+      ) employee
+     WHERE employee->>'staff_id' = $2
+        OR employee->>'staffId' = $2
+        OR employee->>'id' = $2
+        OR (${staffNameParam} IS NOT NULL AND (
+          employee->>'name' = ${staffNameParam}
+          OR employee->>'full_name' = ${staffNameParam}
+          OR employee->>'staff_name' = ${staffNameParam}
+        ))
+  )`;
+}
+
+function hrSubjectCaseCondition(alias, staffNameParam = '$3') {
+  const staffCaseChecks = HR_STAFF_CASE_LINKS.map(([caseType, table]) => (
+    `(${alias}.case_type = '${caseType}' AND ${alias}.case_id IN (
+      SELECT id FROM ${table} WHERE home_id = $1 AND staff_id = $2
+    ))`
+  ));
+  staffCaseChecks.push(
+    `(${alias}.case_type = 'tupe' AND ${alias}.case_id IN (
+      SELECT t.id FROM hr_tupe_transfers t
+       WHERE t.home_id = $1
+         AND t.deleted_at IS NULL
+         AND ${hrTupeEmployeeSubjectPredicate('t', staffNameParam)}
+    ))`
+  );
+  return staffCaseChecks.join('\n             OR ');
+}
+
 function anonymisedStaffPrefix(staffId) {
   return String(staffId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4) || 'staff';
 }
@@ -246,22 +296,12 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => hrRepo.findEdi(homeId, { staffId: subjectId }, conn, { limit: 500, offset: 0 }).then(result => ({ rows: result.rows })),
-        // HR module — TUPE: include only rows where the subject is explicitly present
-        // in the employees JSON payload by staff ID or resolved name.
-        () => staffName
-          ? conn.query(
-              `SELECT * FROM hr_tupe_transfers
-               WHERE home_id = $1 AND deleted_at IS NULL
-                 AND (
-                   employees::text LIKE '%' || $2 || '%'
-                   OR employees::text LIKE '%' || $3 || '%'
-                 )`,
-              [homeId, String(subjectId), staffName])
-          : conn.query(
-              `SELECT * FROM hr_tupe_transfers
-               WHERE home_id = $1 AND deleted_at IS NULL
-                 AND employees::text LIKE '%' || $2 || '%'`,
-              [homeId, String(subjectId)]),
+        () => conn.query(
+          `SELECT t.* FROM hr_tupe_transfers t
+           WHERE t.home_id = $1
+             AND t.deleted_at IS NULL
+             AND ${hrTupeEmployeeSubjectPredicate('t')}`,
+          [homeId, String(subjectId), staffName || null]),
         // HR module — DBS/RTW renewals
         () => conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — case notes authored by this staff member (pre-resolved name)
@@ -274,10 +314,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
            WHERE cn.home_id = $1 AND (
              (cn.subject_type = 'staff' AND cn.subject_id = $2)
              OR
-             (cn.case_type = 'disciplinary' AND cn.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
-             OR (cn.case_type = 'grievance' AND cn.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
-             OR (cn.case_type = 'performance' AND cn.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
-           )`, [homeId, subjectId]),
+             ${hrSubjectCaseCondition('cn')}
+           )`, [homeId, subjectId, staffName || null]),
         // Onboarding data (DBS, RTW, references, etc.)
         () => conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Care Certificate progress
@@ -300,18 +338,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(
           `SELECT m.* FROM hr_investigation_meetings m
            WHERE m.home_id = $1 AND (
-             (m.case_type = 'disciplinary' AND m.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
-             OR (m.case_type = 'grievance' AND m.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
-             OR (m.case_type = 'performance' AND m.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
-           )`, [homeId, subjectId]),
+             ${hrSubjectCaseCondition('m')}
+           )`, [homeId, subjectId, staffName || null]),
         // HR file attachments (linked via case tables)
         () => conn.query(
           `SELECT a.* FROM hr_file_attachments a
            WHERE a.home_id = $1 AND (
-             (a.case_type = 'disciplinary' AND a.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
-             OR (a.case_type = 'grievance' AND a.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
-             OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
-           )`, [homeId, subjectId]),
+             ${hrSubjectCaseCondition('a')}
+           )`, [homeId, subjectId, staffName || null]),
         () => conn.query(
           `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
           [homeId, subjectId]),
@@ -833,22 +867,17 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     await client.query(
       `UPDATE hr_case_notes SET content = '[REDACTED]'
        WHERE home_id = $1 AND (
-         (case_type = 'disciplinary' AND case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
-         OR (case_type = 'grievance' AND case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
-         OR (case_type = 'performance' AND case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
+         ${hrSubjectCaseCondition('hr_case_notes', '$3')}
        )`,
-      [homeId, staffId]
+      [homeId, staffId, originalName || null]
     );
 
     // Delete HR file attachments linked to this staff member's cases (documents may contain personal data)
-    const hrCaseCondition = `
-      (a.case_type = 'disciplinary' AND a.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
-      OR (a.case_type = 'grievance' AND a.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
-      OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))`;
+    const hrCaseCondition = hrSubjectCaseCondition('a', '$3');
     const { rows: attachments } = await client.query(
       `SELECT a.stored_name, a.case_type, a.case_id FROM hr_file_attachments a
        WHERE a.home_id = $1 AND (${hrCaseCondition})`,
-      [homeId, staffId]
+      [homeId, staffId, originalName || null]
     );
     // Delete physical files before metadata so failures leave the DB reference intact.
     await deleteErasureAttachmentFiles(attachments.map((att) => (
@@ -857,7 +886,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Delete attachment metadata
     await client.query(
       `DELETE FROM hr_file_attachments a WHERE a.home_id = $1 AND (${hrCaseCondition})`,
-      [homeId, staffId]
+      [homeId, staffId, originalName || null]
     );
 
     // Anonymise incidents where this staff member was the affected person
@@ -1075,10 +1104,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     await redactWebhookDeliveriesByPayload(client, homeId, [staffId, originalName, ...linkedUsernames]);
 
     // Anonymise hr_investigation_meetings linked to this staff member's cases
-    const meetingCaseCondition = `
-      (case_type = 'disciplinary' AND case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
-      OR (case_type = 'grievance' AND case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
-      OR (case_type = 'performance' AND case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))`;
+    const meetingCaseCondition = hrSubjectCaseCondition('hr_investigation_meetings', '$3');
     // Clear content fields (may contain subject PII). Preserve recorded_by — it is the
     // manager's username, not the subject's data. Only anonymise recorded_by if it matches
     // the subject's name (rare case where the subject recorded their own meeting).
@@ -1086,12 +1112,13 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `UPDATE hr_investigation_meetings SET
          attendees = '[]'::jsonb, summary = NULL, key_points = NULL, outcome = NULL
        WHERE home_id = $1 AND (${meetingCaseCondition})`,
-      [homeId, staffId]
+      [homeId, staffId, originalName || null]
     );
     if (originalName) {
+      const meetingCaseConditionForRecorder = hrSubjectCaseCondition('hr_investigation_meetings', '$4');
       await client.query(
         `UPDATE hr_investigation_meetings SET recorded_by = $3
-         WHERE home_id = $1 AND recorded_by = $4 AND (${meetingCaseCondition})`,
+         WHERE home_id = $1 AND recorded_by = $4 AND (${meetingCaseConditionForRecorder})`,
         [homeId, staffId, anon, originalName]
       );
     }

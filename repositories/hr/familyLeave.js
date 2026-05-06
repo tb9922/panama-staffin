@@ -78,11 +78,14 @@ export async function createFamilyLeave(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO hr_family_leave
        (home_id, staff_id, type, request_date, leave_start_date, leave_end_date,
-        expected_return_date, status, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
+        expected_return_date, actual_return_date, statutory_pay_type, kit_days,
+        status, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.type, data.request_date || null,
      data.leave_start_date || null, data.leave_end_date || null,
-     data.expected_return_date || null, data.status ?? 'requested',
+     data.expected_return_date || null, data.actual_return_date || null,
+     data.statutory_pay_type || null, JSON.stringify(data.kit_days ?? 0),
+     data.status ?? 'requested',
      data.notes || null, data.created_by || null]
   );
   return shapeFamilyLeave(rows[0]);

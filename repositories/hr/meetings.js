@@ -11,6 +11,23 @@ const PARENT_TABLE = {
   performance:  'hr_performance_cases',
 };
 
+function liveParentPredicate(tableRef = 'hr_investigation_meetings') {
+  return `(
+    (${tableRef}.case_type = 'disciplinary' AND EXISTS (
+      SELECT 1 FROM hr_disciplinary_cases p
+       WHERE p.id = ${tableRef}.case_id AND p.home_id = ${tableRef}.home_id AND p.deleted_at IS NULL
+    ))
+    OR (${tableRef}.case_type = 'grievance' AND EXISTS (
+      SELECT 1 FROM hr_grievance_cases p
+       WHERE p.id = ${tableRef}.case_id AND p.home_id = ${tableRef}.home_id AND p.deleted_at IS NULL
+    ))
+    OR (${tableRef}.case_type = 'performance' AND EXISTS (
+      SELECT 1 FROM hr_performance_cases p
+       WHERE p.id = ${tableRef}.case_id AND p.home_id = ${tableRef}.home_id AND p.deleted_at IS NULL
+    ))
+  )`;
+}
+
 const shapeMeeting = createShaper({
   fields: [
     'id', 'home_id', 'case_type', 'case_id',
@@ -25,7 +42,14 @@ const shapeMeeting = createShaper({
 export async function findMeetings(caseType, caseId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS} FROM hr_investigation_meetings WHERE case_type = $1 AND case_id = $2 AND home_id = $3 AND deleted_at IS NULL ORDER BY meeting_date DESC, created_at DESC`,
+    `SELECT ${COLS}
+       FROM hr_investigation_meetings
+      WHERE case_type = $1
+        AND case_id = $2
+        AND home_id = $3
+        AND deleted_at IS NULL
+        AND ${liveParentPredicate()}
+      ORDER BY meeting_date DESC, created_at DESC`,
     [caseType, caseId, homeId]
   );
   return rows.map(shapeMeeting);
@@ -34,7 +58,12 @@ export async function findMeetings(caseType, caseId, homeId, client) {
 export async function findMeetingById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    `SELECT ${COLS}
+       FROM hr_investigation_meetings
+      WHERE id = $1
+        AND home_id = $2
+        AND deleted_at IS NULL
+        AND ${liveParentPredicate()}`,
     [id, homeId]
   );
   return rows[0] ? shapeMeeting(rows[0]) : null;
@@ -79,11 +108,19 @@ export async function updateMeeting(id, homeId, data, client, version) {
   fields.push('version = version + 1');
   fields.push('updated_at = NOW()');
   if (fields.length === 2) {
-    const { rows } = await conn.query(`SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2`, [id, homeId]);
+    const { rows } = await conn.query(
+      `SELECT ${COLS}
+         FROM hr_investigation_meetings
+        WHERE id = $1
+          AND home_id = $2
+          AND deleted_at IS NULL
+          AND ${liveParentPredicate()}`,
+      [id, homeId]
+    );
     return shapeMeeting(rows[0]);
   }
   vals.push(id, homeId);
-  let where = `WHERE id = $${n} AND home_id = $${n + 1}`;
+  let where = `WHERE id = $${n} AND home_id = $${n + 1} AND deleted_at IS NULL AND ${liveParentPredicate()}`;
   n += 2;
   if (version != null) { vals.push(version); where += ` AND version = $${n}`; n++; }
   const { rows, rowCount } = await conn.query(

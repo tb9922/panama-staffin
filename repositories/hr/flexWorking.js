@@ -100,8 +100,10 @@ export async function createFlexWorking(homeId, data, client) {
 export async function updateFlexWorking(id, homeId, data, client, version) {
   const conn = client || pool;
   const normalized = { ...data };
-  if ('request_date' in normalized && !('decision_deadline' in normalized)) {
+  if ('request_date' in normalized) {
     normalized.decision_deadline = normalized.request_date ? resolveDecisionDeadline(normalized.request_date) : null;
+  } else {
+    delete normalized.decision_deadline;
   }
   const fields = [];
   const params = [id, homeId];

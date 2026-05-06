@@ -21,13 +21,19 @@ router.post('/admin/purge-expired', requireAuth, requireHomeAccess, requireModul
     if (!parsed.success) return zodError(res, parsed);
     const { retention_years: retentionYears, dry_run: dryRun } = parsed.data;
     const counts = await hrRepo.purgeExpiredRecords(req.home.id, retentionYears, dryRun);
-    // Also purge audit log entries beyond retention period
-    const retentionDays = retentionYears * 365;
+    // Audit evidence is retained for at least seven years even when HR case
+    // records use the six-year Limitation Act clock.
+    const auditRetentionYears = Math.max(retentionYears, 7);
+    const retentionDays = auditRetentionYears * 365;
     counts.audit_log = dryRun
       ? await auditRepo.countOlderThan(retentionDays, req.home.slug)
       : await auditRepo.purgeOlderThan(retentionDays, req.home.slug);
-    await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', req.home.slug, req.user.username, { retentionYears, counts });
-    res.json({ dry_run: dryRun, retention_years: retentionYears, counts });
+    await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', req.home.slug, req.user.username, {
+      retentionYears,
+      auditRetentionYears,
+      counts,
+    });
+    res.json({ dry_run: dryRun, retention_years: retentionYears, audit_retention_years: auditRetentionYears, counts });
   } catch (err) { next(err); }
 });
 

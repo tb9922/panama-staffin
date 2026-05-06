@@ -14,7 +14,22 @@ const paginationSchema = z.object({
 
 // ── Case Route Factory ──────────────────────────────────────────────────────
 
-export function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapFields, filters, hasGetById = true, repoFind, repoFindById, repoCreate, repoUpdate, auditPrefix, table }) {
+export function registerCaseRoutes(router, {
+  type,
+  path,
+  bodySchema,
+  updateSchema,
+  mapFields,
+  filters,
+  hasGetById = true,
+  repoFind,
+  repoFindById,
+  repoCreate,
+  repoUpdate,
+  auditPrefix,
+  table,
+  auditSensitiveFields = [],
+}) {
   const prefix = auditPrefix || type;
 
   // GET list
@@ -61,7 +76,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
     try {
       const idParsed = idSchema.safeParse(req.params.id);
       if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
-      const versionedSchema = updateSchema.extend({ _version: z.number().int().nonnegative().optional() });
+      const versionedSchema = updateSchema.extend({ _version: z.number().int().nonnegative() });
       const parsed = versionedSchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed);
 
@@ -73,7 +88,9 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
       const result = await repoUpdate(idParsed.data, req.home.id, mapped, null, version);
       if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
 
-      const changes = existing ? diffFields(existing, result) : [];
+      const changes = existing
+        ? diffFields(existing, result, auditSensitiveFields.length ? { extraSensitive: auditSensitiveFields } : undefined)
+        : [];
       await auditService.log(`hr_${prefix}_update`, req.home.slug, req.user.username, { id: result.id, changes });
       res.json(result);
     } catch (err) { next(err); }

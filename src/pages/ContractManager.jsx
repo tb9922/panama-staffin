@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
@@ -43,6 +43,14 @@ export default function ContractManager() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
+  const contractTypeId = useId();
+  const startDateId = useId();
+  const endDateId = useId();
+  const statusId = useId();
+  const probationEndDateId = useId();
+  const hoursId = useId();
+  const rateId = useId();
+  const notesId = useId();
 
   const LIMIT = 50;
 
@@ -113,7 +121,7 @@ export default function ContractManager() {
       setShowModal(false); setEditing(null); setForm(emptyForm()); load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
-        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
       } else { setError(e.message); }
     } finally { setSaving(false); }
@@ -224,7 +232,7 @@ export default function ContractManager() {
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={TABLE.empty}>
+                  <td colSpan={canEdit ? 7 : 6} className={TABLE.empty}>
                     <EmptyState
                       title="No contracts"
                       description={canEdit ? 'Add the first contract to start tracking probation, terms, and hours.' : 'Contracts will appear here once they have been created.'}
@@ -264,50 +272,50 @@ export default function ContractManager() {
       {showModal && (
         <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Contract' : 'New Contract'} size="xl">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <StaffPicker value={form.staff_id || ''} onChange={val => f('staff_id', val)} label="Staff Member" />
                 <div>
-                  <label className={INPUT.label}>Contract Type</label>
-                  <select className={INPUT.select} value={form.contract_type} onChange={e => f('contract_type', e.target.value)}>
+                  <label htmlFor={contractTypeId} className={INPUT.label}>Contract Type</label>
+                  <select id={contractTypeId} className={INPUT.select} value={form.contract_type} onChange={e => f('contract_type', e.target.value)}>
                     {CONTRACT_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Start Date</label>
-                  <input type="date" className={INPUT.base} value={form.start_date} onChange={e => f('start_date', e.target.value)} />
+                  <label htmlFor={startDateId} className={INPUT.label}>Start Date</label>
+                  <input id={startDateId} type="date" className={INPUT.base} value={form.start_date} onChange={e => f('start_date', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>End Date</label>
-                  <input type="date" className={INPUT.base} value={form.end_date} onChange={e => f('end_date', e.target.value)} />
+                  <label htmlFor={endDateId} className={INPUT.label}>End Date</label>
+                  <input id={endDateId} type="date" className={INPUT.base} value={form.end_date} onChange={e => f('end_date', e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Status</label>
-                  <select className={INPUT.select} value={form.status} onChange={e => f('status', e.target.value)}>
+                  <label htmlFor={statusId} className={INPUT.label}>Status</label>
+                  <select id={statusId} className={INPUT.select} value={form.status} onChange={e => f('status', e.target.value)}>
                     {CONTRACT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Probation End Date</label>
-                  <input type="date" className={INPUT.base} value={form.probation_end_date} onChange={e => f('probation_end_date', e.target.value)} />
+                  <label htmlFor={probationEndDateId} className={INPUT.label}>Probation End Date</label>
+                  <input id={probationEndDateId} type="date" className={INPUT.base} value={form.probation_end_date} onChange={e => f('probation_end_date', e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Hours/Week</label>
-                  <input type="number" step="0.5" inputMode="decimal" className={INPUT.base} value={form.hours_per_week} onChange={e => f('hours_per_week', e.target.value)} />
+                  <label htmlFor={hoursId} className={INPUT.label}>Hours/Week</label>
+                  <input id={hoursId} type="number" step="0.5" inputMode="decimal" className={INPUT.base} value={form.hours_per_week} onChange={e => f('hours_per_week', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Hourly Rate</label>
-                  <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.hourly_rate} onChange={e => f('hourly_rate', e.target.value)} />
+                  <label htmlFor={rateId} className={INPUT.label}>Hourly Rate</label>
+                  <input id={rateId} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.hourly_rate} onChange={e => f('hourly_rate', e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} />
+                <label htmlFor={notesId} className={INPUT.label}>Notes</label>
+                <textarea id={notesId} className={INPUT.base} rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} />
               </div>
             </div>
             <FileAttachments caseType="contract" caseId={editing?.id} />

@@ -1267,6 +1267,7 @@ export async function getHrDisciplinary(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
+  if (filters.contractType) params.set('contract_type', filters.contractType);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/cases/disciplinary?${params}`, { headers: authHeaders() });

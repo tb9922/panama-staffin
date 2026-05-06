@@ -40,12 +40,13 @@ const shapeContract = createShaper({
   aliases: { start_date: 'contract_start_date', end_date: 'contract_end_date' },
 });
 
-export async function findContracts(homeId, { staffId, status } = {}, client, pag) {
+export async function findContracts(homeId, { staffId, status, contractType } = {}, client, pag) {
   const conn = client || pool;
   let sql = `SELECT ${COLS} FROM hr_contracts WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+  if (contractType) { params.push(contractType); sql += ` AND contract_type = $${params.length}`; }
   return paginate(conn, sql, params, 'contract_start_date DESC', shapeContract, pag);
 }
 

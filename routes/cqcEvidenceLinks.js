@@ -34,6 +34,14 @@ const SOURCE_MODULES = [
   'hr_disciplinary',
   'hr_grievance',
   'hr_performance',
+  'hr_rtw_interview',
+  'hr_oh_referral',
+  'hr_contract',
+  'hr_family_leave',
+  'hr_flexible_working',
+  'hr_edi',
+  'hr_tupe',
+  'hr_renewal',
 ];
 
 const idSchema = z.coerce.number().int().positive();

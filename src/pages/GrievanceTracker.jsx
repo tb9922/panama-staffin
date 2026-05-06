@@ -193,9 +193,13 @@ export default function GrievanceTracker() {
 
   async function handleAddAction() {
     if (!actionForm.description || !editing?.id || saving) return;
+    if (!actionForm.due_date) { setError('Action due date is required'); return; }
     setSaving(true);
     try {
-      await createGrievanceAction(editing.id, actionForm);
+      await createGrievanceAction(editing.id, {
+        ...actionForm,
+        responsible: actionForm.responsible || actionForm.assigned_to || null,
+      });
       setActions(await getGrievanceActions(editing.id));
       setActionForm({});
       setShowActionForm(false);
@@ -552,10 +556,10 @@ export default function GrievanceTracker() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={INPUT.label}>Assigned To</label>
-                <input className={INPUT.base} value={actionForm.assigned_to || ''} onChange={e => setActionForm({ ...actionForm, assigned_to: e.target.value })} />
+                <input className={INPUT.base} value={actionForm.responsible || ''} onChange={e => setActionForm({ ...actionForm, responsible: e.target.value })} />
               </div>
               <div>
-                <label className={INPUT.label}>Due Date</label>
+                <label className={INPUT.label}>Due Date *</label>
                 <input type="date" className={INPUT.base} value={actionForm.due_date || ''} onChange={e => setActionForm({ ...actionForm, due_date: e.target.value })} />
               </div>
             </div>
@@ -573,7 +577,7 @@ export default function GrievanceTracker() {
               <div>
                 <p className="text-sm text-gray-800">{a.description}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  {a.assigned_to ? `Assigned: ${a.assigned_to}` : ''}
+                  {a.responsible ? `Assigned: ${a.responsible}` : ''}
                   {a.due_date ? ` | Due: ${a.due_date}` : ''}
                 </p>
               </div>
