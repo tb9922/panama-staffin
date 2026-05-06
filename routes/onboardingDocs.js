@@ -7,7 +7,10 @@ const router = Router();
 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
-    res.json(await getOnboardingDocs(req.home.id));
+    res.json(await getOnboardingDocs(req.home.id, {
+      roleId: req.homeRole,
+      isPlatformAdmin: req.user?.is_platform_admin && req.homeRole != null,
+    }));
   } catch (err) {
     next(err);
   }

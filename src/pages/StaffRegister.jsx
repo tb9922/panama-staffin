@@ -23,6 +23,7 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import StickyTable from '../components/StickyTable.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
+import { canManageSensitiveStaffFields } from '../../shared/staffPolicy.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -71,8 +72,10 @@ const NEW_STAFF_FIELD_IDS = {
 
 export default function StaffRegister() {
   const homeSlug = getCurrentHome();
-  const { canWrite } = useData();
+  const { canWrite, homeRole, isPlatformAdmin } = useData();
   const canEdit = canWrite('staff');
+  const canManageSensitiveStaff = canManageSensitiveStaffFields(homeRole, { isPlatformAdmin });
+  const staffTableColSpan = canManageSensitiveStaff ? 17 : 9;
   const { confirm, ConfirmDialog } = useConfirm();
   const [allStaff, setAllStaff] = useState([]);
   const [config, setConfig] = useState(null);
@@ -244,6 +247,7 @@ export default function StaffRegister() {
   }
 
   async function removeStaff(id) {
+    if (!canManageSensitiveStaff) return;
     const s = allStaff.find(x => x.id === id);
     if (!s || !await confirm(`Remove ${s.name} (${id})? This will also remove all their overrides.`)) return;
     setSaving(true);
@@ -260,6 +264,7 @@ export default function StaffRegister() {
   }
 
   async function handleInviteStaff(staffMember) {
+    if (!canManageSensitiveStaff) return;
     setInviteBusyId(staffMember.id);
     setRowError(null);
     try {
@@ -288,7 +293,7 @@ export default function StaffRegister() {
   }
 
   async function handleRevokeSessions(staffMember) {
-    if (!canEdit) return;
+    if (!canManageSensitiveStaff) return;
     if (!await confirm({
       title: 'Sign Out Staff Member',
       message: `Sign out ${staffMember.name} from the staff portal everywhere? They'll need to log in again.`,
@@ -369,28 +374,27 @@ export default function StaffRegister() {
         </div>
         <div className="flex w-full flex-wrap gap-2 print:hidden lg:w-auto lg:justify-end">
           <button onClick={() => {
-            const headers = canEdit
+            const headers = canManageSensitiveStaff
               ? ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay']
-              : ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours'];
+              : ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Start Date', 'Active', '28d Hours'];
             const rows = staff.map(s => {
               const stats = staffStats[s.id];
-              return canEdit
+              return canManageSensitiveStaff
                 ? [s.id, s.name, s.role, s.team, s.pref, s.skill, s.hourly_rate?.toFixed(2),
                   s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
                   s.notes || '', stats ? stats.paidHours.toFixed(1) : '', stats ? stats.totalPay.toFixed(0) : '']
                 : [s.id, s.name, s.role, s.team, s.pref, s.skill,
-                  s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
-                  s.notes || '', stats ? stats.paidHours.toFixed(1) : ''];
+                  s.start_date || '', s.active !== false ? 'Y' : 'N', stats ? stats.paidHours.toFixed(1) : ''];
             });
             downloadCSV('staff_register.csv', headers, rows);
           }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export CSV</button>
           <button onClick={() => {
-            const headers = canEdit
+            const headers = canManageSensitiveStaff
               ? ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay']
-              : ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours'];
+              : ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Start Date', 'Active', '28d Hours'];
             const rows = staff.map(s => {
               const stats = staffStats[s.id];
-              return canEdit
+              return canManageSensitiveStaff
                 ? [s.id, s.name, s.role, s.team, s.pref, s.skill,
                   s.hourly_rate != null ? parseFloat(s.hourly_rate.toFixed(2)) : '',
                   s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
@@ -398,14 +402,12 @@ export default function StaffRegister() {
                   stats ? parseFloat(stats.paidHours.toFixed(1)) : '',
                   stats ? parseFloat(stats.totalPay.toFixed(0)) : '']
                 : [s.id, s.name, s.role, s.team, s.pref, s.skill,
-                  s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
-                  s.notes || '',
-                  stats ? parseFloat(stats.paidHours.toFixed(1)) : ''];
+                  s.start_date || '', s.active !== false ? 'Y' : 'N', stats ? parseFloat(stats.paidHours.toFixed(1)) : ''];
             });
             downloadXLSX('staff_register', [{ name: 'Staff Register', headers, rows }]);
           }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
           <button onClick={handlePrint} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
-          {canEdit && <button onClick={() => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); }} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`}>+ Add Staff</button>}
+          {canManageSensitiveStaff && <button onClick={() => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); }} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`}>+ Add Staff</button>}
         </div>
       </div>
 
@@ -643,7 +645,7 @@ export default function StaffRegister() {
 
       {/* Table */}
       <StickyTable className={CARD.flush}>
-        <table className={TABLE.table + ' min-w-[1500px]'}>
+        <table className={TABLE.table + (canManageSensitiveStaff ? ' min-w-[1500px]' : ' min-w-[980px]')}>
           <thead className={TABLE.thead}>
             <tr>
               <th scope="col" className={TABLE.th}>ID</th>
@@ -652,16 +654,16 @@ export default function StaffRegister() {
               <SortHeader col="team">Team</SortHeader>
               <SortHeader col="pref">Pref</SortHeader>
               <SortHeader col="skill">Skill</SortHeader>
-              {canEdit && <SortHeader col="hourly_rate">Rate</SortHeader>}
-              <th scope="col" className={TABLE.th}>Hrs/wk</th>
+              {canManageSensitiveStaff && <SortHeader col="hourly_rate">Rate</SortHeader>}
+              {canManageSensitiveStaff && <th scope="col" className={TABLE.th}>Hrs/wk</th>}
               <th scope="col" className={TABLE.th}>Start</th>
-              <th scope="col" className={TABLE.th}>WTR</th>
-              <th scope="col" className={TABLE.th}>Bank</th>
-              <th scope="col" className={TABLE.th}>Notes</th>
-              <th scope="col" className={TABLE.th}>AL</th>
-              <th scope="col" className={`${TABLE.th} text-center`}>Active</th>
+              {canManageSensitiveStaff && <th scope="col" className={TABLE.th}>WTR</th>}
+              {canManageSensitiveStaff && <th scope="col" className={TABLE.th}>Bank</th>}
+              {canManageSensitiveStaff && <th scope="col" className={TABLE.th}>Notes</th>}
+              {canManageSensitiveStaff && <th scope="col" className={TABLE.th}>AL</th>}
+              {canManageSensitiveStaff && <th scope="col" className={`${TABLE.th} text-center`}>Active</th>}
               <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Hrs</th>
-              {canEdit && <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>}
+              {canManageSensitiveStaff && <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>}
               <th scope="col" className={`${TABLE.th} min-w-44 print:hidden`}></th>
             </tr>
           </thead>
@@ -725,8 +727,8 @@ export default function StaffRegister() {
                       ) : canEdit ? <button type="button" className="transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.skill}</button> : <span>{s.skill}</span>}
                     </td>
 
-                    {/* Rate — editable (admin only) */}
-                    {canEdit && (
+                    {/* Rate — editable (manager / HR only) */}
+                    {canManageSensitiveStaff && (
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <div>
@@ -756,21 +758,23 @@ export default function StaffRegister() {
                     </td>
                     )}
 
-                    {/* Contract hrs/wk — editable */}
-                    <td className={TABLE.td}>
-                      {isEd(s.id) ? (
-                        <input type="number" min="0" max="60" step="0.5" value={r.contract_hours ?? ''}
-                          placeholder="—"
-                          onChange={e => updateEditingRow('contract_hours', e.target.value ? parseFloat(e.target.value) : null)}
-                          className={INPUT.inline + ' w-14'} />
-                      ) : canEdit ? (
-                        <button type="button" className="text-xs transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>
-                          {s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}
-                        </button>
-                      ) : (
-                        <span className="text-xs">{s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}</span>
-                      )}
-                    </td>
+                    {/* Contract hrs/wk — editable (manager / HR only) */}
+                    {canManageSensitiveStaff && (
+                      <td className={TABLE.td}>
+                        {isEd(s.id) ? (
+                          <input type="number" min="0" max="60" step="0.5" value={r.contract_hours ?? ''}
+                            placeholder="—"
+                            onChange={e => updateEditingRow('contract_hours', e.target.value ? parseFloat(e.target.value) : null)}
+                            className={INPUT.inline + ' w-14'} />
+                        ) : canEdit ? (
+                          <button type="button" className="text-xs transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>
+                            {s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}
+                          </button>
+                        ) : (
+                          <span className="text-xs">{s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}</span>
+                        )}
+                      </td>
+                    )}
 
                     {/* Start Date — editable */}
                     <td className={TABLE.td}>
@@ -780,19 +784,22 @@ export default function StaffRegister() {
                       ) : canEdit ? <button type="button" className="text-xs text-gray-500 transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.start_date || '-'}</button> : <span className="text-xs text-gray-500">{s.start_date || '-'}</span>}
                     </td>
 
-                    {/* WTR Opt-Out — editable */}
-                    <td className={TABLE.td}>
-                      {isEd(s.id) ? (
-                        <input type="checkbox" checked={!!r.wtr_opt_out}
-                          onChange={e => updateEditingRow('wtr_opt_out', e.target.checked)} />
-                      ) : canEdit ? (
-                        <button type="button" className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-emerald-700' : 'text-red-700'} hover:text-blue-700`} onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</button>
-                      ) : (
-                        <span className={`text-xs ${s.wtr_opt_out ? 'text-emerald-700' : 'text-red-700'}`}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
-                      )}
-                    </td>
+                    {/* WTR Opt-Out — editable (manager / HR only) */}
+                    {canManageSensitiveStaff && (
+                      <td className={TABLE.td}>
+                        {isEd(s.id) ? (
+                          <input type="checkbox" checked={!!r.wtr_opt_out}
+                            onChange={e => updateEditingRow('wtr_opt_out', e.target.checked)} />
+                        ) : canEdit ? (
+                          <button type="button" className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-emerald-700' : 'text-red-700'} hover:text-blue-700`} onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</button>
+                        ) : (
+                          <span className={`text-xs ${s.wtr_opt_out ? 'text-emerald-700' : 'text-red-700'}`}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
+                        )}
+                      </td>
+                    )}
 
                     {/* Internal bank */}
+                    {canManageSensitiveStaff && (
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <div className="flex min-w-[12rem] flex-col gap-1">
@@ -834,16 +841,20 @@ export default function StaffRegister() {
                         <span className={s.willing_extras ? BADGE.green : BADGE.gray}>{s.willing_extras ? 'Bank' : 'No'}</span>
                       )}
                     </td>
+                    )}
 
                     {/* Notes */}
+                    {canManageSensitiveStaff && (
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <input type="text" value={r.notes || ''} onChange={e => updateEditingRow('notes', e.target.value)}
                           className={INPUT.inline + ' w-40'} placeholder="Notes..." />
                       ) : canEdit ? <button type="button" className="block max-w-[150px] truncate text-xs text-gray-500 transition-colors hover:text-blue-600" title={s.notes} onClick={() => startEditing(s)}>{s.notes || '-'}</button> : <span className="block max-w-[150px] truncate text-xs text-gray-500" title={s.notes}>{s.notes || '-'}</span>}
                     </td>
+                    )}
 
                     {/* AL entitlement / carryover — editable */}
+                    {canManageSensitiveStaff && (
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <div className="flex flex-col gap-1">
@@ -877,8 +888,10 @@ export default function StaffRegister() {
                         </span>
                       )}
                     </td>
+                    )}
 
                     {/* Active — editable */}
+                    {canManageSensitiveStaff && (
                     <td className={`${TABLE.td} text-center`}>
                       {isEd(s.id) ? (
                         <div className="flex flex-col items-center gap-1">
@@ -902,13 +915,14 @@ export default function StaffRegister() {
                         </div>
                       )}
                     </td>
+                    )}
 
                     {/* 28d Hours & Pay (read-only, computed) */}
                     <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}
                       title={stats?.alHours > 0 ? `${stats.totalHours.toFixed(1)}h worked + ${stats.alHours.toFixed(1)}h AL` : undefined}>
                       {stats ? stats.paidHours.toFixed(1) : '-'}
                     </td>
-                    {canEdit && (
+                    {canManageSensitiveStaff && (
                     <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
                       {stats ? `£${stats.totalPay.toFixed(0)}` : '-'}
                     </td>
@@ -929,7 +943,7 @@ export default function StaffRegister() {
                         ) : (
                           <>
                             <button onClick={() => startEditing(s)} className="text-gray-600 hover:text-blue-700 text-xs transition-colors">Edit</button>
-                            {s.active !== false && (
+                            {canManageSensitiveStaff && s.active !== false && (
                               <button
                                 onClick={() => { void handleInviteStaff(s); }}
                                 disabled={inviteBusyId === s.id}
@@ -938,38 +952,42 @@ export default function StaffRegister() {
                                 {inviteBusyId === s.id ? 'Inviting...' : 'Invite'}
                               </button>
                             )}
-                            <button
-                              onClick={() => { void handleRevokeSessions(s); }}
-                              disabled={revokeBusyId === s.id}
-                              title="Sign this staff member out of the staff portal everywhere"
-                              className="text-amber-600 hover:text-amber-700 text-xs transition-colors disabled:opacity-50"
-                            >
-                              {revokeBusyId === s.id ? 'Revoking...' : 'Revoke'}
-                            </button>
+                            {canManageSensitiveStaff && (
+                              <button
+                                onClick={() => { void handleRevokeSessions(s); }}
+                                disabled={revokeBusyId === s.id}
+                                title="Sign this staff member out of the staff portal everywhere"
+                                className="text-amber-600 hover:text-amber-700 text-xs transition-colors disabled:opacity-50"
+                              >
+                                {revokeBusyId === s.id ? 'Revoking...' : 'Revoke'}
+                              </button>
+                            )}
                           </>
                         )}
-                        <button onClick={() => removeStaff(s.id)} className="text-red-600 hover:text-red-700 text-xs transition-colors">Remove</button>
+                        {canManageSensitiveStaff && (
+                          <button onClick={() => removeStaff(s.id)} className="text-red-600 hover:text-red-700 text-xs transition-colors">Remove</button>
+                        )}
                       </div>
                       )}
                     </td>
                   </tr>
                   {rErr && (
                     <tr key={`${s.id}-err`}>
-                      <td colSpan={canEdit ? 16 : 14} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
+                      <td colSpan={staffTableColSpan} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
                         {rErr}
                       </td>
                     </tr>
                   )}
                   {revokeMessage?.id === s.id && (
                     <tr key={`${s.id}-revoke`}>
-                      <td colSpan={canEdit ? 16 : 14} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs border-b border-emerald-100">
+                      <td colSpan={staffTableColSpan} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs border-b border-emerald-100">
                         {revokeMessage.msg}
                       </td>
                     </tr>
                   )}
                   {rWarn && (
                     <tr key={`${s.id}-warn`}>
-                      <td colSpan={canEdit ? 16 : 14} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
+                      <td colSpan={staffTableColSpan} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
                         {rWarn.join(' | ')}
                       </td>
                     </tr>
@@ -983,7 +1001,8 @@ export default function StaffRegister() {
 
       {/* Financial impact note */}
       <div className="mt-3 text-xs text-gray-600 print:hidden">
-        Click any field to edit inline, then click Save to persist. Changes to pay rates and skills affect all cost and coverage calculations across the app.
+        Click any available field to edit inline, then click Save to persist.
+        {canManageSensitiveStaff && ' Changes to pay rates and skills affect all cost and coverage calculations across the app.'}
       </div>
       {ConfirmDialog}
     </div>

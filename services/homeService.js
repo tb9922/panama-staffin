@@ -6,6 +6,10 @@ import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
 import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/dateOnly.js';
+import {
+  canManageSensitiveStaffFields,
+  redactStaffForBroadReader,
+} from '../shared/staffPolicy.js';
 
 function getSchedulingWindow(anchorDate = new Date()) {
   return {
@@ -34,11 +38,6 @@ function redactOverrideReasons(overrides = {}) {
     }
   }
   return redacted;
-}
-
-function staffSummaryForBroadReaders(staff) {
-  return staff.map(({ id, name, role, team, pref, skill, active, start_date, leaving_date }) =>
-    ({ id, name, role, team, pref, skill, active, start_date, leaving_date }));
 }
 
 export async function listHomes() {
@@ -85,9 +84,8 @@ export async function assembleData(homeSlug, userRole) {
   // receive NI numbers, date_of_birth, and hourly_rate.
   // Denylist is unsafe: new PII fields would leak until explicitly blocked.
   // Roles excluded: training_lead, shift_coordinator, viewer, staff_member (and any unknown role).
-  const PII_ROLES = new Set(['admin', 'home_manager', 'deputy_manager', 'hr_officer', 'finance_officer']);
-  if (!PII_ROLES.has(userRole)) {
-    payload.staff = staffSummaryForBroadReaders(staff);
+  if (!canManageSensitiveStaffFields(userRole)) {
+    payload.staff = redactStaffForBroadReader(staff);
   }
 
   return payload;

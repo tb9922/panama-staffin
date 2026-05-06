@@ -92,6 +92,15 @@ function renderAdminAt(route) {
   });
 }
 
+function renderTrainingLead() {
+  api.getLoggedInUser.mockReturnValue({ username: 'training', role: 'user' });
+  return renderWithProviders(<OnboardingTracker />, {
+    user: { username: 'training', role: 'user' },
+    homeRole: 'training_lead',
+    canWrite: true,
+  });
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -249,6 +258,27 @@ describe('OnboardingTracker', () => {
     expect(screen.getByText('Section Documents')).toBeInTheDocument();
     expect(screen.getByText('No documents uploaded for this section yet.')).toBeInTheDocument();
     expect(api.getOnboardingFiles).toHaveBeenCalledWith('onboarding', 'S001::dbs_check');
+  });
+
+  it('hides sensitive onboarding sections from non-HR compliance writers', async () => {
+    const user = userEvent.setup();
+    renderTrainingLead();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Alice Smith').closest('.cursor-pointer'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Qualifications')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Enhanced DBS Check')).not.toBeInTheDocument();
+    expect(screen.queryByText('Right to Work')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('Qualifications'));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Qualifications/i })).toBeInTheDocument();
+    });
   });
 
   it('deep-links to a staff member from the query string', async () => {

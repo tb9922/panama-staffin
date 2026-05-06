@@ -30,13 +30,18 @@ import {
   downloadOnboardingFile,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import {
+  canManageSensitiveStaffFields,
+  isSensitiveOnboardingSection,
+} from '../../shared/staffPolicy.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
 export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
-  const { canWrite } = useData();
-  const canEdit = canWrite('staff');
+  const { canWrite, homeRole, isPlatformAdmin } = useData();
+  const canEdit = canWrite('compliance');
+  const canAccessSensitiveOnboarding = canManageSensitiveStaffFields(homeRole, { isPlatformAdmin });
   const { confirm, ConfirmDialog } = useConfirm();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState(null);
@@ -72,8 +77,24 @@ export default function OnboardingTracker() {
 
   const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
   const onboardingData = useMemo(() => state?.onboarding || {}, [state]);
+  const visibleOnboardingSections = useMemo(
+    () => ONBOARDING_SECTIONS.filter(sec => canAccessSensitiveOnboarding || !isSensitiveOnboardingSection(sec.id)),
+    [canAccessSensitiveOnboarding],
+  );
+  const visiblePreEmploymentSections = useMemo(
+    () => visibleOnboardingSections.filter(sec => sec.category === 'pre-employment'),
+    [visibleOnboardingSections],
+  );
+  const visibleInductionSections = useMemo(
+    () => visibleOnboardingSections.filter(sec => sec.category === 'induction'),
+    [visibleOnboardingSections],
+  );
 
-  const matrix = useMemo(() => buildOnboardingMatrix(activeStaff, ONBOARDING_SECTIONS, onboardingData), [activeStaff, onboardingData]);
+  function canEditSection(sectionId) {
+    return canEdit && (canAccessSensitiveOnboarding || !isSensitiveOnboardingSection(sectionId));
+  }
+
+  const matrix = useMemo(() => buildOnboardingMatrix(activeStaff, visibleOnboardingSections, onboardingData), [activeStaff, visibleOnboardingSections, onboardingData]);
   const _stats = useMemo(() => getOnboardingStats(matrix), [matrix]);
 
   const filteredStaff = useMemo(() => {
@@ -84,12 +105,12 @@ export default function OnboardingTracker() {
       list = list.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
     }
     if (filterStatus === 'incomplete') {
-      list = list.filter(s => !getStaffOnboardingProgress(s.id, onboardingData).isComplete);
+      list = list.filter(s => !getStaffOnboardingProgress(s.id, onboardingData, visibleOnboardingSections).isComplete);
     } else if (filterStatus === 'complete') {
-      list = list.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete);
+      list = list.filter(s => getStaffOnboardingProgress(s.id, onboardingData, visibleOnboardingSections).isComplete);
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeStaff, filterTeam, search, filterStatus, onboardingData]);
+  }, [activeStaff, filterTeam, search, filterStatus, onboardingData, visibleOnboardingSections]);
 
   useEffect(() => {
     if (!focusedStaffId) return;
@@ -100,34 +121,35 @@ export default function OnboardingTracker() {
   }, [focusedStaffId]);
 
   const fullyOnboarded = useMemo(() => {
-    return activeStaff.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete).length;
-  }, [activeStaff, onboardingData]);
+    return activeStaff.filter(s => getStaffOnboardingProgress(s.id, onboardingData, visibleOnboardingSections).isComplete).length;
+  }, [activeStaff, onboardingData, visibleOnboardingSections]);
 
   const preEmploymentPending = useMemo(() => {
     let count = 0;
     for (const s of activeStaff) {
-      for (const sec of ONBOARDING_SECTIONS.filter(x => x.category === 'pre-employment')) {
+      for (const sec of visiblePreEmploymentSections) {
         const r = onboardingData?.[s.id]?.[sec.id];
         if (!r || r.status !== ONBOARDING_STATUS.COMPLETED) count++;
       }
     }
     return count;
-  }, [activeStaff, onboardingData]);
+  }, [activeStaff, onboardingData, visiblePreEmploymentSections]);
 
   const inductionPending = useMemo(() => {
     let count = 0;
     for (const s of activeStaff) {
-      for (const sec of ONBOARDING_SECTIONS.filter(x => x.category === 'induction')) {
+      for (const sec of visibleInductionSections) {
         const r = onboardingData?.[s.id]?.[sec.id];
         if (!r || r.status !== ONBOARDING_STATUS.COMPLETED) count++;
       }
     }
     return count;
-  }, [activeStaff, onboardingData]);
+  }, [activeStaff, onboardingData, visibleInductionSections]);
 
   // ── Modal ─────────────────────────────────────────────────────────────────
 
   function openModal(staffId, sectionId) {
+    if (!canEditSection(sectionId)) return;
     const existing = onboardingData?.[staffId]?.[sectionId] || {};
     setModalStaffId(staffId);
     setModalSection(sectionId);
@@ -141,6 +163,7 @@ export default function OnboardingTracker() {
 
   async function handleSave() {
     if (!modalStaffId || !modalSection) return;
+    if (!canEditSection(modalSection)) return;
     setSaving(true);
     try {
       await upsertOnboardingSection(homeSlug, modalStaffId, modalSection, modalForm);
@@ -155,6 +178,7 @@ export default function OnboardingTracker() {
   }
 
   async function handleClear() {
+    if (!modalSection || !canEditSection(modalSection)) return;
     if (!await confirm('Remove this onboarding record?')) return;
     setSaving(true);
     try {
@@ -172,12 +196,12 @@ export default function OnboardingTracker() {
   // ── Excel Export ──────────────────────────────────────────────────────────
 
   function handleExport() {
-    const headers = ['Name', 'Team', 'Role', 'Start Date', ...ONBOARDING_SECTIONS.map(s => s.name), 'Progress'];
+    const headers = ['Name', 'Team', 'Role', 'Start Date', ...visibleOnboardingSections.map(s => s.name), 'Progress'];
     const rows = filteredStaff.map(s => {
-      const p = getStaffOnboardingProgress(s.id, onboardingData);
+      const p = getStaffOnboardingProgress(s.id, onboardingData, visibleOnboardingSections);
       return [
         s.name, s.team, s.role, s.start_date || '',
-        ...ONBOARDING_SECTIONS.map(sec => {
+        ...visibleOnboardingSections.map(sec => {
           const r = onboardingData?.[s.id]?.[sec.id];
           return r?.status === ONBOARDING_STATUS.COMPLETED ? 'Completed' :
                  r?.status === ONBOARDING_STATUS.IN_PROGRESS ? 'In Progress' : 'Not Started';
@@ -793,6 +817,7 @@ export default function OnboardingTracker() {
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';
   const staffName = activeStaff.find(s => s.id === modalStaffId)?.name || '';
+  const canEditModalSection = modalSection ? canEditSection(modalSection) : false;
 
   return (
     <div className={PAGE.container}>
@@ -851,7 +876,7 @@ export default function OnboardingTracker() {
       {/* Staff List */}
       <div className="space-y-2">
         {filteredStaff.map(s => {
-          const progress = getStaffOnboardingProgress(s.id, onboardingData);
+          const progress = getStaffOnboardingProgress(s.id, onboardingData, visibleOnboardingSections);
           const isExpanded = expanded === s.id;
           return (
             <div key={s.id} className={CARD.padded}>
@@ -887,17 +912,18 @@ export default function OnboardingTracker() {
                   <div className="mb-3">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Pre-Employment Checks</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {ONBOARDING_SECTIONS.filter(sec => sec.category === 'pre-employment').map(sec => {
+                      {visiblePreEmploymentSections.map(sec => {
                         const r = onboardingData?.[s.id]?.[sec.id];
                         const status = r?.status || ONBOARDING_STATUS.NOT_STARTED;
                         const display = STATUS_DISPLAY[status];
+                        const sectionEditable = canEditSection(sec.id);
                         return (
                           <button
                             key={sec.id}
                             type="button"
                             className="flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-left text-xs transition-colors hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-gray-50"
                             onClick={() => openModal(s.id, sec.id)}
-                            disabled={!canEdit}
+                            disabled={!sectionEditable}
                           >
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
@@ -913,17 +939,18 @@ export default function OnboardingTracker() {
                   <div>
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Day 1 Induction</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {ONBOARDING_SECTIONS.filter(sec => sec.category === 'induction').map(sec => {
+                      {visibleInductionSections.map(sec => {
                         const r = onboardingData?.[s.id]?.[sec.id];
                         const status = r?.status || ONBOARDING_STATUS.NOT_STARTED;
                         const display = STATUS_DISPLAY[status];
+                        const sectionEditable = canEditSection(sec.id);
                         return (
                           <button
                             key={sec.id}
                             type="button"
                             className="flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-left text-xs transition-colors hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-gray-50"
                             onClick={() => openModal(s.id, sec.id)}
-                            disabled={!canEdit}
+                            disabled={!sectionEditable}
                           >
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
@@ -967,7 +994,7 @@ export default function OnboardingTracker() {
               <FileAttachments
                 caseType="onboarding"
                 caseId={`${modalStaffId}::${modalSection}`}
-                readOnly={!canEdit}
+                readOnly={!canEditModalSection}
                 getFiles={getOnboardingFiles}
                 uploadFile={uploadOnboardingFile}
                 deleteFile={deleteOnboardingFile}
@@ -981,11 +1008,11 @@ export default function OnboardingTracker() {
               <input type="text" value={modalForm.notes || ''} onChange={e => setField('notes', e.target.value)} className={INPUT.base} placeholder="Optional notes" />
             </div>
             <div className={MODAL.footer}>
-              {canEdit && onboardingData?.[modalStaffId]?.[modalSection] && (
+              {canEditModalSection && onboardingData?.[modalStaffId]?.[modalSection] && (
                 <button onClick={handleClear} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Remove</button>
               )}
               <button onClick={() => { setShowModal(false); setError(null); }} className={BTN.ghost}>Cancel</button>
-              {canEdit && (
+              {canEditModalSection && (
                 <button onClick={handleSave} disabled={saving} className={BTN.primary}>
                   {saving ? 'Saving...' : 'Save'}
                 </button>

@@ -9,6 +9,7 @@ const _defaultDataCtx = {
   canRead: () => true,
   canWrite: () => true,
   homeRole: 'home_manager',
+  isPlatformAdmin: false,
   staffId: null,
   scanIntakeEnabled: true,
   scanIntakeTargets: SCAN_INTAKE_TARGET_IDS,

@@ -1,6 +1,7 @@
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachments.js';
 import * as staffRepo from '../repositories/staffRepo.js';
+import { visibleOnboardingSectionsForRole } from '../shared/staffPolicy.js';
 
 const REQUIRED_SECTIONS = [
   'dbs_check',
@@ -15,16 +16,17 @@ const REQUIRED_SECTIONS = [
   'policy_acknowledgement',
 ];
 
-export async function getOnboardingDocs(homeId) {
+export async function getOnboardingDocs(homeId, { roleId, isPlatformAdmin = false } = {}) {
   const [onboarding, attachments, staffResult] = await Promise.all([
     onboardingRepo.findByHome(homeId),
     onboardingAttachmentsRepo.findByHome(homeId),
     staffRepo.findByHome(homeId),
   ]);
   const staff = staffResult.rows;
+  const visibleSections = visibleOnboardingSectionsForRole(REQUIRED_SECTIONS, roleId, { isPlatformAdmin });
   const attachmentsByStaffSection = new Map();
   for (const attachment of attachments) {
-    const key = `${attachment.staff_id}:${attachment.section}`;
+    const key = `${attachment.staffId}:${attachment.section}`;
     const bucket = attachmentsByStaffSection.get(key) || [];
     bucket.push(attachment);
     attachmentsByStaffSection.set(key, bucket);
@@ -32,7 +34,7 @@ export async function getOnboardingDocs(homeId) {
 
   const byStaff = staff.map((member) => {
     const onboardingData = onboarding[member.id] || {};
-    const sections = REQUIRED_SECTIONS.map((section) => {
+    const sections = visibleSections.map((section) => {
       const docs = attachmentsByStaffSection.get(`${member.id}:${section}`) || [];
       const sectionData = onboardingData[section] || null;
       return {
@@ -52,7 +54,7 @@ export async function getOnboardingDocs(homeId) {
     };
   });
 
-  const bySection = REQUIRED_SECTIONS.map((section) => {
+  const bySection = visibleSections.map((section) => {
     const staffEntries = byStaff.map((entry) => entry.sections.find((candidate) => candidate.section === section));
     return {
       section,

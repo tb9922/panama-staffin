@@ -7,8 +7,18 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import { assertBufferPassedMalwareScan } from '../lib/malwareScan.js';
 import * as auditService from '../services/auditService.js';
+import { canManageSensitiveStaffFields } from '../shared/staffPolicy.js';
 
 const router = Router();
+
+function requireStaffImportManager(req, res, next) {
+  if (!canManageSensitiveStaffFields(req.homeRole, {
+    isPlatformAdmin: req.user?.is_platform_admin && req.homeRole != null,
+  })) {
+    return res.status(403).json({ error: 'Home manager, deputy manager, or HR officer role required for staff import' });
+  }
+  return next();
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -124,7 +134,7 @@ function splitCsvLine(line) {
 }
 
 // GET /api/import/staff/template?home=X — CSV template with header row
-router.get('/staff/template', readRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'read'), (req, res) => {
+router.get('/staff/template', readRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'read'), requireStaffImportManager, (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="staff_import_template.csv"');
   res.setHeader('Cache-Control', 'no-store');
@@ -132,7 +142,7 @@ router.get('/staff/template', readRateLimiter, requireAuth, requireHomeAccess, r
 });
 
 // POST /api/import/staff?home=X — CSV upload + validate/import
-router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), upload.single('file'), async (req, res, next) => {
+router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), requireStaffImportManager, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     if (!req.file.originalname.toLowerCase().endsWith('.csv')) {

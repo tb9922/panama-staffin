@@ -11,6 +11,10 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { checkNLWViolation } from '../services/validationService.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
+import {
+  canManageSensitiveStaffFields as roleCanManageSensitiveStaffFields,
+  listChangedSensitiveStaffFields,
+} from '../shared/staffPolicy.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -67,36 +71,14 @@ function normalizeStaffPayload(payload) {
   return normalized;
 }
 
-const SENSITIVE_STAFF_FIELDS = new Set([
-  'hourly_rate',
-  'contract_hours',
-  'date_of_birth',
-  'ni_number',
-  'active',
-  'al_entitlement',
-  'al_carryover',
-  'phone',
-  'address',
-  'emergency_contact',
-  'wtr_opt_out',
-  'willing_extras',
-  'willing_other_homes',
-  'max_weekly_hours_topup',
-  'max_travel_radius_km',
-  'home_postcode',
-  'internal_bank_status',
-  'internal_bank_notes',
-  'notes',
-]);
-const SENSITIVE_STAFF_ROLES = new Set(['home_manager', 'deputy_manager', 'hr_officer']);
-
 function canManageSensitiveStaffFields(req) {
-  if (req.user?.is_platform_admin && req.homeRole != null) return true;
-  return SENSITIVE_STAFF_ROLES.has(req.homeRole);
+  return roleCanManageSensitiveStaffFields(req.homeRole, {
+    isPlatformAdmin: req.user?.is_platform_admin && req.homeRole != null,
+  });
 }
 
-function assertSensitiveStaffFieldAccess(req, res, payload) {
-  const requested = Object.keys(payload || {}).filter((key) => SENSITIVE_STAFF_FIELDS.has(key));
+function assertSensitiveStaffFieldAccess(req, res, payload, existing = null) {
+  const requested = listChangedSensitiveStaffFields(payload, existing);
   if (requested.length > 0 && !canManageSensitiveStaffFields(req)) {
     return res.status(403).json({
       error: 'Home manager, deputy manager, or HR officer role required for sensitive staff fields',
@@ -154,10 +136,10 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
     const parsed = staffUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const fieldAccessError = assertSensitiveStaffFieldAccess(req, res, parsed.data);
-    if (fieldAccessError) return fieldAccessError;
     const existing = await staffRepo.findById(req.home.id, idParsed.data);
     if (!existing) return res.status(404).json({ error: 'Staff member not found' });
+    const fieldAccessError = assertSensitiveStaffFieldAccess(req, res, parsed.data, existing);
+    if (fieldAccessError) return fieldAccessError;
     const { version } = splitVersion(parsed.data);
     const staff = await staffRepo.updateOne(req.home.id, idParsed.data, normalizeStaffPayload(definedWithoutVersion(parsed.data)), version);
     if (staff === null) {

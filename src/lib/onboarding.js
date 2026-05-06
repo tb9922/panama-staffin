@@ -106,8 +106,7 @@ export function getOnboardingStats(matrix) {
 /**
  * Get progress for a single staff member.
  */
-export function getStaffOnboardingProgress(staffId, onboardingData) {
-  const sections = ONBOARDING_SECTIONS;
+export function getStaffOnboardingProgress(staffId, onboardingData, sections = ONBOARDING_SECTIONS) {
   let completed = 0;
   for (const sec of sections) {
     const record = onboardingData?.[staffId]?.[sec.id];

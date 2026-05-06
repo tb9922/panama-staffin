@@ -94,7 +94,7 @@ export function DataProvider({ children }) {
     <DataCtx.Provider value={{
       loading, error, homes, activeHome,
       switchHome, refreshHomes, setError, clearError,
-      homeRole, staffId, canRead, canWrite,
+      homeRole, staffId, isPlatformAdmin, canRead, canWrite,
       activeHomeObj, scanIntakeEnabled, scanIntakeTargets, isScanTargetEnabled,
       staffPortalEnabled,
     }}>

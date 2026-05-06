@@ -141,11 +141,11 @@ describe('Template Download — GET /staff/template', () => {
     expect(body).toBe('name,role,team,pref,skill,hourly_rate,start_date,contract_hours,wtr_opt_out');
   });
 
-  it('viewer can download template (scheduling:read)', async () => {
+  it('viewer cannot download staff import template', async () => {
     await request(app)
       .get(`${BASE}/staff/template?home=${homeASlug}`)
       .set('Authorization', `Bearer ${viewerToken}`)
-      .expect(200);
+      .expect(403);
   });
 
   it('requires auth (no token → 401)', async () => {
@@ -347,11 +347,11 @@ describe('Auth & RBAC', () => {
       .expect(401);
   });
 
-  it('viewer can download template (scheduling:read)', async () => {
+  it('viewer cannot download staff import template', async () => {
     await request(app)
       .get(`${BASE}/staff/template?home=${homeASlug}`)
       .set('Authorization', `Bearer ${viewerToken}`)
-      .expect(200);
+      .expect(403);
   });
 });
 

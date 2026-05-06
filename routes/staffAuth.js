@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { config } from '../config.js';
-import { requireAuth, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import {
   tokenCookieOptions,
@@ -12,6 +12,7 @@ import {
 import * as staffAuthService from '../services/staffAuthService.js';
 import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import { issueStaffToken } from '../services/authService.js';
+import { canManageSensitiveStaffFields } from '../shared/staffPolicy.js';
 
 const router = Router();
 
@@ -54,6 +55,15 @@ function requireStaffToken(req, res, next) {
   return next();
 }
 
+function requireStaffPortalManager(req, res, next) {
+  if (!canManageSensitiveStaffFields(req.homeRole, {
+    isPlatformAdmin: req.user?.is_platform_admin && req.homeRole != null,
+  })) {
+    return res.status(403).json({ error: 'Home manager, deputy manager, or HR officer role required' });
+  }
+  return next();
+}
+
 router.get('/invite/:token', readRateLimiter, ensureStaffPortalEnabled, async (req, res, next) => {
   try {
     const invite = await staffAuthRepo.findInviteToken(req.params.token);
@@ -83,7 +93,7 @@ router.post('/invite/consume', writeRateLimiter, ensureStaffPortalEnabled, async
   }
 });
 
-router.post('/invite', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
+router.post('/invite', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireModule('staff', 'write'), requireStaffPortalManager, async (req, res, next) => {
   try {
     const body = inviteBodySchema.parse(req.body);
     const invite = await staffAuthService.createInvite({
@@ -113,7 +123,7 @@ router.post('/change-password', writeRateLimiter, ensureStaffPortalEnabled, requ
   }
 });
 
-router.post('/revoke', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
+router.post('/revoke', writeRateLimiter, ensureStaffPortalEnabled, requireAuth, requireHomeAccess, requireModule('staff', 'write'), requireStaffPortalManager, async (req, res, next) => {
   try {
     const body = revokeBodySchema.parse(req.body);
     await staffAuthService.revokeStaffSessions({

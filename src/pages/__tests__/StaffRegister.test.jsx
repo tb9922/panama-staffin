@@ -18,6 +18,7 @@ vi.mock('../../lib/api.js', async () => {
     updateStaffMember: vi.fn(),
     deleteStaffMember: vi.fn(),
     createStaffInvite: vi.fn(),
+    revokeStaffSessions: vi.fn(),
   };
 });
 
@@ -40,6 +41,15 @@ function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   return renderWithProviders(<StaffRegister />, {
     user: { username: 'viewer', role: 'viewer' }, canWrite: false,
+  });
+}
+
+function renderTrainingLead() {
+  api.getLoggedInUser.mockReturnValue({ username: 'training', role: 'user' });
+  return renderWithProviders(<StaffRegister />, {
+    user: { username: 'training', role: 'user' },
+    homeRole: 'training_lead',
+    canWrite: true,
   });
 }
 
@@ -160,6 +170,20 @@ describe('StaffRegister', () => {
       expect(screen.getByText('Staff Database')).toBeInTheDocument();
     });
     expect(screen.queryByText('Rate')).not.toBeInTheDocument();
+  });
+
+  it('hides sensitive staff controls from staff-write roles without HR authority', async () => {
+    renderTrainingLead();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Rate')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /\+ Add Staff/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Invite' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0);
   });
 
   it('creates a portal invite from the staff row actions', async () => {

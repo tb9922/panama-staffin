@@ -18,6 +18,10 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
+import {
+  canAccessSensitiveOnboarding as roleCanAccessSensitiveOnboarding,
+  isSensitiveOnboardingSection,
+} from '../shared/staffPolicy.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -27,28 +31,18 @@ const sectionSchema = z.enum([
 ]);
 const dateSchema = nullableDateInput;
 
-const SENSITIVE_ONBOARDING_SECTIONS = new Set([
-  'dbs_check',
-  'right_to_work',
-  'references',
-  'identity_check',
-  'health_declaration',
-  'contract',
-  'employment_history',
-]);
-const SENSITIVE_ONBOARDING_ROLES = new Set(['home_manager', 'deputy_manager', 'hr_officer']);
-
 function safePath(segment) {
   return String(segment || '').replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
 function canAccessSensitiveOnboarding(req) {
-  if (req.user?.is_platform_admin && req.homeRole != null) return true;
-  return SENSITIVE_ONBOARDING_ROLES.has(req.homeRole);
+  return roleCanAccessSensitiveOnboarding(req.homeRole, {
+    isPlatformAdmin: req.user?.is_platform_admin && req.homeRole != null,
+  });
 }
 
 function requireOnboardingSectionAccess(req, res, section) {
-  if (SENSITIVE_ONBOARDING_SECTIONS.has(section) && !canAccessSensitiveOnboarding(req)) {
+  if (isSensitiveOnboardingSection(section) && !canAccessSensitiveOnboarding(req)) {
     return res.status(403).json({ error: 'HR or home management role required for this onboarding evidence' });
   }
   return null;
@@ -60,7 +54,7 @@ function redactOnboardingForRole(req, onboarding) {
   for (const [staffId, sections] of Object.entries(onboarding || {})) {
     redacted[staffId] = {};
     for (const [section, value] of Object.entries(sections || {})) {
-      if (!SENSITIVE_ONBOARDING_SECTIONS.has(section)) redacted[staffId][section] = value;
+      if (!isSensitiveOnboardingSection(section)) redacted[staffId][section] = value;
     }
   }
   return redacted;
@@ -131,7 +125,7 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
       ...Object.keys(bodyParsed.data || {}),
     ]);
     const changes = diffFields(beforeSection, bodyParsed.data, {
-      extraSensitive: SENSITIVE_ONBOARDING_SECTIONS.has(sectionParsed.data) ? changedKeys : undefined,
+      extraSensitive: isSensitiveOnboardingSection(sectionParsed.data) ? changedKeys : undefined,
     });
     await auditService.log('onboarding_update', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data, changes });
     res.json(result);
