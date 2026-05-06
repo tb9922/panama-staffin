@@ -94,7 +94,7 @@ const CONSOLE_IGNORE = [
   /Blocked aria-hidden/i,
 ];
 
-const DANGEROUS_BUTTON = /\b(delete|remove|void|deactivate|revoke|reset password|approve|reject|mark paid|purge|merge|confirm delete|permanently)\b/i;
+const DANGEROUS_BUTTON = /\b(save|delete|remove|confirm|apply|approve|reject|upload|submit|sync|import|revert|archive|freeze|verify|erase|release|run payroll|finalise|complete|mark as|mark all read|clock in|clock out|logout|sign out|reset password|send invite|copy link|void|deactivate|revoke|mark paid|purge|merge|permanently)\b/i;
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
