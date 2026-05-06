@@ -110,16 +110,15 @@ export default function AppLayout() {
   const activeSectionId = activeNavContext.section?.id || null;
   const expandedSections = useMemo(() => {
     const next = {};
-    const platformRouteActive = isPlatformAdmin && activeSectionId === 'platform';
     visibleSectionIds.forEach((sectionId) => {
       next[sectionId] = sectionOverrides[sectionId] ?? (
-        platformRouteActive
-          ? sectionId === 'platform'
+        activeSectionId
+          ? sectionId === activeSectionId
           : Boolean(defaultExpandedSections[sectionId])
       );
     });
     return next;
-  }, [activeSectionId, defaultExpandedSections, isPlatformAdmin, sectionOverrides, visibleSectionIds]);
+  }, [activeSectionId, defaultExpandedSections, sectionOverrides, visibleSectionIds]);
   const notificationOpen = notificationPath === location.pathname;
 
   function toggleNotificationPanel() {

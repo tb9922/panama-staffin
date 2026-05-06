@@ -201,7 +201,7 @@ const DEFAULT_EXPANDED_SECTION_IDS = {
 
 export function getDefaultExpandedSections(roleId, visibleSectionIds = [], isPlatformAdmin = false) {
   const preferred = isPlatformAdmin
-    ? ['system']
+    ? []
     : (DEFAULT_EXPANDED_SECTION_IDS[roleId] || ['scheduling', 'staff']);
   const maxExpanded = isPlatformAdmin ? 1 : 2;
   const selected = preferred.filter(id => visibleSectionIds.includes(id)).slice(0, maxExpanded);
