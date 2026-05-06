@@ -159,10 +159,14 @@ describe('Training: training records', () => {
   });
 
   it('soft-deletes a training record', async () => {
-    await trainingRepo.removeRecord(homeA, 'TRN-S001', 'moving-handling');
+    await expect(trainingRepo.removeRecord(homeA, 'TRN-S001', 'moving-handling')).resolves.toBe(true);
 
     const result = await trainingRepo.findByHome(homeA);
     expect(result.rows['TRN-S001']['moving-handling']).toBeUndefined();
+  });
+
+  it('returns false when deleting a missing training record', async () => {
+    await expect(trainingRepo.removeRecord(homeA, 'TRN-S001', 'missing-type')).resolves.toBe(false);
   });
 });
 

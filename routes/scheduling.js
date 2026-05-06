@@ -18,6 +18,10 @@ import {
   checkWTRImpact, formatDate, parseDate, addDays, getShiftHours,
 } from '../shared/rotation.js';
 import { isOwnDataOnly } from '../shared/roles.js';
+import {
+  canManageSensitiveStaffFields as roleCanManageSensitiveStaffFields,
+  redactStaffForBroadReader,
+} from '../shared/staffPolicy.js';
 import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
@@ -171,12 +175,17 @@ function assertEditLock(req, config, dates) {
   throw new AppError(message, 423, 'SCHEDULING_EDIT_LOCKED');
 }
 
-function buildSchedulingConfigOut(config, { ownDataOnly = false } = {}) {
+function canReadCostConfig(req) {
+  return (req.user?.is_platform_admin && req.homeRole != null)
+    || ['admin', 'home_manager', 'deputy_manager', 'finance_officer'].includes(req.homeRole);
+}
+
+function buildSchedulingConfigOut(config, { ownDataOnly = false, costConfigAllowed = true } = {}) {
   const baseConfig = { ...(config || {}) };
   const editLockEnabled = Boolean(baseConfig.edit_lock_pin);
   delete baseConfig.edit_lock_pin;
 
-  if (ownDataOnly) {
+  if (ownDataOnly || !costConfigAllowed) {
     delete baseConfig.agency_rate_day;
     delete baseConfig.agency_rate_night;
     delete baseConfig.ot_premium;
@@ -269,6 +278,12 @@ function buildOverrideMap(rows = []) {
     };
   }
   return map;
+}
+
+function canReadSensitiveStaff(req) {
+  return roleCanManageSensitiveStaffFields(req.homeRole, {
+    isPlatformAdmin: req.user?.is_platform_admin && req.homeRole != null,
+  });
 }
 
 function canSeeOverrideReasons(roleId) {
@@ -475,17 +490,16 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     // Strip PII for non-admin users — only expose scheduling-relevant fields
     const rawOverrides = overrides;
     let staffOut, onboardingOut, overridesOut = canSeeOverrideReasons(req.homeRole) ? rawOverrides : redactOverrideReasons(rawOverrides), trainingOut = training, hourAdjustmentsOut = hourAdjustments, dayNotesOut = canSeeOverrideReasons(req.homeRole) ? dayNotes : {};
-    if (!canSeeOverrideReasons(req.homeRole)) {
-      staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, leaving_date }) =>
-        ({ id, name, role, team, pref, skill, active, start_date, leaving_date }));
+    if (!canReadSensitiveStaff(req)) {
+      staffOut = redactStaffForBroadReader(staff);
       onboardingOut = undefined;
     } else {
       staffOut = staff;
-      onboardingOut = onboarding;
+      onboardingOut = canSeeOverrideReasons(req.homeRole) ? onboarding : undefined;
     }
 
     // staff_member own-data: minimal staff fields, own overrides only, no training/onboarding
-    let configOut = buildSchedulingConfigOut(req.home.config);
+    let configOut = buildSchedulingConfigOut(req.home.config, { costConfigAllowed: canReadCostConfig(req) });
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
       staffOut = staff
@@ -504,7 +518,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       onboardingOut = undefined;
       dayNotesOut = {};
       // Strip commercially sensitive fields — staff don't need cost parameters
-      configOut = buildSchedulingConfigOut(req.home.config, { ownDataOnly: true });
+      configOut = buildSchedulingConfigOut(req.home.config, { ownDataOnly: true, costConfigAllowed: false });
     }
 
     res.json({

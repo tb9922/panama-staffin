@@ -205,10 +205,11 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
 
 export async function removeRecord(homeId, staffId, typeId, client) {
   const conn = client || pool;
-  await conn.query(
+  const { rowCount } = await conn.query(
     'UPDATE training_records SET deleted_at=NOW() WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3 AND deleted_at IS NULL',
     [homeId, staffId, typeId]
   );
+  return rowCount > 0;
 }
 
 export async function acknowledgeByStaff(homeId, staffId, typeId, client) {

@@ -153,6 +153,20 @@ describe('training routes optimistic concurrency', () => {
     expect(res.body.error).toBeTruthy();
   });
 
+  it('returns 404 instead of auditing missing training-record deletes', async () => {
+    await authRequest('delete', `/api/training/${STAFF_ID}/missing-training?home=${homeSlug}`)
+      .expect(404);
+
+    const { rows } = await pool.query(
+      `SELECT id FROM audit_log
+        WHERE home_slug = $1
+          AND action = 'training_record_delete'
+          AND details::jsonb->>'typeId' = 'missing-training'`,
+      [homeSlug],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   it('requires _clientUpdatedAt for named record updates', async () => {
     const createSupervision = await authRequest('post', `/api/training/supervisions?home=${homeSlug}`)
       .send({

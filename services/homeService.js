@@ -40,6 +40,21 @@ function redactOverrideReasons(overrides = {}) {
   return redacted;
 }
 
+function redactConfigForRole(config, userRole) {
+  const result = { ...(config || {}) };
+  const canSeeCostConfig = ['admin', 'home_manager', 'deputy_manager', 'finance_officer'].includes(userRole);
+  const canSeeEditPin = ['admin', 'home_manager'].includes(userRole);
+
+  if (!canSeeEditPin) delete result.edit_lock_pin;
+  if (!canSeeCostConfig) {
+    delete result.agency_rate_day;
+    delete result.agency_rate_night;
+    delete result.ot_premium;
+    delete result.bh_premium_multiplier;
+  }
+  return result;
+}
+
 export async function listHomes() {
   return homeRepo.listAll();
 }
@@ -65,20 +80,12 @@ export async function assembleData(homeSlug, userRole) {
   const payload = {
     _updatedAt: home.updated_at?.toISOString() || null,
     _windowAnchorDate: windowAnchor.toISOString(),
-    config: home.config,
+    config: redactConfigForRole(home.config, userRole),
     annual_leave: home.annual_leave,
     staff,
     overrides: canSeeOverrideReasons(userRole) ? overrides : redactOverrideReasons(overrides),
     day_notes: canSeeOverrideReasons(userRole) ? dayNotes : {},
   };
-
-  // edit_lock_pin: home_manager only (and legacy 'admin' string used by tests).
-  // deputy_manager and other roles must not see the PIN via DevTools network tab.
-  const hasPinAccess = userRole === 'admin' || userRole === 'home_manager';
-  if (!hasPinAccess && payload.config?.edit_lock_pin) {
-    payload.config = { ...payload.config };
-    delete payload.config.edit_lock_pin;
-  }
 
   // PII allowlist — only roles with legitimate HR/payroll/staff-management access
   // receive NI numbers, date_of_birth, and hourly_rate.

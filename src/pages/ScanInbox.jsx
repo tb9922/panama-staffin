@@ -24,6 +24,7 @@ import { clickableRowProps } from '../lib/a11y.js';
 import { SCAN_INTAKE_TARGETS, SCAN_INTAKE_STATUS_LABELS } from '../../shared/scanIntake.js';
 import { describeScanLaunchContext, parseScanLaunchParams } from '../lib/scanRouting.js';
 import { todayLocalISO } from '../lib/localDates.js';
+import { canManageSensitiveStaffFields } from '../../shared/staffPolicy.js';
 
 const ONBOARDING_SECTIONS = [
   'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
@@ -51,7 +52,7 @@ function pickField(fields, ...keys) {
 export default function ScanInbox() {
   const home = getCurrentHome();
   const { showToast } = useToast();
-  const { scanIntakeEnabled = false, scanIntakeTargets = [], canRead } = useData();
+  const { scanIntakeEnabled = false, scanIntakeTargets = [], canRead, homeRole, isPlatformAdmin } = useData();
   const [searchParams] = useSearchParams();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -272,7 +273,10 @@ export default function ScanInbox() {
       tasks.push(getPaymentSchedules(home, { limit: 200 }).then((scheduleData) => setSchedules(scheduleData.rows || [])));
       tasks.push(getSuppliers(home, { activeOnly: true }).then((supplierData) => setSuppliers(supplierData || [])));
     }
-    if (targetEnabled('onboarding') && canRead('compliance')) {
+    if (targetEnabled('onboarding') && (
+      canRead('compliance')
+      || canManageSensitiveStaffFields(homeRole, { isPlatformAdmin })
+    )) {
       tasks.push(getOnboardingData(home).then((onboarding) => setOnboardingData(onboarding || { onboarding: {}, staff: [] })));
     }
     if (targetEnabled('cqc') && canRead('compliance')) {
@@ -280,7 +284,7 @@ export default function ScanInbox() {
     }
 
     await Promise.allSettled(tasks);
-  }, [canRead, home, scanIntakeEnabled, scanIntakeTargets]);
+  }, [canRead, home, homeRole, isPlatformAdmin, scanIntakeEnabled, scanIntakeTargets]);
 
   useEffect(() => { loadList(); loadReferenceData(); }, [loadList, loadReferenceData]);
   useEffect(() => { loadSelected(); }, [loadSelected]);

@@ -87,7 +87,15 @@ export async function findBySha(homeId, sha256, client) {
   return shape(rows[0]);
 }
 
-export async function listByHome(homeId, { statuses, target, limit = 100, offset = 0 } = {}, client) {
+export async function listByHome(homeId, {
+  statuses,
+  target,
+  targets,
+  includeUnclassified = false,
+  unclassifiedCreatedBy = null,
+  limit = 100,
+  offset = 0,
+} = {}, client) {
   const conn = client || pool;
   const params = [homeId];
   let sql = `
@@ -103,6 +111,22 @@ export async function listByHome(homeId, { statuses, target, limit = 100, offset
   if (target) {
     params.push(target);
     sql += ` AND classification_target = $${params.length}`;
+  } else if (Array.isArray(targets)) {
+    if (targets.length === 0 && !includeUnclassified && !unclassifiedCreatedBy) {
+      return { rows: [], total: 0 };
+    }
+    const clauses = [];
+    if (targets.length > 0) {
+      params.push(targets);
+      clauses.push(`classification_target = ANY($${params.length}::text[])`);
+    }
+    if (includeUnclassified) {
+      clauses.push('classification_target IS NULL');
+    } else if (unclassifiedCreatedBy) {
+      params.push(unclassifiedCreatedBy);
+      clauses.push(`(classification_target IS NULL AND created_by = $${params.length})`);
+    }
+    sql += ` AND (${clauses.join(' OR ')})`;
   }
   sql += ' ORDER BY created_at DESC, id DESC';
   params.push(Math.min(limit, 500));

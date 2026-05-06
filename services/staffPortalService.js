@@ -10,7 +10,7 @@ import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as auditService from './auditService.js';
 import { dispatchEvent } from './webhookService.js';
 import { getTrainingTypes } from '../shared/training.js';
-import { todayLocalISO } from '../lib/dateOnly.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 import {
   addDays,
   formatDate,
@@ -217,8 +217,10 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
     const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-    if (home.config?.edit_lock_pin && date < todayLocalISO()) {
-      throw new AppError('Past dates are locked. Ask a manager to record this through Scheduling with the edit PIN.', 423, 'SCHEDULING_EDIT_LOCKED');
+    const today = todayLocalISO();
+    const latestSelfReportDate = addDaysLocalISO(today, 1);
+    if (date < today || date > latestSelfReportDate) {
+      throw new AppError('Self-reported sickness can only be recorded for today or tomorrow', 400, 'SICK_SELF_REPORT_DATE_RANGE');
     }
 
     // Idempotency guard: if SICK is already recorded for this date, return early

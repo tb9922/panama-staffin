@@ -48,10 +48,10 @@ function hrTupeEmployeeSubjectPredicate(tableAlias = 't', staffNameParam = '$3')
      WHERE employee->>'staff_id' = $2
         OR employee->>'staffId' = $2
         OR employee->>'id' = $2
-        OR (${staffNameParam} IS NOT NULL AND (
-          employee->>'name' = ${staffNameParam}
-          OR employee->>'full_name' = ${staffNameParam}
-          OR employee->>'staff_name' = ${staffNameParam}
+        OR (${staffNameParam}::text IS NOT NULL AND (
+          employee->>'name' = ${staffNameParam}::text
+          OR employee->>'full_name' = ${staffNameParam}::text
+          OR employee->>'staff_name' = ${staffNameParam}::text
         ))
   )`;
 }
@@ -718,6 +718,12 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `UPDATE staff SET
          name = $2, date_of_birth = NULL, ni_number = NULL,
          hourly_rate = 0, contract_hours = NULL, leaving_date = CURRENT_DATE,
+         phone = NULL, address = NULL, emergency_contact = NULL,
+         al_entitlement = NULL, al_carryover = 0, wtr_opt_out = FALSE,
+         willing_extras = FALSE, willing_other_homes = FALSE,
+         max_weekly_hours_topup = NULL, max_travel_radius_km = NULL,
+         home_postcode = NULL, internal_bank_status = 'not_interested',
+         internal_bank_notes = NULL, notes = NULL,
          active = FALSE
        WHERE home_id = $1 AND id = $3`,
       [homeId, anon, staffId]
@@ -738,9 +744,16 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, anon, staffId]
     );
 
-    // Remove training records (not legally required to retain after erasure)
+    // Retain the training evidence skeleton for CQC/workforce records, but clear
+    // free-text and identifiers that can carry staff personal data.
     await client.query(
-      `DELETE FROM training_records WHERE home_id = $1 AND staff_id = $2`,
+      `UPDATE training_records
+          SET trainer = NULL,
+              certificate_ref = NULL,
+              evidence_ref = NULL,
+              notes = NULL,
+              updated_at = NOW()
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
     const { rows: trainingAttachments } = await client.query(
@@ -759,7 +772,11 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       )
     )));
     await client.query(
-      `DELETE FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      `UPDATE training_file_attachments
+          SET original_name = CONCAT('redacted-training-evidence-', id),
+              description = NULL,
+              deleted_at = NOW()
+        WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
       [homeId, staffId]
     );
 

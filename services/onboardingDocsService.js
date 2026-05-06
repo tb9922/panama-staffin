@@ -76,7 +76,7 @@ export async function getOnboardingDocs(homeId, { roleId, isPlatformAdmin = fals
 
   return {
     summary: {
-      total_documents: attachments.length,
+      total_documents: byStaff.reduce((sum, entry) => sum + entry.attachment_count, 0),
       staff_with_docs: byStaff.filter((entry) => entry.attachment_count > 0).length,
       outstanding_required_sections: outstandingMandatory.length,
     },

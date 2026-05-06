@@ -122,9 +122,32 @@ beforeAll(async () => {
 
   // Insert a staff member in home A for SAR/erasure tests
   await pool.query(
-    `INSERT INTO staff (home_id, id, name, role, team, skill, hourly_rate, active, wtr_opt_out, start_date, version)
-     VALUES ($1, 'GDPR-S01', 'Test Staff SAR', 'Carer', 'Day A', 1, 15.00, true, false, '2024-01-01', 1)`,
+    `INSERT INTO staff (
+       home_id, id, name, role, team, skill, hourly_rate, active, wtr_opt_out, start_date,
+       date_of_birth, ni_number, contract_hours, al_entitlement, al_carryover,
+       phone, address, emergency_contact, willing_extras, willing_other_homes,
+       max_weekly_hours_topup, max_travel_radius_km, home_postcode,
+       internal_bank_status, internal_bank_notes, notes, version
+     )
+     VALUES (
+       $1, 'GDPR-S01', 'Test Staff SAR', 'Carer', 'Day A', 1, 15.00, true, true, '2024-01-01',
+       '1980-02-03', 'QQ123456C', 37.5, 28, 4,
+       '07123456789', '1 Privacy Street', 'Next of Kin 07000', true, true,
+       12, 25, 'AA1 1AA', 'available', 'Can cover sister home', 'Sensitive staff note', 1
+     )`,
     [homeAId]
+  );
+  await pool.query(
+    `INSERT INTO training_records
+       (home_id, staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes)
+     VALUES ($1, 'GDPR-S01', 'safeguarding', '2026-01-01', '2027-01-01', 'Trainer Name', 'classroom', 'CERT-PII', 'EVID-PII', '2', 'Contains staff PII')`,
+    [homeAId],
+  );
+  await pool.query(
+    `INSERT INTO training_file_attachments
+       (home_id, staff_id, training_type, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, 'GDPR-S01', 'safeguarding', 'named-certificate.pdf', 'missing-test-file.pdf', 'application/pdf', 10, 'Certificate with staff name', 'test')`,
+    [homeAId],
   );
 
   // Login
@@ -474,6 +497,58 @@ describe('Erasure Execute — /requests/:id/execute', () => {
 
     expect(res.body.anonymised).toBe(true);
     expect(res.body.staff_id).toBe('GDPR-S01');
+
+    const { rows: [staff] } = await pool.query(
+      `SELECT name, date_of_birth, ni_number, hourly_rate, contract_hours, phone, address,
+              emergency_contact, al_entitlement, al_carryover, wtr_opt_out,
+              willing_extras, willing_other_homes, max_weekly_hours_topup,
+              max_travel_radius_km, home_postcode, internal_bank_status,
+              internal_bank_notes, notes, active
+         FROM staff
+        WHERE home_id = $1 AND id = 'GDPR-S01'`,
+      [homeAId],
+    );
+    expect(staff.name).toMatch(/^\[REDACTED-/);
+    for (const field of [
+      'date_of_birth', 'ni_number', 'contract_hours', 'phone', 'address',
+      'emergency_contact', 'al_entitlement', 'max_weekly_hours_topup',
+      'max_travel_radius_km', 'home_postcode', 'internal_bank_notes', 'notes',
+    ]) {
+      expect(staff[field]).toBeNull();
+    }
+    expect(Number(staff.hourly_rate)).toBe(0);
+    expect(Number(staff.al_carryover)).toBe(0);
+    expect(staff.wtr_opt_out).toBe(false);
+    expect(staff.willing_extras).toBe(false);
+    expect(staff.willing_other_homes).toBe(false);
+    expect(staff.internal_bank_status).toBe('not_interested');
+    expect(staff.active).toBe(false);
+
+    const { rows: trainingRows } = await pool.query(
+      `SELECT completed, expiry, trainer, certificate_ref, evidence_ref, notes, deleted_at
+         FROM training_records
+        WHERE home_id = $1 AND staff_id = 'GDPR-S01' AND training_type_id = 'safeguarding'`,
+      [homeAId],
+    );
+    expect(trainingRows).toHaveLength(1);
+    expect(trainingRows[0].completed).toBeTruthy();
+    expect(trainingRows[0].expiry).toBeTruthy();
+    expect(trainingRows[0].trainer).toBeNull();
+    expect(trainingRows[0].certificate_ref).toBeNull();
+    expect(trainingRows[0].evidence_ref).toBeNull();
+    expect(trainingRows[0].notes).toBeNull();
+    expect(trainingRows[0].deleted_at).toBeNull();
+
+    const { rows: trainingFiles } = await pool.query(
+      `SELECT original_name, description, deleted_at
+         FROM training_file_attachments
+        WHERE home_id = $1 AND staff_id = 'GDPR-S01' AND training_type = 'safeguarding'`,
+      [homeAId],
+    );
+    expect(trainingFiles).toHaveLength(1);
+    expect(trainingFiles[0].original_name).toMatch(/^redacted-training-evidence-/);
+    expect(trainingFiles[0].description).toBeNull();
+    expect(trainingFiles[0].deleted_at).not.toBeNull();
   });
 
   it('rejects rerunning a completed erasure request', async () => {

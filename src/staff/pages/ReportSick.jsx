@@ -4,9 +4,10 @@ import { reportMySick } from '../../lib/api.js';
 import ErrorState from '../../components/ErrorState.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
-import { todayLocalISO } from '../../lib/localDates.js';
+import { addDaysLocalISO, todayLocalISO } from '../../lib/localDates.js';
 
 const TODAY = todayLocalISO();
+const TOMORROW = addDaysLocalISO(TODAY, 1);
 
 export default function ReportSick() {
   const [form, setForm] = useState({
@@ -42,13 +43,13 @@ export default function ReportSick() {
       {error && <ErrorState title="Unable to report sick" message={error} />}
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-2xl font-bold text-slate-900">Report Sick</h2>
-        <p className="mt-2 text-sm text-slate-600">Let the home know quickly if you're unable to work.</p>
+        <p className="mt-2 text-sm text-slate-600">Let the home know quickly if you're unable to work today or tomorrow.</p>
       </div>
       <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label htmlFor="report-sick-date" className={INPUT.label}>Date</label>
-            <input id="report-sick-date" type="date" className={INPUT.base} value={form.date} onChange={(e) => setForm((current) => ({ ...current, date: e.target.value }))} required />
+            <input id="report-sick-date" type="date" min={TODAY} max={TOMORROW} className={INPUT.base} value={form.date} onChange={(e) => setForm((current) => ({ ...current, date: e.target.value }))} required />
           </div>
           <div>
             <label htmlFor="report-sick-reason" className={INPUT.label}>Reason</label>

@@ -17,6 +17,7 @@ import * as staffPortalService from '../../services/staffPortalService.js';
 import * as overrideRequestService from '../../services/overrideRequestService.js';
 import * as overrideRequestRepo from '../../repositories/overrideRequestRepo.js';
 import { addDays, formatDate, getALDeductionHours, parseDate } from '../../shared/rotation.js';
+import { addDaysLocalISO, todayLocalISO } from '../../lib/dateOnly.js';
 
 const HOME_SLUG = 'staffportal-test-home';
 const STAFF_A = 'SPORT-001';
@@ -206,11 +207,40 @@ describe('AL request flow', () => {
       homeId, staffId: STAFF_B, id: req.id, expectedVersion: req.version,
     })).rejects.toMatchObject({ statusCode: 409 });
   });
+
+  it('serializes concurrent approvals so the same-day AL cap holds', async () => {
+    const date = getWorkingDate('2026-06-22', 8);
+    await pool.query(
+      `UPDATE homes SET config = config || $2::jsonb WHERE id = $1`,
+      [homeId, JSON.stringify({ max_al_same_day: 1 })],
+    );
+    const requestA = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
+    const requestB = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_B, date });
+
+    const results = await Promise.allSettled([
+      overrideRequestService.decideRequest({
+        homeId, id: requestA.id, status: 'approved', decidedBy: 'manager-a', expectedVersion: requestA.version,
+      }),
+      overrideRequestService.decideRequest({
+        homeId, id: requestB.id, status: 'approved', decidedBy: 'manager-b', expectedVersion: requestB.version,
+      }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM shift_overrides
+        WHERE home_id = $1 AND date = $2 AND shift = 'AL'`,
+      [homeId, date],
+    );
+    expect(rows[0].count).toBe(1);
+  });
 });
 
 describe('Sick self-report', () => {
   it('writes SICK override immediately', async () => {
-    const date = '2026-06-30';
+    const date = todayLocalISO();
     await staffPortalService.reportSick({
       homeId, staffId: STAFF_A, date, reason: 'Flu',
       actorUsername: STAFF_A_USER,
@@ -224,7 +254,7 @@ describe('Sick self-report', () => {
   });
 
   it('writes audit event', async () => {
-    const date = '2026-07-01';
+    const date = addDaysLocalISO(todayLocalISO(), 1);
     await staffPortalService.reportSick({
       homeId, staffId: STAFF_A, date,
       actorUsername: STAFF_A_USER,
@@ -236,25 +266,42 @@ describe('Sick self-report', () => {
   });
 
   it('carries forward the actual linked-period waiting days on self-report', async () => {
+    const reportDate = todayLocalISO();
     const { rows: [previous] } = await pool.query(
       `INSERT INTO sick_periods (
          home_id, staff_id, start_date, end_date, qualifying_days_per_week,
          waiting_days_served, ssp_weeks_paid
        )
-       VALUES ($1, $2, '2026-06-01', '2026-06-04', 5, 1, 0)
+       VALUES ($1, $2, $3, $4, 5, 1, 0)
        RETURNING id`,
-      [homeId, STAFF_A],
+      [homeId, STAFF_A, addDaysLocalISO(reportDate, -35), addDaysLocalISO(reportDate, -32)],
     );
 
     const result = await staffPortalService.reportSick({
       homeId,
       staffId: STAFF_A,
-      date: '2026-06-20',
+      date: reportDate,
       actorUsername: STAFF_A_USER,
     });
 
     expect(result.sickPeriod.linked_to_period_id).toBe(previous.id);
     expect(result.sickPeriod.waiting_days_served).toBe(1);
+  });
+
+  it('rejects past and far-future self-reported sickness dates', async () => {
+    await expect(staffPortalService.reportSick({
+      homeId,
+      staffId: STAFF_A,
+      date: addDaysLocalISO(todayLocalISO(), -1),
+      actorUsername: STAFF_A_USER,
+    })).rejects.toMatchObject({ statusCode: 400 });
+
+    await expect(staffPortalService.reportSick({
+      homeId,
+      staffId: STAFF_A,
+      date: addDaysLocalISO(todayLocalISO(), 2),
+      actorUsername: STAFF_A_USER,
+    })).rejects.toMatchObject({ statusCode: 400 });
   });
 });
 

@@ -59,7 +59,7 @@ export async function consumeInvite({ token, username, password }) {
   }
 
   return withTransaction(async (client) => {
-    const invite = await staffAuthRepo.findInviteToken(token, client);
+    const invite = await staffAuthRepo.findInviteTokenForUpdate(token, client);
     if (!invite) throw new AppError('Invite token not found', 404, 'INVITE_NOT_FOUND');
     if (invite.consumedAt) throw new ConflictError('Invite token has already been used', 'INVITE_CONSUMED');
     if (new Date(invite.expiresAt) <= new Date()) throw new AppError('Invite token has expired', 410, 'INVITE_EXPIRED');
@@ -84,7 +84,10 @@ export async function consumeInvite({ token, username, password }) {
       username: normalizedUsername,
       passwordHash,
     }, client);
-    await staffAuthRepo.consumeInviteToken(token, client);
+    const consumed = await staffAuthRepo.consumeInviteToken(token, client);
+    if (!consumed) {
+      throw new ConflictError('Invite token has already been used', 'INVITE_CONSUMED');
+    }
     await authRepo.clearForUser(normalizedUsername);
 
     await auditService.log('staff_invite_consumed', invite.homeSlug, normalizedUsername, {

@@ -120,12 +120,27 @@ export async function findInviteToken(token, client = pool) {
   return shapeInvite(rows[0]);
 }
 
+export async function findInviteTokenForUpdate(token, client = pool) {
+  const { rows } = await client.query(
+    `SELECT ${INVITE_COLS}
+       FROM staff_invite_tokens sit
+       JOIN staff s ON s.home_id = sit.home_id AND s.id = sit.staff_id
+       JOIN homes h ON h.id = sit.home_id AND h.deleted_at IS NULL
+      WHERE sit.token = $1
+      LIMIT 1
+      FOR UPDATE OF sit`,
+    [token],
+  );
+  return shapeInvite(rows[0]);
+}
+
 export async function consumeInviteToken(token, client = pool) {
   const { rowCount } = await client.query(
     `UPDATE staff_invite_tokens
         SET consumed_at = NOW()
       WHERE token = $1
-        AND consumed_at IS NULL`,
+        AND consumed_at IS NULL
+        AND expires_at > NOW()`,
     [token],
   );
   return rowCount > 0;

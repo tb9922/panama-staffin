@@ -89,7 +89,7 @@ export async function replace(homeId, overridesObj, client, fromDate, toDate) {
 
 /**
  * Delete all overrides for a specific staff member.
- * Called when a staff member is removed from the register.
+ * Called only by legacy cleanup paths; staff removal should retain historical evidence.
  * @param {number} homeId
  * @param {string} staffId
  * @param {object} [client]
@@ -100,6 +100,22 @@ export async function deleteForStaff(homeId, staffId, client) {
     'DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2',
     [homeId, staffId]
   );
+}
+
+/**
+ * Delete future planning overrides for a staff member while retaining historical rota evidence.
+ * @param {number} homeId
+ * @param {string} staffId
+ * @param {string} fromDate YYYY-MM-DD inclusive
+ * @param {object} [client]
+ */
+export async function deleteFutureForStaff(homeId, staffId, fromDate, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
+    'DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2 AND date > $3',
+    [homeId, staffId, fromDate]
+  );
+  return rowCount;
 }
 
 /**

@@ -440,6 +440,11 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       att.stored_name
     ));
     if (!isPathInsideRoot(uploadRoot, filePath)) return res.status(403).json({ error: 'Forbidden' });
+    await auditService.log('training_attachment_download', req.home.slug, req.user.username, {
+      fileId: id,
+      staffId: att.staff_id,
+      typeId: att.training_type,
+    });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,
@@ -483,7 +488,8 @@ router.delete('/:staffId/:typeId', writeRateLimiter, requireAuth, requireHomeAcc
     const staffParsed = staffIdSchema.safeParse(req.params.staffId);
     const typeParsed = typeIdSchema.safeParse(req.params.typeId);
     if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
-    await trainingRepo.removeRecord(req.home.id, staffParsed.data, typeParsed.data);
+    const removed = await trainingRepo.removeRecord(req.home.id, staffParsed.data, typeParsed.data);
+    if (!removed) return res.status(404).json({ error: 'Training record not found' });
     await auditService.log('training_record_delete', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }

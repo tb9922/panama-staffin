@@ -96,6 +96,13 @@ export async function decideRequest({ homeId, id, status, decidedBy, decisionNot
       throw new ConflictError('This request has already been decided', 'REQUEST_ALREADY_DECIDED');
     }
 
+    if (status === 'approved' && existing.requestType === 'AL') {
+      await client.query(
+        'SELECT pg_advisory_xact_lock($1::integer, hashtext($2))',
+        [homeId, existing.date],
+      );
+    }
+
     const updated = await overrideRequestRepo.decide({
       homeId,
       id,

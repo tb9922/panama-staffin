@@ -21,6 +21,10 @@ const STAFF_ID = 'SAUTH-001';
 const STAFF_NAME = 'Alice Carer';
 const PORTAL_USERNAME = 'staffauth-alice';
 const PORTAL_PASSWORD = 'P0rtalP4ss!23';
+const MANAGER_USER = 'staffauth-manager';
+const TRAINING_USER = 'staffauth-training';
+const VIEWER_USER = 'staffauth-viewer';
+const ADMIN_PASSWORD = 'StaffAuthAdmin!2026';
 
 let homeId;
 
@@ -28,9 +32,12 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
+  await pool.query(`DELETE FROM user_home_roles WHERE username = ANY($1::text[])`, [[MANAGER_USER, TRAINING_USER, VIEWER_USER]]);
   await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [PORTAL_USERNAME]);
+  await pool.query(`DELETE FROM token_denylist WHERE username = ANY($1::text[])`, [[MANAGER_USER, TRAINING_USER, VIEWER_USER]]);
   await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]);
   await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
+  await pool.query(`DELETE FROM users WHERE username = ANY($1::text[])`, [[MANAGER_USER, TRAINING_USER, VIEWER_USER]]);
 
   const { rows: [home] } = await pool.query(
     `INSERT INTO homes (slug, name, config) VALUES ($1, $2, $3) RETURNING id`,
@@ -43,15 +50,34 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, 'Carer', 'Day A', 1, 13.00, true, false, '2025-01-01', 37.5)`,
     [homeId, STAFF_ID, STAFF_NAME],
   );
+
+  const adminHash = await bcrypt.hash(ADMIN_PASSWORD, 4);
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $4, 'viewer', true, 'Staff Auth Manager', 'test-setup'),
+            ($2, $4, 'viewer', true, 'Staff Auth Training', 'test-setup'),
+            ($3, $4, 'viewer', true, 'Staff Auth Viewer', 'test-setup')`,
+    [MANAGER_USER, TRAINING_USER, VIEWER_USER, adminHash],
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $4, 'home_manager', 'test-setup'),
+            ($2, $4, 'training_lead', 'test-setup'),
+            ($3, $4, 'viewer', 'test-setup')`,
+    [MANAGER_USER, TRAINING_USER, VIEWER_USER, homeId],
+  );
 });
 
 afterAll(async () => {
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM user_home_roles WHERE username = ANY($1::text[])`, [[MANAGER_USER, TRAINING_USER, VIEWER_USER]]);
   await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [PORTAL_USERNAME]);
+  await pool.query(`DELETE FROM token_denylist WHERE username = ANY($1::text[])`, [[MANAGER_USER, TRAINING_USER, VIEWER_USER]]);
   await pool.query(`DELETE FROM homes WHERE id = $1`, [homeId]);
   await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
+  await pool.query(`DELETE FROM users WHERE username = ANY($1::text[])`, [[MANAGER_USER, TRAINING_USER, VIEWER_USER]]);
 });
 
 beforeEach(async () => {
@@ -62,6 +88,14 @@ beforeEach(async () => {
   await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
   await pool.query(`UPDATE staff SET active = true, deleted_at = NULL WHERE home_id = $1`, [homeId]);
 });
+
+async function login(username) {
+  const res = await request(app)
+    .post('/api/login')
+    .send({ username, password: ADMIN_PASSWORD })
+    .expect(200);
+  return res.body.token;
+}
 
 describe('staff invite — create', () => {
   it('creates a 64-char hex token with future expiry', async () => {
@@ -97,6 +131,31 @@ describe('staff invite — create', () => {
     await expect(staffAuthService.consumeInvite({
       token: first.token, username: PORTAL_USERNAME, password: PORTAL_PASSWORD,
     })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('route allows managers to create invites', async () => {
+    const token = await login(MANAGER_USER);
+    const res = await request(app)
+      .post('/api/staff-auth/invite')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({ staffId: STAFF_ID })
+      .expect(201);
+
+    expect(res.body.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(res.body.inviteUrl).toContain(res.body.token);
+  });
+
+  it('route blocks training leads and viewers from creating invites', async () => {
+    for (const username of [TRAINING_USER, VIEWER_USER]) {
+      const token = await login(username);
+      await request(app)
+        .post('/api/staff-auth/invite')
+        .query({ home: HOME_SLUG })
+        .set('Authorization', `Bearer ${token}`)
+        .send({ staffId: STAFF_ID })
+        .expect(403);
+    }
   });
 });
 
@@ -150,6 +209,19 @@ describe('staff invite — consume', () => {
     await expect(staffAuthService.consumeInvite({
       token: invite.token, username: PORTAL_USERNAME, password: 'short',
     })).rejects.toThrow();
+  });
+
+  it('only lets one concurrent invite consumption create credentials', async () => {
+    const invite = await staffAuthService.createInvite({ homeId, staffId: STAFF_ID, createdBy: 'admin' });
+    const results = await Promise.allSettled([
+      staffAuthService.consumeInvite({ token: invite.token, username: PORTAL_USERNAME, password: PORTAL_PASSWORD }),
+      staffAuthService.consumeInvite({ token: invite.token, username: `${PORTAL_USERNAME}-2`, password: PORTAL_PASSWORD }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    const creds = await staffAuthRepo.findByStaff(homeId, STAFF_ID);
+    expect(creds).toBeTruthy();
   });
 });
 

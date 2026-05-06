@@ -41,6 +41,7 @@ vi.mock('../../lib/malwareScan.js', () => ({
 }));
 
 import scanIntakeRouter from '../../routes/scanIntake.js';
+import * as documentIntakeRepo from '../../repositories/documentIntakeRepo.js';
 import * as scanIntakeService from '../../services/scanIntakeService.js';
 
 function makeApp() {
@@ -68,6 +69,13 @@ function handoverPayload(category) {
 describe('scan intake handover category authorization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    documentIntakeRepo.findById.mockResolvedValue({
+      id: 7,
+      home_id: 1,
+      status: 'ready',
+      classification_target: null,
+      created_by: 'scan-route-tester',
+    });
     scanIntakeService.confirmScanIntake.mockResolvedValue({
       id: 7,
       routed_module: 'handover',
@@ -108,5 +116,23 @@ describe('scan intake handover category authorization', () => {
       .expect(200);
 
     expect(scanIntakeService.confirmScanIntake).toHaveBeenCalled();
+  });
+
+  it('blocks scheduling-only users from filing already-classified handover scans', async () => {
+    documentIntakeRepo.findById.mockResolvedValueOnce({
+      id: 7,
+      home_id: 1,
+      status: 'ready',
+      classification_target: 'handover',
+      created_by: 'scan-route-tester',
+    });
+
+    await request(app)
+      .post('/api/scan-intake/7/confirm?home=home-a')
+      .set('x-home-role', 'shift_coordinator')
+      .send(handoverPayload('operational'))
+      .expect(403);
+
+    expect(scanIntakeService.confirmScanIntake).not.toHaveBeenCalled();
   });
 });

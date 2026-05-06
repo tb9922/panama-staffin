@@ -14,7 +14,9 @@ import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js'
 import {
   canManageSensitiveStaffFields as roleCanManageSensitiveStaffFields,
   listChangedSensitiveStaffFields,
+  redactStaffForBroadReader,
 } from '../shared/staffPolicy.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -102,6 +104,13 @@ function assertStaffDeleteAccess(req, res) {
   return null;
 }
 
+function shapeStaffResponse(req, staff, warnings = []) {
+  const body = canManageSensitiveStaffFields(req)
+    ? staff
+    : redactStaffForBroadReader([staff])[0];
+  return warnings.length > 0 && canManageSensitiveStaffFields(req) ? { ...body, warnings } : body;
+}
+
 // POST /api/staff?home=X — create a new staff member
 // Server generates the ID inside a transaction to prevent concurrent collisions.
 // Client-provided IDs are allowed for imports/backfills, but POST must never
@@ -119,13 +128,14 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       if (!data.id) {
         data.id = await staffRepo.nextId(req.home.id, client);
       }
-      return staffRepo.createOne(req.home.id, data, client);
+      const created = await staffRepo.createOne(req.home.id, data, client);
+      await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: data.id }, client);
+      return created;
     });
-    await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: data.id });
     const warnings = [];
     const nlwWarning = checkNLWViolation(staff, req.home.config);
     if (nlwWarning) warnings.push(nlwWarning);
-    res.status(201).json(warnings.length > 0 ? { ...staff, warnings } : staff);
+    res.status(201).json(shapeStaffResponse(req, staff, warnings));
   } catch (err) { next(err); }
 });
 
@@ -141,16 +151,23 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     const fieldAccessError = assertSensitiveStaffFieldAccess(req, res, parsed.data, existing);
     if (fieldAccessError) return fieldAccessError;
     const { version } = splitVersion(parsed.data);
-    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, normalizeStaffPayload(definedWithoutVersion(parsed.data)), version);
+    const staff = await withTransaction(async (client) => {
+      const lockedExisting = await staffRepo.findById(req.home.id, idParsed.data, client);
+      if (!lockedExisting) return undefined;
+      const updated = await staffRepo.updateOne(req.home.id, idParsed.data, normalizeStaffPayload(definedWithoutVersion(parsed.data)), version, client);
+      if (updated === null) return null;
+      const changes = diffFields(lockedExisting, updated);
+      await auditService.log('staff_update', req.home.slug, req.user.username, { staff_id: idParsed.data, changes }, client);
+      return updated;
+    });
+    if (staff === undefined) return res.status(404).json({ error: 'Staff member not found' });
     if (staff === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, staff);
-    await auditService.log('staff_update', req.home.slug, req.user.username, { staff_id: idParsed.data, changes });
     const warnings = [];
     const nlwWarning = checkNLWViolation(staff, req.home.config);
     if (nlwWarning) warnings.push(nlwWarning);
-    res.json(warnings.length > 0 ? { ...staff, warnings } : staff);
+    res.json(shapeStaffResponse(req, staff, warnings));
   } catch (err) { next(err); }
 });
 
@@ -164,9 +181,9 @@ router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, req
     await withTransaction(async (client) => {
       const deleted = await staffRepo.softDeleteOne(req.home.id, idParsed.data, client);
       if (!deleted) throw Object.assign(new Error('Staff member not found'), { status: 404 });
-      await overrideRepo.deleteForStaff(req.home.id, idParsed.data, client);
+      await overrideRepo.deleteFutureForStaff(req.home.id, idParsed.data, todayLocalISO(), client);
+      await auditService.log('staff_deactivate', req.home.slug, req.user.username, { staff_id: idParsed.data }, client);
     });
-    await auditService.log('staff_deactivate', req.home.slug, req.user.username, { staff_id: idParsed.data });
     res.json({ ok: true });
   } catch (err) {
     if (err.status === 404) return res.status(404).json({ error: err.message });

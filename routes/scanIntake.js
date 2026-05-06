@@ -19,6 +19,10 @@ import * as documentIntakeRepo from '../repositories/documentIntakeRepo.js';
 import * as scanIntakeService from '../services/scanIntakeService.js';
 import * as auditService from '../services/auditService.js';
 import { caseTypeSchema } from './hr/schemas.js';
+import {
+  canAccessSensitiveOnboarding,
+  isSensitiveOnboardingSection,
+} from '../shared/staffPolicy.js';
 
 const router = Router();
 
@@ -156,6 +160,59 @@ function requireScanInboxAccess(level = 'read') {
   };
 }
 
+function hasPlatformHomeRole(req) {
+  return req.user?.is_platform_admin && req.homeRole != null;
+}
+
+function canAccessUnclassifiedScan(req) {
+  return hasPlatformHomeRole(req) || ['home_manager', 'deputy_manager'].includes(req.homeRole);
+}
+
+function canAccessOnboardingTarget(req, level, payload) {
+  if (hasPlatformHomeRole(req)) return true;
+  const hasSensitiveOnboarding = canAccessSensitiveOnboarding(req.homeRole);
+  if (payload?.onboarding?.section && isSensitiveOnboardingSection(payload.onboarding.section)) {
+    return hasSensitiveOnboarding;
+  }
+  return hasSensitiveOnboarding || hasModuleAccess(req.homeRole, 'compliance', level, { includeOwn: false });
+}
+
+function canReadScanTarget(req, target, item = null) {
+  if (!target) {
+    return canAccessUnclassifiedScan(req) || item?.created_by === req.user?.username;
+  }
+  if (target === 'onboarding') {
+    // OCR classification only knows the broad destination. Treat onboarding
+    // scans as potentially DBS/RTW/health evidence until a reviewer routes them.
+    return hasPlatformHomeRole(req) || canAccessSensitiveOnboarding(req.homeRole);
+  }
+  if (target === 'record_attachment') return false;
+  const targetDef = getScanTarget(target);
+  if (!targetDef) return false;
+  if (target === 'handover') {
+    return canAccessUnclassifiedScan(req);
+  }
+  if (hasPlatformHomeRole(req)) return true;
+  return hasModuleAccess(req.homeRole, targetDef.permissionModule, 'read', { includeOwn: false });
+}
+
+function readableScanTargets(req) {
+  return getConfiguredTargets(req).filter((target) => canReadScanTarget(req, target));
+}
+
+async function loadReadableScanItem(req, res, id) {
+  const item = await documentIntakeRepo.findById(id, req.home.id);
+  if (!item) {
+    res.status(404).json({ error: 'Scan item not found' });
+    return null;
+  }
+  if (!canReadScanTarget(req, item.classification_target, item)) {
+    res.status(403).json({ error: 'Insufficient permissions for this scan target' });
+    return null;
+  }
+  return item;
+}
+
 function requireTargetWriteAccess(req, res, target, payload) {
   if (target === 'record_attachment') {
     const moduleId = payload?.record_attachment?.module;
@@ -186,6 +243,13 @@ function requireTargetWriteAccess(req, res, target, payload) {
   }
   if (target === 'handover') return true;
   if (req.user?.is_platform_admin && req.homeRole != null) return true;
+  if (target === 'onboarding') {
+    if (!canAccessOnboardingTarget(req, 'write', payload)) {
+      res.status(403).json({ error: 'HR or home management role required for this onboarding evidence' });
+      return false;
+    }
+    return true;
+  }
   if (!hasModuleAccess(req.homeRole, targetDef.permissionModule, 'write')) {
     res.status(403).json({ error: `Insufficient permissions for ${targetDef.permissionModule}` });
     return false;
@@ -240,9 +304,16 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireScanInbo
     const statuses = parsed.data.status
       ? parsed.data.status.split(',').map((value) => value.trim()).filter(Boolean)
       : undefined;
+    if (parsed.data.target && !canReadScanTarget(req, parsed.data.target)) {
+      return res.status(403).json({ error: 'Insufficient permissions for this scan target' });
+    }
+    const allowedTargets = parsed.data.target ? undefined : readableScanTargets(req);
     const result = await documentIntakeRepo.listByHome(req.home.id, {
       statuses,
       target: parsed.data.target,
+      targets: allowedTargets,
+      includeUnclassified: !parsed.data.target && canAccessUnclassifiedScan(req),
+      unclassifiedCreatedBy: !parsed.data.target && !canAccessUnclassifiedScan(req) ? req.user.username : null,
       limit: parsed.data.limit || 50,
       offset: parsed.data.offset || 0,
     });
@@ -259,6 +330,9 @@ router.get('/:id', readRateLimiter, requireAuth, requireHomeAccess, requireScanI
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
     const item = await documentIntakeRepo.findById(idParsed.data, req.home.id);
     if (!item) return res.status(404).json({ error: 'Scan item not found' });
+    if (!canReadScanTarget(req, item.classification_target, item)) {
+      return res.status(403).json({ error: 'Insufficient permissions for this scan target' });
+    }
     res.json({ ...item, extraction: scanIntakeService.decryptExtraction(item) });
   } catch (err) {
     next(err);
@@ -316,6 +390,8 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!isScanEnabled(req)) return res.status(403).json({ error: 'Scan intake is disabled for this home' });
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
+    const sourceItem = await loadReadableScanItem(req, res, idParsed.data);
+    if (!sourceItem) return;
     const parsed = confirmBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid confirm payload' });
     if (parsed.data.target === 'record_attachment' && !parsed.data.record_attachment) {
@@ -370,6 +446,8 @@ router.post('/:id/reject', writeRateLimiter, requireAuth, requireHomeAccess, req
     if (!isScanEnabled(req)) return res.status(403).json({ error: 'Scan intake is disabled for this home' });
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
+    const sourceItem = await loadReadableScanItem(req, res, idParsed.data);
+    if (!sourceItem) return;
     const item = await documentIntakeRepo.update(idParsed.data, req.home.id, {
       status: 'rejected',
       reviewed_by: req.user.username,
@@ -389,6 +467,8 @@ router.post('/:id/retry', writeRateLimiter, requireAuth, requireHomeAccess, requ
     if (!isScanEnabled(req)) return res.status(403).json({ error: 'Scan intake is disabled for this home' });
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
+    const sourceItem = await loadReadableScanItem(req, res, idParsed.data);
+    if (!sourceItem) return;
     const item = await scanIntakeService.retryScanIntake(req.home.id, idParsed.data);
     await auditService.log('scan_intake_retry', req.home.slug, req.user.username, {
       intakeId: idParsed.data,

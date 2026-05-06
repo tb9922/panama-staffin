@@ -71,6 +71,7 @@ const AUTH_Z_PATTERNS = [
   'requireStaffSelf',
   'requireAnyHandoverRead',
   'requireScanInboxAccess',
+  'requireOnboardingAccess',
   'staffReadChain',
   'staffWriteChain',
 ];

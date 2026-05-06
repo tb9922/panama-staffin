@@ -1,8 +1,6 @@
 -- UP
-ALTER TABLE incidents
-  ADD COLUMN IF NOT EXISTS cqc_notified_time TIME,
-  ADD COLUMN IF NOT EXISTS riddor_reported_time TIME;
-
+-- Staff rows are soft-deleted for leavers/erasures, while onboarding and training
+-- attachments are regulated evidence. Prevent accidental hard-delete cascades.
 CREATE TABLE IF NOT EXISTS onboarding_orphan_attachment_records (
   quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   record JSONB NOT NULL
@@ -63,11 +61,15 @@ ALTER TABLE training_file_attachments
 
 -- DOWN
 ALTER TABLE training_file_attachments
-  DROP CONSTRAINT IF EXISTS training_file_attachments_staff_fk;
+  DROP CONSTRAINT IF EXISTS training_file_attachments_staff_fk,
+  ADD CONSTRAINT training_file_attachments_staff_fk
+  FOREIGN KEY (home_id, staff_id)
+  REFERENCES staff(home_id, id)
+  ON DELETE CASCADE;
 
 ALTER TABLE onboarding_file_attachments
-  DROP CONSTRAINT IF EXISTS onboarding_file_attachments_staff_fk;
-
-ALTER TABLE incidents
-  DROP COLUMN IF EXISTS riddor_reported_time,
-  DROP COLUMN IF EXISTS cqc_notified_time;
+  DROP CONSTRAINT IF EXISTS onboarding_file_attachments_staff_fk,
+  ADD CONSTRAINT onboarding_file_attachments_staff_fk
+  FOREIGN KEY (home_id, staff_id)
+  REFERENCES staff(home_id, id)
+  ON DELETE CASCADE;

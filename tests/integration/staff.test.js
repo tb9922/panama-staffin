@@ -12,6 +12,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
+import { todayLocalISO } from '../../lib/dateOnly.js';
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -41,7 +42,9 @@ beforeAll(async () => {
   homeASlug = `${PREFIX}-home-a`;
   homeBSlug = `${PREFIX}-home-b`;
   const { rows: [ha] } = await pool.query(
-    `INSERT INTO homes (slug, name, config) VALUES ($1, 'Staff Test Home A', '{"home_name":"Staff Test Home A"}') RETURNING id`,
+    `INSERT INTO homes (slug, name, config)
+     VALUES ($1, 'Staff Test Home A', '{"home_name":"Staff Test Home A","agency_rate_day":25,"agency_rate_night":30,"ot_premium":1.25,"bh_premium_multiplier":2}')
+     RETURNING id`,
     [homeASlug]
   );
   const { rows: [hb] } = await pool.query(
@@ -334,6 +337,23 @@ describe('PUT /api/staff/:id — update', () => {
     expect(res.body.fields).toEqual(expect.arrayContaining(['hourly_rate', 'date_of_birth', 'willing_extras', 'active']));
   });
 
+  it('redacts sensitive fields from broad staff-writer update responses', async () => {
+    const res = await request(app)
+      .put('/api/staff/ST010')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${trainingToken}`)
+      .send({ skill: 5 })
+      .expect(200);
+
+    expect(res.body.skill).toBe(5);
+    expect(res.body.hourly_rate).toBeUndefined();
+    expect(res.body.contract_hours).toBeUndefined();
+    expect(res.body.date_of_birth).toBeUndefined();
+    expect(res.body.ni_number).toBeUndefined();
+    expect(res.body.al_entitlement).toBeUndefined();
+    expect(res.body.warnings).toBeUndefined();
+  });
+
   it('returns 404 for nonexistent staff', async () => {
     await request(app)
       .put('/api/staff/NONEXISTENT')
@@ -357,7 +377,7 @@ describe('PUT /api/staff/:id — update', () => {
 
 describe('DELETE /api/staff/:id — soft delete', () => {
   beforeAll(async () => {
-    // Seed staff + override for cascade test
+    // Seed staff + historical/future overrides for retention-aware removal test
     await pool.query(
       `INSERT INTO staff (home_id, id, name, role, team, skill, hourly_rate, active, version)
        VALUES ($1, 'ST020', 'Delete Target', 'Carer', 'Day A', 1, 12.50, true, 1)`,
@@ -365,8 +385,11 @@ describe('DELETE /api/staff/:id — soft delete', () => {
     );
     await pool.query(
       `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source)
-       VALUES ($1, '2026-03-01', 'ST020', 'AL', 'test leave', 'al')`,
-      [homeAId]
+       VALUES
+         ($1, '2026-03-01', 'ST020', 'AL', 'historical leave', 'al'),
+         ($1, $2, 'ST020', 'SICK', 'same-day evidence', 'manager'),
+         ($1, '2099-01-01', 'ST020', 'AL', 'future leave', 'al')`,
+      [homeAId, todayLocalISO()]
     );
   });
 
@@ -401,12 +424,16 @@ describe('DELETE /api/staff/:id — soft delete', () => {
     expect(rows[0].updated_at.toISOString()).not.toBe(before.rows[0].updated_at.toISOString());
   });
 
-  it('cascades override deletion', async () => {
+  it('retains historical rota evidence while removing future planning rows', async () => {
     const { rows } = await pool.query(
-      `SELECT COUNT(*) AS count FROM shift_overrides WHERE home_id = $1 AND staff_id = 'ST020'`,
+      `SELECT date::text, shift, reason FROM shift_overrides WHERE home_id = $1 AND staff_id = 'ST020' ORDER BY date`,
       [homeAId]
     );
-    expect(parseInt(rows[0].count)).toBe(0);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].date).toMatch(/^2026-03-01/);
+    expect(rows[0].reason).toBe('historical leave');
+    expect(rows[1].date).toMatch(new RegExp(`^${todayLocalISO()}`));
+    expect(rows[1].reason).toBe('same-day evidence');
   });
 
   it('returns 404 for nonexistent staff', async () => {
@@ -483,6 +510,7 @@ describe('GET /api/scheduling — PII filtering', () => {
     expect(staff.wtr_opt_out).toBeUndefined();
     expect(staff.al_entitlement).toBeUndefined();
     expect(staff.al_carryover).toBeUndefined();
+    expect(staff.leaving_date).toBeUndefined();
   });
 
   it('viewer does NOT see onboarding data', async () => {
@@ -493,6 +521,20 @@ describe('GET /api/scheduling — PII filtering', () => {
       .expect(200);
 
     expect(res.body.onboarding).toBeUndefined();
+  });
+
+  it('viewer does NOT see scheduling cost configuration', async () => {
+    const res = await request(app)
+      .get('/api/scheduling')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+
+    expect(res.body.config.edit_lock_pin).toBeUndefined();
+    expect(res.body.config.agency_rate_day).toBeUndefined();
+    expect(res.body.config.agency_rate_night).toBeUndefined();
+    expect(res.body.config.ot_premium).toBeUndefined();
+    expect(res.body.config.bh_premium_multiplier).toBeUndefined();
   });
 });
 
