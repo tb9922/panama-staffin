@@ -42,6 +42,7 @@ const generateSchema = z.object({
   from: requiredDateInput.optional(),
   to: requiredDateInput.optional(),
 });
+const MAX_GENERATE_RANGE_DAYS = 548;
 
 const listSchema = paginationSchema.extend({
   status: z.enum(['open', 'completed', 'verified', 'cancelled']).optional(),
@@ -100,6 +101,13 @@ function defaultGenerateRange() {
   return { from: dateOnly(from), to: dateOnly(to) };
 }
 
+function dateDiffDays(from, to) {
+  const fromDate = new Date(`${from}T00:00:00Z`);
+  const toDate = new Date(`${to}T00:00:00Z`);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) return null;
+  return Math.round((toDate - fromDate) / 86400000) + 1;
+}
+
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), async (req, res, next) => {
   try {
     const parsed = listSchema.safeParse(req.query);
@@ -133,6 +141,13 @@ router.post('/generate', writeRateLimiter, requireAuth, requireHomeAccess, requi
       from: parsed.data.from || defaults.from,
       to: parsed.data.to || defaults.to,
     };
+    const rangeDays = dateDiffDays(range.from, range.to);
+    if (rangeDays == null || rangeDays < 1) {
+      return res.status(400).json({ error: 'Generate range end date must be on or after start date' });
+    }
+    if (rangeDays > MAX_GENERATE_RANGE_DAYS) {
+      return res.status(400).json({ error: 'Generate range cannot exceed 18 months' });
+    }
     const tasks = buildAuditTasksForRange(range);
     const inserted = await auditTaskRepo.createGenerated(req.home.id, tasks, actorId(req));
     await auditService.log('audit_task_generate', req.home.slug, req.user.username, {

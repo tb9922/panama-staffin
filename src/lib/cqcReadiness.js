@@ -48,6 +48,8 @@ function buildReasonParts({
   metricsMissing,
   staleCount,
   reviewOverdue,
+  reviewMissing,
+  ownerMissing,
   narrativePresent,
 }) {
   const reasons = [];
@@ -55,6 +57,8 @@ function buildReasonParts({
   if (metricsMissing.length) reasons.push(`Missing metrics: ${metricsMissing.join(', ')}`);
   if (staleCount > 0) reasons.push(`${staleCount} stale evidence item${staleCount === 1 ? '' : 's'}`);
   if (reviewOverdue > 0) reasons.push(`${reviewOverdue} review overdue`);
+  if (reviewMissing > 0) reasons.push(`${reviewMissing} missing review date${reviewMissing === 1 ? '' : 's'}`);
+  if (ownerMissing > 0) reasons.push(`${ownerMissing} missing owner${ownerMissing === 1 ? '' : 's'}`);
   if (!narrativePresent) reasons.push('No self-assessment narrative');
   return reasons;
 }
@@ -66,12 +70,22 @@ function computeStatus({
   categoriesExpected,
   staleCount,
   reviewOverdue,
+  reviewMissing,
+  ownerMissing,
+  narrativePresent,
 }) {
   if (evidenceCount === 0 && metricCoverageCount === 0) return 'missing';
   if (evidenceCount === 0) return 'weak';
   if (staleCount > 0 && staleCount >= evidenceCount * 0.5) return 'stale';
   if (categoriesCovered < Math.max(1, categoriesExpected * 0.5)) return 'partial';
-  if (categoriesCovered >= Math.ceil(categoriesExpected * 0.75) && staleCount === 0 && reviewOverdue === 0) return 'strong';
+  if (
+    categoriesCovered >= Math.ceil(categoriesExpected * 0.75)
+    && staleCount === 0
+    && reviewOverdue === 0
+    && reviewMissing === 0
+    && ownerMissing === 0
+    && narrativePresent
+  ) return 'strong';
   return 'partial';
 }
 
@@ -81,6 +95,8 @@ function buildSummary({
   categoriesExpected,
   staleCount,
   reviewOverdue,
+  reviewMissing,
+  ownerMissing,
   categoriesMissing,
   metricsMissing,
   narrativePresent,
@@ -91,6 +107,8 @@ function buildSummary({
   ];
   if (staleCount > 0) parts.push(`${staleCount} stale`);
   if (reviewOverdue > 0) parts.push(`${reviewOverdue} review overdue`);
+  if (reviewMissing > 0) parts.push(`${reviewMissing} missing review date${reviewMissing === 1 ? '' : 's'}`);
+  if (ownerMissing > 0) parts.push(`${ownerMissing} missing owner${ownerMissing === 1 ? '' : 's'}`);
   if (categoriesMissing.length) parts.push(`Missing: ${categoriesMissing.join(', ')}`);
   if (metricsMissing.length) parts.push(`Metrics missing: ${metricsMissing.join(', ')}`);
   if (!narrativePresent) parts.push('Narrative missing');
@@ -115,6 +133,8 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
     const staleItems = [];
     let reviewOverdue = 0;
     let reviewDueSoon = 0;
+    let reviewMissing = 0;
+    let ownerMissing = 0;
     let oldestEvidenceDate = null;
     let newestEvidenceDate = null;
 
@@ -151,6 +171,12 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
         const diff = daysBetween(asOf, reviewDue);
         if (diff < 0) reviewOverdue += 1;
         else if (diff <= 30) reviewDueSoon += 1;
+      } else {
+        reviewMissing += 1;
+      }
+
+      if (!String(item.evidence_owner || '').trim()) {
+        ownerMissing += 1;
       }
     }
 
@@ -195,6 +221,8 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       metricsMissing,
       reviewOverdue,
       reviewDueSoon,
+      reviewMissing,
+      ownerMissing,
       narrative,
       narrativePresent,
     };
@@ -205,6 +233,8 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       metricsMissing,
       staleCount: entry.staleCount,
       reviewOverdue,
+      reviewMissing,
+      ownerMissing,
       narrativePresent,
     });
     entry.summary = buildSummary({
@@ -213,6 +243,8 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       categoriesExpected: entry.categoriesExpected,
       staleCount: entry.staleCount,
       reviewOverdue,
+      reviewMissing,
+      ownerMissing,
       categoriesMissing,
       metricsMissing,
       narrativePresent,

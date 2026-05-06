@@ -153,6 +153,7 @@ export default function AuditCalendar() {
   const { confirm, ConfirmDialog } = useConfirm();
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const [tasks, setTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState({ status: '', category: '' });
@@ -169,8 +170,25 @@ export default function AuditCalendar() {
     if (!activeHome) return;
     setLoading(true);
     try {
-      const result = await getAuditTasks(activeHome, { ...filters, limit: PAGE_SIZE, offset });
+      const [result, allResult] = await Promise.all([
+        getAuditTasks(activeHome, { ...filters, limit: PAGE_SIZE, offset }),
+        (async () => {
+          const collected = [];
+          let allOffset = 0;
+          let totalRows = Infinity;
+          while (collected.length < totalRows) {
+            const page = await getAuditTasks(activeHome, { ...filters, limit: 500, offset: allOffset });
+            const rows = Array.isArray(page?.tasks) ? page.tasks : [];
+            collected.push(...rows);
+            totalRows = page?._total ?? collected.length;
+            if (rows.length === 0) break;
+            allOffset += rows.length;
+          }
+          return collected;
+        })(),
+      ]);
       setTasks(Array.isArray(result.tasks) ? result.tasks : []);
+      setAllTasks(allResult);
       setTotal(result._total || 0);
       setError(null);
     } catch (e) {
@@ -185,12 +203,12 @@ export default function AuditCalendar() {
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return {
-      open: tasks.filter(task => task.status === 'open').length,
-      overdue: tasks.filter(task => task.status === 'open' && task.due_date < today).length,
-      completed: tasks.filter(task => task.status === 'completed' || task.status === 'verified').length,
-      qaSigned: tasks.filter(task => task.status === 'verified').length,
+      open: allTasks.filter(task => task.status === 'open').length,
+      overdue: allTasks.filter(task => task.status === 'open' && task.due_date < today).length,
+      completed: allTasks.filter(task => task.status === 'completed' || task.status === 'verified').length,
+      qaSigned: allTasks.filter(task => task.status === 'verified').length,
     };
-  }, [tasks]);
+  }, [allTasks]);
 
   function openNew() {
     setEditing(null);

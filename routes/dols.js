@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { denyHomeRoles, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as dolsRepo from '../repositories/dolsRepo.js';
+import * as financeRepo from '../repositories/financeRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
@@ -58,6 +59,16 @@ const mcaUpdateSchema = mcaBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
+async function validateResidentId(homeId, residentId, res) {
+  if (residentId == null) return true;
+  const resident = await financeRepo.findResidentById(residentId, homeId);
+  if (!resident) {
+    res.status(400).json({ error: 'Resident does not exist for this home' });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -73,7 +84,12 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const mcaAssessments = isAdmin
       ? mcaResult.rows
       : mcaResult.rows.map(({ lacks_capacity: _lc, best_interest_decision: _bid, ...rest }) => rest);
-    res.json({ dols, mcaAssessments, _total: dolsResult.total });
+    res.json({
+      dols,
+      mcaAssessments,
+      _total: dolsResult.total,
+      _totals: { dols: dolsResult.total, mcaAssessments: mcaResult.total },
+    });
   } catch (err) { next(err); }
 });
 
@@ -82,6 +98,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveC
   try {
     const parsed = dolsBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     const windowError = validateDolsAuthorisationWindow(parsed.data);
     if (windowError) return res.status(400).json({ error: windowError });
     const record = await dolsRepo.upsertDols(req.home.id, parsed.data);
@@ -97,6 +114,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiv
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = dolsUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     const existing = await dolsRepo.findDolsById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const statusError = validateDolsReviewStatusChange(existing, parsed.data);
@@ -133,6 +151,7 @@ router.post('/mca', writeRateLimiter, requireAuth, requireHomeAccess, ...sensiti
   try {
     const parsed = mcaBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     const record = await dolsRepo.upsertMca(req.home.id, parsed.data);
     await auditService.log('mca_create', req.home.slug, req.user.username, { id: record?.id });
     res.status(201).json(record);
@@ -146,6 +165,7 @@ router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sens
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = mcaUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     const existing = await dolsRepo.findMcaById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const { version, payload } = splitVersion(parsed.data);

@@ -1083,12 +1083,31 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
     });
   }
 
-  const manualEvidence = (data.cqc_evidence || [])
+  const linkedEvidence = (data.cqc_evidence_links || [])
+    .filter((entry) => (entry.quality_statement || entry.qualityStatement) === statementId)
+    .map((entry) => ({
+      id: `link-${entry.id}`,
+      title: entry.rationale || entry.sourceModule || entry.source_module || 'Linked evidence',
+      description: entry.rationale || '',
+      quality_statement: entry.quality_statement || entry.qualityStatement,
+      evidence_category: normalizeEvidenceCategory(entry.evidence_category || entry.evidenceCategory),
+      evidence_owner: entry.linked_by || entry.linkedBy || null,
+      review_due: null,
+      added_at: entry.source_recorded_at || entry.sourceRecordedAt || entry.created_at || entry.createdAt,
+      source_module: entry.source_module || entry.sourceModule,
+      source_id: entry.source_id || entry.sourceId,
+      auto_linked: entry.auto_linked ?? entry.autoLinked ?? false,
+    }));
+
+  const manualEvidence = [
+    ...(data.cqc_evidence || [])
     .filter((entry) => entry.quality_statement === statementId)
     .map((entry) => ({
       ...entry,
       evidence_category: normalizeEvidenceCategory(entry.evidence_category),
-    }));
+    })),
+    ...linkedEvidence,
+  ];
 
   return { statement, autoEvidence, manualEvidence };
 }

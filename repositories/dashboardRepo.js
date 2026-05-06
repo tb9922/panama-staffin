@@ -1,4 +1,5 @@
 import { pool } from '../db.js';
+import { CARE_ROLES } from '../shared/rotation.js';
 
 const int = (v) => parseInt(v ?? '0', 10);
 
@@ -512,21 +513,40 @@ export async function getDolsCounts(homeId, today) {
 export async function getCareCertCounts(homeId, today) {
   const { rows } = await pool.query(
     `/* dashboardRepo – getCareCertCounts */
+     WITH active_care_staff AS (
+       SELECT id, start_date
+         FROM staff
+        WHERE home_id = $1
+          AND deleted_at IS NULL
+          AND active IS TRUE
+          AND role = ANY($3::text[])
+     ),
+     certs AS (
+       SELECT acs.id AS staff_id,
+              acs.start_date,
+              cc.status,
+              cc.expected_completion
+         FROM active_care_staff acs
+         LEFT JOIN care_certificates cc
+           ON cc.home_id = $1
+          AND cc.staff_id = acs.id
+          AND cc.deleted_at IS NULL
+     )
      SELECT
        COUNT(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
        COUNT(*) FILTER (
          WHERE status IS DISTINCT FROM 'completed'
-           AND expected_completion IS NOT NULL
-           AND expected_completion < $2
-       )::int AS overdue
-     FROM care_certificates
-     WHERE home_id = $1 AND deleted_at IS NULL`,
-    [homeId, today]
+           AND COALESCE(expected_completion, start_date + INTERVAL '84 days') < $2
+       )::int AS overdue,
+       COUNT(*) FILTER (WHERE status IS NULL)::int AS missing
+     FROM certs`,
+    [homeId, today, CARE_ROLES]
   );
   const r = rows[0];
   return {
     inProgress: r.in_progress,
     overdue: r.overdue,
+    missing: r.missing,
   };
 }
 

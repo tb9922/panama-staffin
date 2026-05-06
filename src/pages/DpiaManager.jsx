@@ -46,7 +46,7 @@ export default function DpiaManager() {
     if (!home) return;
     setLoading(true); setError(null);
     try {
-      const data = await getDpiaAssessments(home, { limit: 200 });
+      const data = await getDpiaAssessments(home);
       setItems(data.rows || []); setTotal(data.total || 0);
     } catch (e) { setError(e.message || 'Failed to load'); }
     finally { setLoading(false); }

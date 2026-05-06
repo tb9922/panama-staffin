@@ -174,7 +174,7 @@ export function calculateDolsCompliancePct(data, asOfDate) {
   const today = typeof asOfDate === 'string' ? asOfDate : formatDate(asOfDate || new Date());
   const dols = data.dols || [];
 
-  if (dols.length === 0) return { score: 100, active: 0, expired: 0, applied: 0, total: 0 };
+  if (dols.length === 0) return { score: null, active: 0, expired: 0, applied: 0, total: 0, noEvidence: true };
 
   let active = 0;
   let expired = 0;

@@ -104,6 +104,12 @@ router.delete('/purge', writeRateLimiter, requireAuth, requirePlatformAdmin, req
     const parsed = purgeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const deleted = await auditService.purgeOlderThan(parsed.data.days, req.home.slug);
+    await auditService.log('audit_log_purge', req.home.slug, req.user.username, {
+      days: parsed.data.days,
+      deleted,
+      home: req.home.slug,
+      actor: req.user.username,
+    });
     res.json({ deleted, days: parsed.data.days, home: req.home.slug });
   } catch (err) {
     next(err);

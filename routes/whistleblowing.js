@@ -104,7 +104,13 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
     let changes = diffFields(existing, concern, {
-      extraSensitive: ['description', 'findings', 'resolution'],
+      extraSensitive: [
+        'description',
+        'findings',
+        'outcome_details',
+        'protection_details',
+        'lessons_learned',
+      ],
     });
     // Strip raised_by_role from audit diff for anonymous concerns to prevent de-anonymisation
     if (concern.anonymous) {

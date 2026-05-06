@@ -47,7 +47,7 @@ export default function RopaManager() {
     if (!home) return;
     setLoading(true); setError(null);
     try {
-      const data = await getRopaActivities(home, { status: filterStatus || undefined, limit: 200 });
+      const data = await getRopaActivities(home, { status: filterStatus || undefined });
       setItems(data.rows || []); setTotal(data.total || 0);
     } catch (e) { setError(e.message || 'Failed to load'); }
     finally { setLoading(false); }

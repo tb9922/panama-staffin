@@ -16,6 +16,7 @@ export const PORTFOLIO_RAG_THRESHOLDS = Object.freeze({
   complaintRatePerResidentMonth: { greenAtMost: 0.02, amberAtMost: 0.08 },
   overdueCounts: { greenAtMost: 0, amberAtMost: 2 },
   expiredCertificates: { greenAtMost: 0, amberAtMost: 0 },
+  careCertificateGaps: { greenAtMost: 0, amberAtMost: 2 },
   cqcEvidenceGaps: { greenAtMost: 0, amberAtMost: 4 },
   agencyEmergencyOverridePct: { greenAtMost: 10, amberAtMost: 20 },
   falls28d: { greenAtMost: 1, amberAtMost: 3 },
@@ -58,6 +59,10 @@ export function buildPortfolioRag(kpis) {
       ? RAG.UNKNOWN
       : ragAtMost(kpis.agency.emergency_override_pct, thresholds.agencyEmergencyOverridePct),
     training: ragAtLeast(kpis?.training?.compliance_pct, thresholds.trainingCompliancePct),
+    care_certificate: ragAtMost(
+      (kpis?.care_certificate?.overdue || 0) + (kpis?.care_certificate?.missing || 0),
+      thresholds.careCertificateGaps,
+    ),
     incidents: overallRag({
       open: ragAtMost(kpis?.incidents?.open, thresholds.incidentOpen),
       rate: ragAtMost(kpis?.incidents?.rate_per_resident_month, thresholds.incidentRatePerResidentMonth),

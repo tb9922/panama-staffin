@@ -20,6 +20,7 @@ import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
+import * as cqcEvidenceLinksRepo from '../repositories/cqcEvidenceLinksRepo.js';
 import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as ropaRepo from '../repositories/ropaRepo.js';
@@ -41,6 +42,42 @@ import { calculateGdprControlsScore } from '../src/lib/gdpr.js';
 import { formatDate, parseDate, addDays } from '../shared/rotation.js';
 import { endOfLocalMonthISO, startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 
+const ASSESSMENT_PAGE_SIZE = 500;
+
+function mergePagedRows(target, pageRows) {
+  if (Array.isArray(pageRows)) {
+    target.push(...pageRows);
+    return pageRows.length;
+  }
+  let count = 0;
+  for (const [key, value] of Object.entries(pageRows || {})) {
+    if (Array.isArray(value)) {
+      target[key] = [...(target[key] || []), ...value];
+      count += value.length;
+    } else {
+      target[key] = { ...(target[key] || {}), ...(value || {}) };
+      count += Object.keys(value || {}).length;
+    }
+  }
+  return count;
+}
+
+async function loadAllPages(findPage, seed) {
+  const rows = Array.isArray(seed) ? [] : {};
+  let offset = 0;
+  let total = Infinity;
+  while (offset < total) {
+    const result = await findPage({ limit: ASSESSMENT_PAGE_SIZE, offset });
+    const pageRows = result?.rows ?? result ?? [];
+    const pageCount = mergePagedRows(rows, pageRows);
+    const loadedCount = offset + pageCount;
+    total = Number.isFinite(Number(result?.total)) ? Number(result.total) : loadedCount;
+    if (pageCount === 0 || loadedCount >= total) break;
+    offset = loadedCount;
+  }
+  return rows;
+}
+
 // ── CQC Data Assembly ───────────────────────────────────────────────────────
 // Gathers the same data shape that CQCEvidence.jsx builds client-side.
 
@@ -57,27 +94,28 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     staffResult, overrides, training, supervisions, appraisals,
     fireDrills, incidents, complaints, complaintSurveys,
     maintenance, ipcAudits, risks, policies,
-    whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence, cqcNarratives,
+    whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence, cqcEvidenceLinks, cqcNarratives,
   ] = await Promise.all([
-    staffRepo.findByHome(homeId),
+    staffRepo.findByHome(homeId, { limit: 5000 }),
     overrideRepo.findByHome(homeId, from, to),
-    trainingRepo.findByHome(homeId),
-    supervisionRepo.findByHome(homeId),
-    appraisalRepo.findByHome(homeId),
+    loadAllPages((pg) => trainingRepo.findByHome(homeId, pg), {}),
+    loadAllPages((pg) => supervisionRepo.findByHome(homeId, pg), {}),
+    loadAllPages((pg) => appraisalRepo.findByHome(homeId, pg), {}),
     fireDrillRepo.findByHome(homeId),
-    incidentRepo.findByHome(homeId, { limit: 500 }),
-    complaintRepo.findByHome(homeId, { limit: 500 }),
-    complaintSurveyRepo.findByHome(homeId),
-    maintenanceRepo.findByHome(homeId),
-    ipcRepo.findByHome(homeId, { limit: 500 }),
-    riskRepo.findByHome(homeId),
-    policyRepo.findByHome(homeId),
-    whistleblowingRepo.findByHome(homeId),
-    dolsRepo.findByHome(homeId),
-    dolsRepo.findMcaByHome(homeId, { limit: 500 }),
+    loadAllPages((pg) => incidentRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => complaintRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => complaintSurveyRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => maintenanceRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => ipcRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => riskRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => policyRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => whistleblowingRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => dolsRepo.findByHome(homeId, pg), []),
+    loadAllPages((pg) => dolsRepo.findMcaByHome(homeId, pg), []),
     careCertRepo.findByHome(homeId),
     onboardingRepo.findByHome(homeId),
-    cqcEvidenceRepo.findByHome(homeId, { limit: 500 }),
+    loadAllPages((pg) => cqcEvidenceRepo.findByHome(homeId, pg), []),
+    cqcEvidenceLinksRepo.findAllByHome(homeId),
     cqcNarrativeRepo.findByHome(homeId),
   ]);
 
@@ -86,22 +124,23 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     staff: staffResult.rows || staffResult || [],
     overrides: overrides || {},
     training: training || {},
-    supervisions: supervisions?.rows || supervisions || {},
-    appraisals: appraisals?.rows || appraisals || {},
+    supervisions: supervisions || {},
+    appraisals: appraisals || {},
     fire_drills: fireDrills || [],
-    incidents: incidents?.rows || incidents || [],
-    complaints: complaints?.rows || complaints || [],
-    complaint_surveys: complaintSurveys?.rows || complaintSurveys || [],
-    maintenance: maintenance?.rows || maintenance || [],
-    ipc_audits: ipcAudits?.rows || ipcAudits || [],
-    risk_register: risks?.rows || risks || [],
-    policy_reviews: policies?.rows || policies || [],
-    whistleblowing_concerns: whistleblowing?.rows || whistleblowing || [],
-    dols: dols?.rows || dols || [],
-    mca_assessments: mcaAssessments?.rows || mcaAssessments || [],
+    incidents: incidents || [],
+    complaints: complaints || [],
+    complaint_surveys: complaintSurveys || [],
+    maintenance: maintenance || [],
+    ipc_audits: ipcAudits || [],
+    risk_register: risks || [],
+    policy_reviews: policies || [],
+    whistleblowing_concerns: whistleblowing || [],
+    dols: dols || [],
+    mca_assessments: mcaAssessments || [],
     care_certificate: careCert || {},
     onboarding: onboarding || {},
-    cqc_evidence: cqcEvidence?.rows || cqcEvidence || [],
+    cqc_evidence: cqcEvidence || [],
+    cqc_evidence_links: cqcEvidenceLinks || [],
     cqc_statement_narratives: cqcNarratives || [],
   };
 }

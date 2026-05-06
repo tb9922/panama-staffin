@@ -25,6 +25,7 @@ vi.mock('../../lib/api.js', async () => {
     getDols: vi.fn(),
     getCareCertData: vi.fn(),
     getCqcEvidence: vi.fn(),
+    getCqcEvidenceLinks: vi.fn(),
     getCqcReadiness: vi.fn(),
     getCqcNarratives: vi.fn(),
     createCqcEvidence: vi.fn(),
@@ -84,6 +85,7 @@ function setupApiMocks() {
   api.getDols.mockResolvedValue({ dols: [], mcaAssessments: [] });
   api.getCareCertData.mockResolvedValue({ careCert: {} });
   api.getCqcEvidence.mockResolvedValue({ evidence: [] });
+  api.getCqcEvidenceLinks.mockResolvedValue({ rows: [] });
   api.getCqcReadiness.mockResolvedValue({
     computedAt: '2026-03-08',
     entries: [

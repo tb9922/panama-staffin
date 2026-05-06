@@ -177,7 +177,7 @@ const DEFAULTS = {
   auditTasks:      { overdue: 0, dueSoon: 0, pendingQa: 0, evidenceMissing: 0 },
   whistleblowing:  { open: 0, unacknowledged: 0 },
   dols:            { active: 0, expiringSoon: 0, overdueReviews: 0 },
-  careCertificate: { inProgress: 0, overdue: 0 },
+  careCertificate: { inProgress: 0, overdue: 0, missing: 0 },
   beds:            { total: 0, occupied: 0, available: 0, hospitalHold: 0, occupancyRate: 100,
                      vacantBeds: 0, floorWeeklyLoss: 0, avgWeeklyLoss: 0,
                      hospitalHoldExpiring: 0, staleReservations: 0, residentBedMismatch: 0 },

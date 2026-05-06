@@ -50,8 +50,8 @@ const EMPTY_SURVEY = {
 const COMPLAINT_CONFIG = { complaint_response_days: 28 };
 
 export default function ComplaintsTracker() {
-  const { canWrite, activeHomeObj } = useData();
-  const canEdit = canWrite('compliance');
+  const { canWrite, activeHomeObj, homeRole } = useData();
+  const canEdit = canWrite('compliance') && homeRole !== 'training_lead';
   const bankHolidays = useMemo(() => activeHomeObj?.config?.bank_holidays || [], [activeHomeObj]);
   const { confirm, ConfirmDialog } = useConfirm();
   const [complaints, setComplaints] = useState([]);

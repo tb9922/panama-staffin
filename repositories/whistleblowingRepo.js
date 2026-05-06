@@ -24,7 +24,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM whistleblowing_concerns
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY date_raised DESC NULLS LAST LIMIT $2 OFFSET $3`,
+     ORDER BY date_raised DESC NULLS LAST, id DESC LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
@@ -33,7 +33,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function sync(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
+  if (!arr || arr.length === 0) return;
   const incomingIds = arr.map(c => c.id);
 
   const COLS_PER_ROW = 22;
@@ -80,19 +80,16 @@ export async function sync(homeId, arr, client) {
          findings=EXCLUDED.findings,outcome=EXCLUDED.outcome,outcome_details=EXCLUDED.outcome_details,
          reporter_protected=EXCLUDED.reporter_protected,protection_details=EXCLUDED.protection_details,
          follow_up_date=EXCLUDED.follow_up_date,follow_up_completed=EXCLUDED.follow_up_completed,resolution_date=EXCLUDED.resolution_date,
-         lessons_learned=EXCLUDED.lessons_learned,reported_at=EXCLUDED.reported_at,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+         lessons_learned=EXCLUDED.lessons_learned,reported_at=EXCLUDED.reported_at,updated_at=EXCLUDED.updated_at,
+         version=whistleblowing_concerns.version + 1,deleted_at=NULL`,
       [homeId, ...values]
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(`UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
-  }
+  await conn.query(
+    `UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }
 
 // ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
@@ -128,7 +125,7 @@ export async function upsert(homeId, data) {
        findings=$13,outcome=$14,outcome_details=$15,
        reporter_protected=$16,protection_details=$17,
        follow_up_date=$18,follow_up_completed=$19,resolution_date=$20,
-       lessons_learned=$21,reported_at=$22,updated_at=$23,deleted_at=NULL
+       lessons_learned=$21,reported_at=$22,updated_at=$23,version=whistleblowing_concerns.version + 1,deleted_at=NULL
      RETURNING ${COLS}`,
     [
       id, homeId, data.date_raised || null, data.raised_by_role || null,

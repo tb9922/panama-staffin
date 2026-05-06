@@ -35,6 +35,12 @@ const ALLOWED_TABLES = new Set([
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
   'action_items', 'reflective_practice', 'agency_approval_attempts',
   'audit_tasks', 'outcome_metrics',
+  'sick_periods', 'complaint_surveys', 'mca_assessments', 'cqc_evidence',
+  'cqc_evidence_links', 'cqc_evidence_files', 'cqc_partner_feedback',
+  'cqc_observations', 'cqc_statement_narratives', 'training_file_attachments',
+  'record_file_attachments', 'ropa_activities', 'dpia_assessments',
+  'data_requests', 'data_breaches', 'dp_complaints', 'processors',
+  'consent_records',
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',
   'hr_flexible_working', 'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
@@ -48,6 +54,10 @@ const RETENTION_DATE_COLUMNS = Object.freeze({
   access_log: 'ts',
   audit_log: 'ts',
   outcome_metrics: 'recorded_at',
+  data_requests: 'received_at',
+  data_breaches: 'discovered_at',
+  dp_complaints: 'received_at',
+  consent_records: 'consent_date',
 });
 
 // Tables with soft-delete — only purge records where deleted_at IS NOT NULL
@@ -55,6 +65,12 @@ const SOFT_DELETE_TABLES = new Set([
   'staff', 'incidents', 'complaints', 'dols', 'risk_register',
   'whistleblowing_concerns', 'maintenance', 'action_items', 'reflective_practice',
   'agency_approval_attempts', 'audit_tasks', 'outcome_metrics',
+  'sick_periods', 'complaint_surveys', 'mca_assessments', 'cqc_evidence',
+  'cqc_evidence_links', 'cqc_evidence_files', 'cqc_partner_feedback',
+  'cqc_observations', 'cqc_statement_narratives', 'training_file_attachments',
+  'record_file_attachments', 'ropa_activities', 'dpia_assessments',
+  'data_requests', 'data_breaches', 'dp_complaints', 'processors',
+  'consent_records',
 ]);
 
 async function run() {

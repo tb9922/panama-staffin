@@ -42,7 +42,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
     `SELECT ${EVIDENCE_COLS}, ${FILE_COUNT_SQL}, COUNT(*) OVER() AS _total
        FROM cqc_evidence e
       WHERE home_id = $1 AND deleted_at IS NULL
-      ORDER BY added_at DESC NULLS LAST
+      ORDER BY added_at DESC NULLS LAST, id DESC
       LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
@@ -51,7 +51,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function sync(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
+  if (!arr || arr.length === 0) return;
   const incomingIds = arr.map((entry) => entry.id);
 
   const COLS_PER_ROW = 12;
@@ -98,29 +98,20 @@ export async function sync(homeId, arr, client) {
          review_due = EXCLUDED.review_due,
          added_by = EXCLUDED.added_by,
          added_at = EXCLUDED.added_at,
+         version = cqc_evidence.version + 1,
          deleted_at = NULL`,
       [homeId, ...values]
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE cqc_evidence
-          SET deleted_at = NOW()
-        WHERE home_id = $1
-          AND id != ALL($2::text[])
-          AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(
-      `UPDATE cqc_evidence
-          SET deleted_at = NOW()
-        WHERE home_id = $1
-          AND deleted_at IS NULL`,
-      [homeId]
-    );
-  }
+  await conn.query(
+    `UPDATE cqc_evidence
+        SET deleted_at = NOW()
+      WHERE home_id = $1
+        AND id != ALL($2::text[])
+        AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }
 
 export async function findById(id, homeId) {
@@ -153,6 +144,7 @@ export async function upsert(homeId, data) {
        review_due = $11,
        added_by = $12,
        added_at = $13,
+       version = cqc_evidence.version + 1,
        deleted_at = NULL
      RETURNING id`,
     [

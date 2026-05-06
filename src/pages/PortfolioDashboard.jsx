@@ -24,6 +24,7 @@ const RAG_RANK = {
 const METRIC_META = {
   staffing: { label: 'Staffing', route: '/day', actionLabel: 'Open rota' },
   training: { label: 'Training', route: '/training', actionLabel: 'Open matrix' },
+  care_certificate: { label: 'Care Cert', route: '/care-cert', actionLabel: 'Open care cert' },
   manager_actions: { label: 'Actions', route: '/actions', actionLabel: 'Open actions' },
   incidents: { label: 'Incidents', route: '/incidents', actionLabel: 'Open incidents' },
   complaints: { label: 'Complaints', route: '/complaints', actionLabel: 'Open complaints' },
@@ -144,6 +145,13 @@ function buildMetricCards(home) {
       detail: home.training?.baseline_configured === false
         ? 'Configure mandatory training'
         : `${formatNumber(home.training?.expired)} expired`,
+    },
+    {
+      key: 'care_certificate',
+      ...METRIC_META.care_certificate,
+      rag: normalizeRag(home.rag?.care_certificate),
+      value: `${formatNumber(home.care_certificate?.overdue)} overdue`,
+      detail: `${formatNumber(home.care_certificate?.missing)} missing / ${formatNumber(home.care_certificate?.in_progress)} in progress`,
     },
     {
       key: 'manager_actions',

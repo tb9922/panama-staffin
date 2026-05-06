@@ -170,6 +170,23 @@ async function loadAllForMatrix(repo, homeId) {
   return rows;
 }
 
+async function requireActiveStaff(req, res, staffId) {
+  const staff = await staffRepo.findById(req.home.id, staffId);
+  if (!staff || staff.active === false) {
+    res.status(404).json({ error: 'Active staff member not found for this home' });
+    return null;
+  }
+  return staff;
+}
+
+async function validateActiveStaffIds(req, res, staffIds = []) {
+  const uniqueIds = [...new Set((staffIds || []).filter(Boolean))];
+  for (const staffId of uniqueIds) {
+    if (!await requireActiveStaff(req, res, staffId)) return false;
+  }
+  return true;
+}
+
 // GET /api/training?home=X — one-shot load for TrainingMatrix
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -225,6 +242,7 @@ router.post('/supervisions', writeRateLimiter, requireAuth, requireHomeAccess, r
     const parsed = supervisionCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'supervisions')) return;
+    if (!await requireActiveStaff(req, res, parsed.data.staffId)) return;
     const record = { ...parsed.data, id: `sup-${randomUUID()}` };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
@@ -240,6 +258,7 @@ router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAccess
     const parsed = supervisionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'supervisions')) return;
+    if (!await requireActiveStaff(req, res, parsed.data.staffId)) return;
     const record = { ...parsed.data, id: idParsed.data };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -265,6 +284,7 @@ router.post('/appraisals', writeRateLimiter, requireAuth, requireHomeAccess, req
     const parsed = appraisalCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['training_needs', 'development_plan'], 'appraisals')) return;
+    if (!await requireActiveStaff(req, res, parsed.data.staffId)) return;
     const record = { ...parsed.data, id: `apr-${randomUUID()}` };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
@@ -280,6 +300,7 @@ router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     const parsed = appraisalUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['training_needs', 'development_plan'], 'appraisals')) return;
+    if (!await requireActiveStaff(req, res, parsed.data.staffId)) return;
     const record = { ...parsed.data, id: idParsed.data };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -305,6 +326,7 @@ router.post('/fire-drills', writeRateLimiter, requireAuth, requireHomeAccess, re
     const parsed = fireDrillCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'fire_drills')) return;
+    if (!await validateActiveStaffIds(req, res, parsed.data.staff_present)) return;
     const record = { ...parsed.data, id: `fd-${randomUUID()}` };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_create', req.home.slug, req.user.username, { id: record.id });
@@ -320,6 +342,7 @@ router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAccess,
     const parsed = fireDrillUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'fire_drills')) return;
+    if (!await validateActiveStaffIds(req, res, parsed.data.staff_present)) return;
     const record = { ...parsed.data, id: idParsed.data };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_update', req.home.slug, req.user.username, { id: idParsed.data });
@@ -446,6 +469,7 @@ router.put('/:staffId/:typeId', writeRateLimiter, requireAuth, requireHomeAccess
     if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
     const parsed = trainingRecordSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await requireActiveStaff(req, res, staffParsed.data)) return;
     const record = await trainingRepo.upsertRecord(req.home.id, staffParsed.data, typeParsed.data, parsed.data);
     await auditService.log('training_record_upsert', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
     res.json(record);

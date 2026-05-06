@@ -21,7 +21,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${SURVEY_COLS}, COUNT(*) OVER() AS _total FROM complaint_surveys
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY date DESC NULLS LAST
+     ORDER BY date DESC NULLS LAST, id DESC
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
@@ -69,7 +69,9 @@ export async function sync(homeId, arr, client) {
          key_feedback         = EXCLUDED.key_feedback,
          actions              = EXCLUDED.actions,
          conducted_by         = EXCLUDED.conducted_by,
-         reported_at          = EXCLUDED.reported_at`,
+         reported_at          = EXCLUDED.reported_at,
+         version              = complaint_surveys.version + 1,
+         deleted_at           = NULL`,
       [homeId, ...values]
     );
   }
@@ -109,7 +111,7 @@ export async function upsert(homeId, data) {
      ON CONFLICT (home_id, id) DO UPDATE SET
        type=$3,date=$4,title=$5,total_sent=$6,responses=$7,
        overall_satisfaction=$8,area_scores=$9,key_feedback=$10,
-       actions=$11,conducted_by=$12,reported_at=$13
+       actions=$11,conducted_by=$12,reported_at=$13,version=complaint_surveys.version + 1,deleted_at=NULL
      RETURNING ${SURVEY_COLS}`,
     [
       id, homeId, data.type || null, data.date || null, data.title || null,

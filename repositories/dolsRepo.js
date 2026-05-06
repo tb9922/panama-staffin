@@ -51,7 +51,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${DOLS_COLS}, COUNT(*) OVER() AS _total FROM dols
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY application_date DESC NULLS LAST
+     ORDER BY application_date DESC NULLS LAST, id DESC
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
@@ -60,7 +60,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function syncDols(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
+  if (!arr || arr.length === 0) return;
   const incomingIds = arr.map(d => d.id);
 
   const COLS_PER_ROW = 18;
@@ -102,19 +102,15 @@ export async function syncDols(homeId, arr, client) {
          authorisation_number=EXCLUDED.authorisation_number,authorising_authority=EXCLUDED.authorising_authority,
          restrictions=EXCLUDED.restrictions,reviewed_date=EXCLUDED.reviewed_date,
          review_status=EXCLUDED.review_status,next_review_date=EXCLUDED.next_review_date,
-         notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+         notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at,version=dols.version + 1,deleted_at=NULL`,
       [homeId, ...values]
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE dols SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(`UPDATE dols SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
-  }
+  await conn.query(
+    `UPDATE dols SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }
 
 // ── Individual CRUD for DoLS (Mode 2 endpoints) ───────────────────────────────
@@ -147,7 +143,7 @@ export async function upsertDols(homeId, data) {
        application_type=$7,application_date=$8,authorised=$9,
        authorisation_date=$10,expiry_date=$11,authorisation_number=$12,
        authorising_authority=$13,restrictions=$14,reviewed_date=$15,
-       review_status=$16,next_review_date=$17,notes=$18,updated_at=$19,deleted_at=NULL
+       review_status=$16,next_review_date=$17,notes=$18,updated_at=$19,version=dols.version + 1,deleted_at=NULL
      RETURNING ${DOLS_COLS}`,
     [
       id, homeId, data.resident_name || null, residentId,
@@ -200,7 +196,7 @@ export async function findMcaByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${MCA_COLS}, COUNT(*) OVER() AS _total FROM mca_assessments
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY assessment_date DESC NULLS LAST
+     ORDER BY assessment_date DESC NULLS LAST, id DESC
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
@@ -209,10 +205,10 @@ export async function findMcaByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function syncMca(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
+  if (!arr || arr.length === 0) return;
   const incomingIds = arr.map(m => m.id);
 
-  const COLS_PER_ROW = 10;
+  const COLS_PER_ROW = 11;
   const CHUNK = Math.floor(65000 / COLS_PER_ROW);
   for (let i = 0; i < arr.length; i += CHUNK) {
     const chunk = arr.slice(i, i + CHUNK);
@@ -222,10 +218,10 @@ export async function syncMca(homeId, arr, client) {
       const b = j * COLS_PER_ROW + 2;
       placeholders.push(
         `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
-        `$${b+7},$${b+8},$${b+9})`
+        `$${b+7},$${b+8},$${b+9},$${b+10})`
       );
       values.push(
-        m.id, m.resident_name || null, m.assessment_date || null,
+        m.id, m.resident_name || null, m.resident_id || null, m.assessment_date || null,
         m.assessor || null, m.decision_area || null,
         m.lacks_capacity ?? false, m.best_interest_decision || null,
         m.next_review_date || null, m.notes || null, m.updated_at || null,
@@ -233,27 +229,23 @@ export async function syncMca(homeId, arr, client) {
     });
     await conn.query(
       `INSERT INTO mca_assessments (
-         id, home_id, resident_name, assessment_date, assessor,
+         id, home_id, resident_name, resident_id, assessment_date, assessor,
          decision_area, lacks_capacity, best_interest_decision,
          next_review_date, notes, updated_at
        ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         resident_name=EXCLUDED.resident_name,assessment_date=EXCLUDED.assessment_date,assessor=EXCLUDED.assessor,
+         resident_name=EXCLUDED.resident_name,resident_id=EXCLUDED.resident_id,assessment_date=EXCLUDED.assessment_date,assessor=EXCLUDED.assessor,
          decision_area=EXCLUDED.decision_area,lacks_capacity=EXCLUDED.lacks_capacity,
          best_interest_decision=EXCLUDED.best_interest_decision,
-         next_review_date=EXCLUDED.next_review_date,notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+         next_review_date=EXCLUDED.next_review_date,notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at,version=mca_assessments.version + 1,deleted_at=NULL`,
       [homeId, ...values]
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE mca_assessments SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(`UPDATE mca_assessments SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
-  }
+  await conn.query(
+    `UPDATE mca_assessments SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }
 
 // ── Individual CRUD for MCA (Mode 2 endpoints) ────────────────────────────────
@@ -279,7 +271,7 @@ export async function upsertMca(homeId, data) {
      ON CONFLICT (home_id, id) DO UPDATE SET
        resident_name=$3,resident_id=$4,assessment_date=$5,assessor=$6,
        decision_area=$7,lacks_capacity=$8,best_interest_decision=$9,
-       next_review_date=$10,notes=$11,updated_at=$12,deleted_at=NULL
+       next_review_date=$10,notes=$11,updated_at=$12,version=mca_assessments.version + 1,deleted_at=NULL
      RETURNING ${MCA_COLS}`,
     [
       id, homeId, data.resident_name || null, residentId,

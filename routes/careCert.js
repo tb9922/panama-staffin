@@ -13,6 +13,11 @@ import { addDaysLocalISO } from '../lib/dateOnly.js';
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
 const dateSchema = nullableDateInput;
+const CARE_CERT_CONFIG_KEYS = [
+  'care_certificate_expected_days',
+  'care_certificate_probation_days',
+  'care_certificate_required_roles',
+];
 
 const careCertCreateSchema = z.object({
   staffId:    staffIdSchema,
@@ -47,6 +52,23 @@ const careCertUpdateSchema = z.object({
   standards:           z.record(z.string().regex(/^std-\d+$/), standardDataSchema).optional(),
 });
 
+function careCertConfig(config = {}) {
+  return Object.fromEntries(
+    CARE_CERT_CONFIG_KEYS
+      .filter((key) => Object.prototype.hasOwnProperty.call(config, key))
+      .map((key) => [key, config[key]])
+  );
+}
+
+async function requireActiveStaff(req, res, staffId) {
+  const staff = await staffRepo.findById(req.home.id, staffId);
+  if (!staff || staff.active === false) {
+    res.status(404).json({ error: 'Active staff member not found for this home' });
+    return null;
+  }
+  return staff;
+}
+
 // GET /api/care-cert?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -55,7 +77,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       staffRepo.findByHome(req.home.id),
     ]);
     const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
-    res.json({ careCert, staff, config: req.home.config });
+    res.json({ careCert, staff, config: careCertConfig(req.home.config) });
   } catch (err) { next(err); }
 });
 
@@ -65,6 +87,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const parsed = careCertCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const { staffId, start_date, supervisor } = parsed.data;
+    if (!await requireActiveStaff(req, res, staffId)) return;
     const record = {
       start_date,
       expected_completion: addDaysLocalISO(start_date, 84),

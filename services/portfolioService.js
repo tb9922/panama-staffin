@@ -267,6 +267,12 @@ const UNKNOWN_SIGNAL_FIXES = Object.freeze({
     fix: 'Configure role-required training and upload current certificates.',
     route: '/training',
   },
+  care_certificate: {
+    label: 'Care Certificate',
+    reason: 'Care Certificate evidence is not available for active care staff.',
+    fix: 'Start or update Care Certificate trackers for active carers.',
+    route: '/care-cert',
+  },
   incidents: {
     label: 'Incidents',
     reason: 'Incident trend rates cannot be calculated from the current resident/period baseline.',
@@ -472,6 +478,11 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
       expired: m.training?.expired || 0,
       expiring_30d: m.training?.expiringSoon || 0,
       not_started: m.training?.notStarted || 0,
+    },
+    care_certificate: {
+      in_progress: m.careCertificate?.inProgress || 0,
+      overdue: m.careCertificate?.overdue || 0,
+      missing: m.careCertificate?.missing || 0,
     },
     supervisions: {
       overdue: m.supervisions?.overdue || 0,

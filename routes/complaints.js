@@ -94,7 +94,13 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
         return safe;
       });
     }
-    res.json({ complaints, surveys, complaintCategories, _total: complaintsResult.total });
+    res.json({
+      complaints,
+      surveys,
+      complaintCategories,
+      _total: complaintsResult.total,
+      _totals: { complaints: complaintsResult.total, surveys: surveysResult.total },
+    });
   } catch (err) { next(err); }
 });
 
@@ -135,7 +141,14 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiv
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
     const changes = diffFields(existing, complaint, {
-      extraSensitive: ['description', 'resolution', 'investigation_notes'],
+      extraSensitive: [
+        'description',
+        'resolution',
+        'investigation_notes',
+        'root_cause',
+        'improvements',
+        'lessons_learned',
+      ],
     });
     await auditService.log('complaint_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(complaint);
@@ -185,7 +198,9 @@ router.put('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...
     if (survey === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, survey);
+    const changes = diffFields(existing, survey, {
+      extraSensitive: ['key_feedback', 'actions'],
+    });
     await auditService.log('survey_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(survey);
   } catch (err) { next(err); }

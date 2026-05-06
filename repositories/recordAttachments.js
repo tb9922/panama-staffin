@@ -9,9 +9,9 @@ const PARENT_TABLES = {
   handover_entry: { table: 'handover_entries', idExpr: 'id::text' },
   payroll_run: { table: 'payroll_runs', idExpr: 'id::text' },
   investigation_meeting: { table: 'hr_investigation_meetings', idExpr: 'id::text', softDelete: true },
-  supervision: { table: 'supervisions', idExpr: 'id' },
-  appraisal: { table: 'appraisals', idExpr: 'id' },
-  fire_drill: { table: 'fire_drills', idExpr: 'id' },
+  supervision: { table: 'supervisions', idExpr: 'id', softDelete: true },
+  appraisal: { table: 'appraisals', idExpr: 'id', softDelete: true },
+  fire_drill: { table: 'fire_drills', idExpr: 'id', softDelete: true },
   policy_review: { table: 'policy_reviews', idExpr: 'id', softDelete: true },
   risk: { table: 'risk_register', idExpr: 'id', softDelete: true },
   whistleblowing: { table: 'whistleblowing_concerns', idExpr: 'id', softDelete: true },
@@ -30,7 +30,7 @@ const PARENT_TABLES = {
   payroll_sick_period: { table: 'sick_periods', idExpr: 'id::text' },
   agency_provider: { table: 'agency_providers', idExpr: 'id::text' },
   agency_shift: { table: 'agency_shifts', idExpr: 'id::text' },
-  care_certificate: { table: 'care_certificates', idExpr: 'staff_id' },
+  care_certificate: { table: 'care_certificates', idExpr: 'staff_id', softDelete: true },
   staff_register: { table: 'staff', idExpr: 'id', softDelete: true },
 };
 

@@ -8,6 +8,7 @@ import { splitVersion } from '../lib/versionedPayload.js';
 import * as auditService from '../services/auditService.js';
 import * as cqcEvidenceLinksRepo from '../repositories/cqcEvidenceLinksRepo.js';
 import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCategories.js';
+import { pool } from '../db.js';
 
 const router = Router();
 
@@ -43,6 +44,38 @@ const SOURCE_MODULES = [
   'hr_tupe',
   'hr_renewal',
 ];
+const SOURCE_TABLES = {
+  incident: { table: 'incidents', idExpr: 'id::text', softDelete: true },
+  complaint: { table: 'complaints', idExpr: 'id::text', softDelete: true },
+  training_record: { table: 'training_records', idExpr: 'id::text', softDelete: true },
+  supervision: { table: 'supervisions', idExpr: 'id::text', softDelete: true },
+  appraisal: { table: 'appraisals', idExpr: 'id::text', softDelete: true },
+  fire_drill: { table: 'fire_drills', idExpr: 'id::text', softDelete: true },
+  ipc_audit: { table: 'ipc_audits', idExpr: 'id::text', softDelete: true },
+  maintenance: { table: 'maintenance', idExpr: 'id::text', softDelete: true },
+  risk: { table: 'risk_register', idExpr: 'id::text', softDelete: true },
+  policy_review: { table: 'policy_reviews', idExpr: 'id::text', softDelete: true },
+  whistleblowing: { table: 'whistleblowing_concerns', idExpr: 'id::text', softDelete: true },
+  dols: { table: 'dols', idExpr: 'id::text', softDelete: true },
+  mca_assessment: { table: 'mca_assessments', idExpr: 'id::text', softDelete: true },
+  cqc_evidence: { table: 'cqc_evidence', idExpr: 'id::text', softDelete: true },
+  cqc_partner_feedback: { table: 'cqc_partner_feedback', idExpr: 'id::text', softDelete: true },
+  cqc_observation: { table: 'cqc_observations', idExpr: 'id::text', softDelete: true },
+  handover: { table: 'handover_entries', idExpr: 'id::text' },
+  onboarding: { table: 'onboarding', idExpr: 'staff_id', softDelete: true },
+  care_certificate: { table: 'care_certificates', idExpr: 'staff_id', softDelete: true },
+  hr_disciplinary: { table: 'hr_disciplinary_cases', idExpr: 'id::text', softDelete: true },
+  hr_grievance: { table: 'hr_grievance_cases', idExpr: 'id::text', softDelete: true },
+  hr_performance: { table: 'hr_performance_cases', idExpr: 'id::text', softDelete: true },
+  hr_rtw_interview: { table: 'hr_rtw_interviews', idExpr: 'id::text', softDelete: true },
+  hr_oh_referral: { table: 'hr_oh_referrals', idExpr: 'id::text', softDelete: true },
+  hr_contract: { table: 'hr_contracts', idExpr: 'id::text', softDelete: true },
+  hr_family_leave: { table: 'hr_family_leave', idExpr: 'id::text', softDelete: true },
+  hr_flexible_working: { table: 'hr_flexible_working', idExpr: 'id::text', softDelete: true },
+  hr_edi: { table: 'hr_edi_records', idExpr: 'id::text', softDelete: true },
+  hr_tupe: { table: 'hr_tupe_transfers', idExpr: 'id::text', softDelete: true },
+  hr_renewal: { table: 'hr_rtw_dbs_renewals', idExpr: 'id::text', softDelete: true },
+};
 
 const idSchema = z.coerce.number().int().positive();
 const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/);
@@ -85,6 +118,33 @@ const updateLinkSchema = z.object({
 const confirmBulkSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),
 });
+
+async function sourceRecordExists(homeId, sourceModule, sourceId) {
+  const source = SOURCE_TABLES[sourceModule];
+  if (!source) return false;
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM ${source.table}
+      WHERE home_id = $1
+        AND ${source.idExpr} = $2
+        ${source.softDelete ? 'AND deleted_at IS NULL' : ''}
+      LIMIT 1`,
+    [homeId, String(sourceId)]
+  );
+  return rows.length > 0;
+}
+
+async function validateLinkSources(req, res, links) {
+  for (const link of links) {
+    if (!await sourceRecordExists(req.home.id, link.source_module, link.source_id)) {
+      res.status(400).json({
+        error: `Source record does not exist for this home: ${link.source_module}/${link.source_id}`,
+      });
+      return false;
+    }
+  }
+  return true;
+}
 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -131,6 +191,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = createLinkSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateLinkSources(req, res, [parsed.data])) return;
 
     const saved = await cqcEvidenceLinksRepo.createLink(req.home.id, {
       ...parsed.data,
@@ -156,6 +217,7 @@ router.post('/bulk', writeRateLimiter, requireAuth, requireHomeAccess, requireMo
   try {
     const parsed = bulkCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!await validateLinkSources(req, res, parsed.data.links)) return;
 
     const saved = await cqcEvidenceLinksRepo.createBulkLinks(
       req.home.id,

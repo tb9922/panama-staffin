@@ -77,6 +77,32 @@ async function apiFetch(url, options = {}) {
   return parseBody();
 }
 
+async function fetchAllPaged(buildUrl, rowKeys, { limit = 500 } = {}) {
+  let offset = 0;
+  let total = Infinity;
+  let combined = null;
+  while (offset < total) {
+    const page = await apiFetch(buildUrl({ limit, offset }), { headers: authHeaders() });
+    if (!combined) {
+      combined = { ...page };
+      for (const key of rowKeys) combined[key] = [];
+    }
+    let pageCount = 0;
+    for (const key of rowKeys) {
+      const rows = Array.isArray(page?.[key]) ? page[key] : [];
+      combined[key].push(...rows);
+      pageCount = Math.max(pageCount, rows.length);
+    }
+    const totals = page?._totals
+      ? Object.values(page._totals).map(Number).filter(Number.isFinite)
+      : [Number(page?._total ?? page?.total)].filter(Number.isFinite);
+    total = totals.length ? Math.max(...totals) : offset + pageCount;
+    if (pageCount === 0 || offset + pageCount >= total) break;
+    offset += pageCount;
+  }
+  return combined || {};
+}
+
 async function fetchDownloadResponse(url) {
   const res = await fetch(url, {
     credentials: 'same-origin',
@@ -435,6 +461,12 @@ export async function acknowledgeHandoverEntry(homeSlug, id) {
 // ── Incidents ────────────────────────────────────────────────────────────────
 
 export async function getIncidents(homeSlug, filters = {}) {
+  if (!filters.limit && !filters.offset && filters.all !== false) {
+    return fetchAllPaged(
+      ({ limit, offset }) => `${API_BASE}/incidents?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+      ['incidents']
+    );
+  }
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
@@ -479,8 +511,17 @@ export async function addIncidentAddendum(homeSlug, incidentId, content) {
 
 // ── Complaints ───────────────────────────────────────────────────────────────
 
-export async function getComplaints(homeSlug) {
-  return apiFetch(`${API_BASE}/complaints?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getComplaints(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/complaints?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/complaints?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['complaints', 'surveys']
+  );
 }
 
 export async function createComplaint(homeSlug, data) {
@@ -521,8 +562,17 @@ export async function deleteComplaintSurvey(homeSlug, id) {
 
 // ── Maintenance ──────────────────────────────────────────────────────────────
 
-export async function getMaintenance(homeSlug) {
-  return apiFetch(`${API_BASE}/maintenance?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getMaintenance(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/maintenance?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/maintenance?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['checks']
+  );
 }
 
 export async function createMaintenanceCheck(homeSlug, data) {
@@ -545,8 +595,17 @@ export async function deleteMaintenanceCheck(homeSlug, id) {
 
 // ── IPC Audits ───────────────────────────────────────────────────────────────
 
-export async function getIpcAudits(homeSlug) {
-  return apiFetch(`${API_BASE}/ipc?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getIpcAudits(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/ipc?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/ipc?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['audits']
+  );
 }
 
 export async function createIpcAudit(homeSlug, data) {
@@ -569,8 +628,17 @@ export async function deleteIpcAudit(homeSlug, id) {
 
 // ── Risk Register ─────────────────────────────────────────────────────────────
 
-export async function getRisks(homeSlug) {
-  return apiFetch(`${API_BASE}/risk-register?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getRisks(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/risk-register?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/risk-register?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['risks']
+  );
 }
 
 export async function createRisk(homeSlug, data) {
@@ -737,8 +805,17 @@ export async function deleteReflectivePractice(homeSlug, id) {
 }
 
 // Policies
-export async function getPolicies(homeSlug) {
-  return apiFetch(`${API_BASE}/policies?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getPolicies(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/policies?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/policies?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['policies']
+  );
 }
 
 export async function createPolicy(homeSlug, data) {
@@ -761,8 +838,17 @@ export async function deletePolicy(homeSlug, id) {
 
 // ── Whistleblowing ───────────────────────────────────────────────────────────
 
-export async function getWhistleblowingConcerns(homeSlug) {
-  return apiFetch(`${API_BASE}/whistleblowing?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getWhistleblowingConcerns(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/whistleblowing?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/whistleblowing?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['concerns']
+  );
 }
 
 export async function createWhistleblowingConcern(homeSlug, data) {
@@ -785,8 +871,17 @@ export async function deleteWhistleblowingConcern(homeSlug, id) {
 
 // ── DoLS & MCA ───────────────────────────────────────────────────────────────
 
-export async function getDols(homeSlug) {
-  return apiFetch(`${API_BASE}/dols?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getDols(homeSlug, filters = {}) {
+  if (filters.limit || filters.offset || filters.all === false) {
+    const params = new URLSearchParams({ home: homeSlug });
+    if (filters.limit) params.set('limit', filters.limit);
+    if (filters.offset) params.set('offset', filters.offset);
+    return apiFetch(`${API_BASE}/dols?${params}`, { headers: authHeaders() });
+  }
+  return fetchAllPaged(
+    ({ limit, offset }) => `${API_BASE}/dols?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+    ['dols', 'mcaAssessments']
+  );
 }
 
 export async function createDols(homeSlug, data) {
@@ -828,10 +923,32 @@ export async function deleteMcaAssessment(homeSlug, id) {
 // ── CQC Evidence ─────────────────────────────────────────────────────────────
 
 export async function getCqcEvidence(homeSlug, filters = {}) {
+  if (!filters.limit && !filters.offset && filters.all !== false) {
+    return fetchAllPaged(
+      ({ limit, offset }) => `${API_BASE}/cqc-evidence?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+      ['evidence']
+    );
+  }
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/cqc-evidence?${params}`, { headers: authHeaders() });
+}
+
+export async function getCqcEvidenceLinks(homeSlug, filters = {}) {
+  if (!filters.limit && !filters.offset && filters.all !== false) {
+    return fetchAllPaged(
+      ({ limit, offset }) => `${API_BASE}/cqc-evidence-links?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
+      ['rows']
+    );
+  }
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  if (filters.statement) params.set('statement', filters.statement);
+  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) params.set('dateTo', filters.dateTo);
+  return apiFetch(`${API_BASE}/cqc-evidence-links?${params}`, { headers: authHeaders() });
 }
 
 export async function createCqcEvidence(homeSlug, data) {
@@ -2189,6 +2306,13 @@ export function logReportDownload(reportType, dateRange) {
 // ── ROPA (Record of Processing Activities) ──────────────────────────────────
 
 export async function getRopaActivities(homeSlug, filters = {}) {
+  if (!filters.limit && !filters.offset && filters.all !== false) {
+    const statusPart = filters.status ? `&status=${encodeURIComponent(filters.status)}` : '';
+    return fetchAllPaged(
+      ({ limit, offset }) => `${API_BASE}/ropa?home=${h(homeSlug)}${statusPart}&limit=${limit}&offset=${offset}`,
+      ['rows']
+    );
+  }
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
@@ -2217,6 +2341,13 @@ export async function deleteRopaActivity(homeSlug, id) {
 // ── DPIA (Data Protection Impact Assessments) ───────────────────────────────
 
 export async function getDpiaAssessments(homeSlug, filters = {}) {
+  if (!filters.limit && !filters.offset && filters.all !== false) {
+    const statusPart = filters.status ? `&status=${encodeURIComponent(filters.status)}` : '';
+    return fetchAllPaged(
+      ({ limit, offset }) => `${API_BASE}/dpia?home=${h(homeSlug)}${statusPart}&limit=${limit}&offset=${offset}`,
+      ['rows']
+    );
+  }
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);

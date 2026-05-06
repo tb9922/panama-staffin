@@ -43,8 +43,8 @@ function focusField(id) {
 }
 
 export default function DolsTracker() {
-  const { canWrite } = useData();
-  const canEdit = canWrite('compliance');
+  const { canWrite, homeRole } = useData();
+  const canEdit = canWrite('compliance') && homeRole !== 'training_lead';
   const { confirm, ConfirmDialog } = useConfirm();
   const [dols, setDols] = useState([]);
   const [mcaAssessments, setMcaAssessments] = useState([]);

@@ -19,7 +19,7 @@ import {
   getCqcEvidenceFiles, uploadCqcEvidenceFile, deleteCqcEvidenceFile, downloadCqcEvidenceFile,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
-  getCqcNarratives, getCqcReadiness, upsertCqcNarrative,
+  getCqcNarratives, getCqcReadiness, upsertCqcNarrative, getCqcEvidenceLinks,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -149,6 +149,7 @@ export default function CQCEvidence() {
   const [moduleData, setModuleData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [partialLoadErrors, setPartialLoadErrors] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -160,21 +161,38 @@ export default function CQCEvidence() {
     fromDate.setFullYear(fromDate.getFullYear() - 1);
     const from = todayLocalISO(fromDate);
     const to = addDaysLocalISO(todayLocalISO(now), 7);
+    const capture = (label, promise, fallback) => promise
+      .then((data) => ({ label, data, error: null }))
+      .catch((e) => ({ label, data: fallback, error: e.message || `Failed to load ${label}` }));
 
     Promise.all([
       getSchedulingData(homeSlug, { from, to }),
-      getTrainingData(homeSlug).catch(e => { console.warn('Failed to load training data:', e.message); return {}; }),
-      getIncidents(homeSlug).catch(e => { console.warn('Failed to load incidents:', e.message); return { incidents: [] }; }),
-      getComplaints(homeSlug).catch(e => { console.warn('Failed to load complaints:', e.message); return { complaints: [], surveys: [] }; }),
-      getMaintenance(homeSlug).catch(e => { console.warn('Failed to load maintenance:', e.message); return { checks: [] }; }),
-      getIpcAudits(homeSlug).catch(e => { console.warn('Failed to load IPC audits:', e.message); return { audits: [] }; }),
-      getRisks(homeSlug).catch(e => { console.warn('Failed to load risks:', e.message); return { risks: [] }; }),
-      getPolicies(homeSlug).catch(e => { console.warn('Failed to load policies:', e.message); return { policies: [] }; }),
-      getWhistleblowingConcerns(homeSlug).catch(e => { console.warn('Failed to load whistleblowing:', e.message); return { concerns: [] }; }),
-      getDols(homeSlug).catch(e => { console.warn('Failed to load DoLS:', e.message); return { dols: [], mcaAssessments: [] }; }),
-      getCareCertData(homeSlug).catch(e => { console.warn('Failed to load care cert:', e.message); return { careCert: {} }; }),
-    ]).then(([sched, train, inc, comp, maint, ipc, risks, pol, wb, dols, cc]) => {
+      capture('training', getTrainingData(homeSlug), {}),
+      capture('incidents', getIncidents(homeSlug), { incidents: [] }),
+      capture('complaints', getComplaints(homeSlug), { complaints: [], surveys: [] }),
+      capture('maintenance', getMaintenance(homeSlug), { checks: [] }),
+      capture('IPC audits', getIpcAudits(homeSlug), { audits: [] }),
+      capture('risk register', getRisks(homeSlug), { risks: [] }),
+      capture('policies', getPolicies(homeSlug), { policies: [] }),
+      capture('whistleblowing', getWhistleblowingConcerns(homeSlug), { concerns: [] }),
+      capture('DoLS/MCA', getDols(homeSlug), { dols: [], mcaAssessments: [] }),
+      capture('Care Certificate', getCareCertData(homeSlug), { careCert: {} }),
+    ]).then(([sched, trainResult, incResult, compResult, maintResult, ipcResult, risksResult, polResult, wbResult, dolsResult, ccResult]) => {
       if (cancelled) return;
+      const partials = [trainResult, incResult, compResult, maintResult, ipcResult, risksResult, polResult, wbResult, dolsResult, ccResult]
+        .filter((result) => result.error)
+        .map((result) => ({ label: result.label, message: result.error }));
+      setPartialLoadErrors(partials);
+      const train = trainResult.data;
+      const inc = incResult.data;
+      const comp = compResult.data;
+      const maint = maintResult.data;
+      const ipc = ipcResult.data;
+      const risks = risksResult.data;
+      const pol = polResult.data;
+      const wb = wbResult.data;
+      const dols = dolsResult.data;
+      const cc = ccResult.data;
       setModuleData({
         config: sched.config,
         staff: sched.staff,
@@ -196,7 +214,7 @@ export default function CQCEvidence() {
         mca_assessments: dols.mcaAssessments || [],
         care_certificate: cc.careCert || {},
       });
-    }).catch(e => { if (!cancelled) setError(e.message || 'Failed to load CQC data'); })
+    }).catch(e => { if (!cancelled) { setPartialLoadErrors([]); setError(e.message || 'Failed to load CQC data'); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [homeSlug, refreshKey]);
@@ -214,16 +232,17 @@ export default function CQCEvidence() {
     );
   }
 
-  return <CQCEvidenceInner data={moduleData} />;
+  return <CQCEvidenceInner data={moduleData} partialLoadErrors={partialLoadErrors} />;
 }
 
-function CQCEvidenceInner({ data }) {
+function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const isMounted = useRef(true);
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
+  const [evidenceLinks, setEvidenceLinks] = useState([]);
   const [narratives, setNarratives] = useState([]);
   const [narrativeDrafts, setNarrativeDrafts] = useState({});
   const [evidenceLoading, setEvidenceLoading] = useState(true);
@@ -245,6 +264,7 @@ function CQCEvidenceInner({ data }) {
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
+  const hasPartialLoadErrors = partialLoadErrors.length > 0;
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState([]);
@@ -278,6 +298,18 @@ function CQCEvidenceInner({ data }) {
   }, []);
 
   useEffect(() => { loadEvidence(); }, [loadEvidence]);
+
+  const loadEvidenceLinks = useCallback(async () => {
+    try {
+      const home = getCurrentHome();
+      const result = await getCqcEvidenceLinks(home);
+      if (isMounted.current) setEvidenceLinks(result.rows || []);
+    } catch (err) {
+      if (isMounted.current) console.error('Failed to load CQC evidence links:', err);
+    }
+  }, []);
+
+  useEffect(() => { loadEvidenceLinks(); }, [loadEvidenceLinks]);
 
   const loadNarratives = useCallback(async () => {
     try {
@@ -319,7 +351,7 @@ function CQCEvidenceInner({ data }) {
     const controller = new AbortController();
     loadReadiness(controller.signal);
     return () => controller.abort();
-  }, [loadReadiness, evidence, narratives]);
+  }, [loadReadiness, evidence, evidenceLinks, narratives]);
 
   const loadSnapshots = useCallback(async () => {
     const home = getCurrentHome();
@@ -340,6 +372,10 @@ function CQCEvidenceInner({ data }) {
   async function handleCreateSnapshot() {
     const home = getCurrentHome();
     if (!home || generating) return;
+    if (hasPartialLoadErrors) {
+      setSnapshotError('Snapshot blocked because some CQC source modules failed to load. Refresh before saving an inspection record.');
+      return;
+    }
     setGenerating(true);
     setSnapshotError(null);
     setSnapshotNotice(null);
@@ -393,9 +429,10 @@ function CQCEvidenceInner({ data }) {
     return {
       ...data,
       cqc_evidence: evidence,
+      cqc_evidence_links: evidenceLinks,
       cqc_statement_narratives: narratives,
     };
-  }, [data, evidence, narratives]);
+  }, [data, evidence, evidenceLinks, narratives]);
 
   const score = useMemo(() => {
     if (!dataWithEvidence?.config) return null;
@@ -586,6 +623,10 @@ function CQCEvidenceInner({ data }) {
   }
 
   async function handleGeneratePDF() {
+    if (hasPartialLoadErrors) {
+      setPdfError('Evidence pack blocked because some CQC source modules failed to load. Refresh before export.');
+      return;
+    }
     setGenerating(true);
     setPdfError(null);
     try {
@@ -601,6 +642,10 @@ function CQCEvidenceInner({ data }) {
   }
 
   function handleExportExcel() {
+    if (hasPartialLoadErrors) {
+      setPdfError('Excel export blocked because some CQC source modules failed to load. Refresh before export.');
+      return;
+    }
     const rows = [];
     for (const qs of QUALITY_STATEMENTS) {
       const ev = evidenceByStatement[qs.id];
@@ -631,17 +676,22 @@ function CQCEvidenceInner({ data }) {
           <p className={PAGE.subtitle}>Single Assessment Framework — staffing compliance scorecard and evidence pack</p>
         </div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
-          <button onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
-          {canEdit && <button onClick={handleCreateSnapshot} disabled={generating} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>
+          <button onClick={handleExportExcel} disabled={hasPartialLoadErrors} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          {canEdit && <button onClick={handleCreateSnapshot} disabled={generating || hasPartialLoadErrors} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>
             Save Snapshot
           </button>}
-          <button onClick={handleGeneratePDF} disabled={generating} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`}>
+          <button onClick={handleGeneratePDF} disabled={generating || hasPartialLoadErrors} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`}>
             {generating ? 'Generating...' : 'Generate Evidence Pack'}
           </button>
         </div>
       </div>
 
       {pdfError && <InlineNotice variant="error" className="mb-3" role="alert">{pdfError}</InlineNotice>}
+      {hasPartialLoadErrors && (
+        <InlineNotice variant="warning" className="mb-3" role="alert">
+          CQC source data is incomplete: {partialLoadErrors.map((item) => item.label).join(', ')} failed to load. Refresh before saving snapshots or exporting packs.
+        </InlineNotice>
+      )}
       {snapshotNotice && <InlineNotice variant="warning" className="mb-3">{snapshotNotice}</InlineNotice>}
       {snapshotError && <InlineNotice variant="error" className="mb-3" role="alert">{snapshotError}</InlineNotice>}
       {narrativeNotice && <InlineNotice variant="success" className="mb-3">{narrativeNotice}</InlineNotice>}
@@ -1176,6 +1226,7 @@ function CQCEvidenceInner({ data }) {
                   viewingSnapshot?.result?.evidencePackMeta?.date_range_days || dateRangeDays,
                   viewingSnapshot
                 );
+                logReportDownload('cqc-evidence', `snapshot ${viewingSnapshot?.id || ''}`.trim());
               } catch (e) { setSnapshotError(e.message); }
               finally { setGenerating(false); }
             }} disabled={generating || !snapshotPdfAvailable}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>

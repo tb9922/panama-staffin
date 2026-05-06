@@ -58,9 +58,11 @@ describe('AuditCalendar', () => {
   it('shows the result count and requests subsequent audit-task pages', async () => {
     const user = userEvent.setup();
     const pageOne = Array.from({ length: 100 }, (_, index) => makeTask(index + 1));
-    const pageTwo = [makeTask(101)];
+    const allRows = Array.from({ length: 125 }, (_, index) => makeTask(index + 1));
+    const pageTwo = allRows.slice(100);
     api.getAuditTasks
       .mockResolvedValueOnce({ tasks: pageOne, _total: 125 })
+      .mockResolvedValueOnce({ tasks: allRows, _total: 125 })
       .mockResolvedValueOnce({ tasks: pageTwo, _total: 125 });
 
     renderWithProviders(<AuditCalendar />);
@@ -76,11 +78,11 @@ describe('AuditCalendar', () => {
 
     await screen.findByText('Audit task 101');
     await waitFor(() => {
-      expect(api.getAuditTasks).toHaveBeenLastCalledWith('test-home', expect.objectContaining({
+      expect(api.getAuditTasks).toHaveBeenCalledWith('test-home', expect.objectContaining({
         limit: 100,
         offset: 100,
       }));
     });
-    expect(screen.getByText('Showing 101-101 of 125 tasks')).toBeInTheDocument();
+    expect(screen.getByText('Showing 101-125 of 125 tasks')).toBeInTheDocument();
   });
 });

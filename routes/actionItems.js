@@ -100,7 +100,7 @@ function hasAccountableOwner(data) {
 }
 
 function requiresAccountableOwner(data) {
-  return ['high', 'critical'].includes(data.priority) && !hasAccountableOwner(data);
+  return !hasAccountableOwner(data);
 }
 
 function hasRequiredEvidence(existing, evidenceNotes) {
@@ -149,7 +149,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       return res.status(400).json({ error: 'Complete or verify actions using the workflow buttons' });
     }
     if (requiresAccountableOwner(parsed.data)) {
-      return res.status(400).json({ error: 'High and critical actions need an owner user, owner name, or owner role' });
+      return res.status(400).json({ error: 'Open actions need an owner user, owner name, or owner role' });
     }
 
     const item = await actionItemRepo.create(req.home.id, {
@@ -186,7 +186,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const merged = { ...existing, ...updates };
     if (requiresAccountableOwner(merged)) {
-      return res.status(400).json({ error: 'High and critical actions need an owner user, owner name, or owner role' });
+      return res.status(400).json({ error: 'Open actions need an owner user, owner name, or owner role' });
     }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
 

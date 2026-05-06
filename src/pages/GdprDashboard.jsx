@@ -71,6 +71,7 @@ export default function GdprDashboard() {
   // Modal state
   const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'processor' | 'complaint'
   const [form, setForm] = useState({});
+  const [modalError, setModalError] = useState(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -101,7 +102,7 @@ export default function GdprDashboard() {
         getConsentRecords(home),
         getGdprProcessors(home).catch(() => ({ rows: [] })),
         getDPComplaints(home),
-        getAccessLog(200).catch(() => []),  // admin-only — graceful fallback for non-admin
+        getAccessLog(500).catch(() => []),  // admin-only — graceful fallback for non-admin
         getRopaActivities(home).catch(() => ({ rows: [] })),
         getDpiaAssessments(home).catch(() => ({ rows: [] })),
         scanRetention(home).catch(() => []),  // auto-scan on load for accurate live score
@@ -170,16 +171,22 @@ export default function GdprDashboard() {
     } catch (e) { setError(e.message); }
   }
 
-  function closeModal() { setShowModal(null); setForm({}); }
+  function closeModal() { setShowModal(null); setForm({}); setModalError(null); }
+
+  function setModalValidation(message, fieldId) {
+    setModalError(message);
+    if (fieldId) focusField(fieldId);
+  }
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   async function handleCreateRequest() {
     if (saving) return;
-    if (!form.request_type) { setError('Request type is required.'); focusField('gdpr-request-type'); return; }
-    if (!form.subject_type) { setError('Subject type is required.'); focusField('gdpr-request-subject-type'); return; }
-    if (!form.subject_id) { setError('Please select a subject.'); focusField(form.subject_type === 'resident' ? 'gdpr-request-resident' : 'gdpr-request-staff'); return; }
-    if (!form.date_received) { setError('Date received is required.'); focusField('gdpr-request-date'); return; }
+    setModalError(null);
+    if (!form.request_type) { setModalValidation('Request type is required.', 'gdpr-request-type'); return; }
+    if (!form.subject_type) { setModalValidation('Subject type is required.', 'gdpr-request-subject-type'); return; }
+    if (!form.subject_id) { setModalValidation('Please select a subject.', form.subject_type === 'resident' ? 'gdpr-request-resident' : 'gdpr-request-staff'); return; }
+    if (!form.date_received) { setModalValidation('Date received is required.', 'gdpr-request-date'); return; }
     setSaving(true);
     try {
       const data = {
@@ -191,13 +198,14 @@ export default function GdprDashboard() {
       setForm({});
       showNotice('Data request created.');
       load();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setModalError(e.message); } finally { setSaving(false); }
   }
 
   async function handleCreateBreach() {
     if (saving) return;
-    if (!form.title) { setError('Breach title is required.'); focusField('gdpr-breach-title'); return; }
-    if (!form.discovered_date) { setError('Discovered date is required.'); focusField('gdpr-breach-date'); return; }
+    setModalError(null);
+    if (!form.title) { setModalValidation('Breach title is required.', 'gdpr-breach-title'); return; }
+    if (!form.discovered_date) { setModalValidation('Discovered date is required.', 'gdpr-breach-date'); return; }
     setSaving(true);
     try {
       const data = { ...form };
@@ -214,15 +222,16 @@ export default function GdprDashboard() {
       setForm({});
       showNotice('Data breach recorded.');
       load();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setModalError(e.message); } finally { setSaving(false); }
   }
 
   async function handleCreateConsent() {
     if (saving) return;
-    if (!form.subject_type) { setError('Subject type is required.'); focusField('gdpr-consent-subject-type'); return; }
-    if (!form.subject_id) { setError('Subject ID is required.'); focusField('gdpr-consent-subject-id'); return; }
-    if (!form.purpose) { setError('Purpose is required.'); focusField('gdpr-consent-purpose'); return; }
-    if (!form.legal_basis) { setError('Legal basis is required.'); focusField('gdpr-consent-legal-basis'); return; }
+    setModalError(null);
+    if (!form.subject_type) { setModalValidation('Subject type is required.', 'gdpr-consent-subject-type'); return; }
+    if (!form.subject_id) { setModalValidation('Subject ID is required.', 'gdpr-consent-subject-id'); return; }
+    if (!form.purpose) { setModalValidation('Purpose is required.', 'gdpr-consent-purpose'); return; }
+    if (!form.legal_basis) { setModalValidation('Legal basis is required.', 'gdpr-consent-legal-basis'); return; }
     setSaving(true);
     try {
       await createConsentRecord(home, form);
@@ -230,16 +239,17 @@ export default function GdprDashboard() {
       setForm({});
       showNotice('Consent record created.');
       load();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setModalError(e.message); } finally { setSaving(false); }
   }
 
   async function handleSaveProcessor() {
     if (saving) return;
-    if (!form.provider_name?.trim()) { setError('Provider name is required.'); focusField('gdpr-processor-name'); return; }
-    if (!form.provider_role) { setError('Provider role is required.'); focusField('gdpr-processor-role'); return; }
-    if (!form.categories_of_data?.trim()) { setError('Categories of data are required.'); focusField('gdpr-processor-data'); return; }
-    if (!form.categories_of_subjects?.trim()) { setError('Categories of subjects are required.'); focusField('gdpr-processor-subjects'); return; }
-    if (form.dpa_status === 'signed' && !form.signed_date) { setError('Signed date is required when DPA status is signed.'); focusField('gdpr-processor-signed'); return; }
+    setModalError(null);
+    if (!form.provider_name?.trim()) { setModalValidation('Provider name is required.', 'gdpr-processor-name'); return; }
+    if (!form.provider_role) { setModalValidation('Provider role is required.', 'gdpr-processor-role'); return; }
+    if (!form.categories_of_data?.trim()) { setModalValidation('Categories of data are required.', 'gdpr-processor-data'); return; }
+    if (!form.categories_of_subjects?.trim()) { setModalValidation('Categories of subjects are required.', 'gdpr-processor-subjects'); return; }
+    if (form.dpa_status === 'signed' && !form.signed_date) { setModalValidation('Signed date is required when DPA status is signed.', 'gdpr-processor-signed'); return; }
     setSaving(true);
     try {
       const payload = {
@@ -265,19 +275,19 @@ export default function GdprDashboard() {
       }
       closeModal();
       load();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setModalError(e.message); } finally { setSaving(false); }
   }
 
   async function handleCreateComplaint() {
     if (saving) return;
-    if (!form.date_received) { setError('Date received is required.'); focusField('gdpr-complaint-date'); return; }
-    if (!form.category) { setError('Complaint category is required.'); focusField('gdpr-complaint-category'); return; }
+    setModalError(null);
+    if (!form.date_received) { setModalValidation('Date received is required.', 'gdpr-complaint-date'); return; }
+    if (!form.category) { setModalValidation('Complaint category is required.', 'gdpr-complaint-category'); return; }
     if (form.subject_type && !form.subject_id) {
-      setError('Please select the linked subject.');
-      focusField(form.subject_type === 'resident' ? 'gdpr-complaint-resident' : 'gdpr-complaint-staff');
+      setModalValidation('Please select the linked subject.', form.subject_type === 'resident' ? 'gdpr-complaint-resident' : 'gdpr-complaint-staff');
       return;
     }
-    if (!form.description) { setError('Complaint description is required.'); focusField('gdpr-complaint-description'); return; }
+    if (!form.description) { setModalValidation('Complaint description is required.', 'gdpr-complaint-description'); return; }
     setSaving(true);
     try {
       await createDPComplaint(home, form);
@@ -285,7 +295,7 @@ export default function GdprDashboard() {
       setForm({});
       showNotice('Data protection complaint logged.');
       load();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setModalError(e.message); } finally { setSaving(false); }
   }
 
   async function handleAssessBreach(id) {
@@ -299,6 +309,7 @@ export default function GdprDashboard() {
   }
 
   function openDecisionModal(breach) {
+    setModalError(null);
     setDecisionBreach(breach);
     setDecisionForm({
       manual_decision: breach.manual_decision ?? breach.recommended_ico_notification ?? false,
@@ -308,7 +319,8 @@ export default function GdprDashboard() {
 
   async function handleSaveDecision() {
     if (saving || !decisionBreach) return;
-    if (!decisionForm.decision_rationale?.trim()) { setError('Decision rationale is required'); return; }
+    setModalError(null);
+    if (!decisionForm.decision_rationale?.trim()) { setModalValidation('Decision rationale is required'); return; }
     setSaving(true);
     try {
       const today = todayLocalISO();
@@ -321,9 +333,10 @@ export default function GdprDashboard() {
         _version: decisionBreach.version,
       });
       setDecisionBreach(null);
+      setModalError(null);
       showNotice('ICO decision recorded.');
       load();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setModalError(e.message); } finally { setSaving(false); }
   }
 
   async function handleGatherData(id) {
@@ -469,8 +482,9 @@ export default function GdprDashboard() {
 
       {/* ICO Decision Record Modal */}
       {decisionBreach && (
-        <Modal isOpen={true} onClose={() => setDecisionBreach(null)} title="ICO Notification Decision" size="md">
+        <Modal isOpen={true} onClose={() => { setDecisionBreach(null); setModalError(null); }} title="ICO Notification Decision" size="md">
           <div className="space-y-4">
+            {renderModalError()}
             <div className="p-3 rounded bg-gray-50 text-sm">
               <div className="font-medium text-gray-700">{decisionBreach.title}</div>
               <div className="text-xs text-gray-500 mt-1">
@@ -501,7 +515,7 @@ export default function GdprDashboard() {
             </div>
           </div>
           <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setDecisionBreach(null)}>Cancel</button>
+            <button className={BTN.secondary} onClick={() => { setDecisionBreach(null); setModalError(null); }}>Cancel</button>
             <button className={BTN.primary} onClick={handleSaveDecision} disabled={saving}>
               {saving ? 'Saving...' : 'Record Decision'}
             </button>
@@ -1059,6 +1073,13 @@ export default function GdprDashboard() {
     return (
       <div>
         <h2 className="text-lg font-semibold mb-4">Access Log</h2>
+        {accessLogData.length >= 500 && (
+          <InlineNotice
+            type="warning"
+            message="Showing the latest 500 access-log entries. Use the audit export for a complete evidence trail."
+            className="mb-4"
+          />
+        )}
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
@@ -1094,10 +1115,15 @@ export default function GdprDashboard() {
 
   // ── Modals ─────────────────────────────────────────────────────────────
 
+  function renderModalError() {
+    return modalError ? <InlineNotice type="error" message={modalError} /> : null;
+  }
+
   function renderRequestModal() {
     return (
       <Modal isOpen={true} onClose={closeModal} title="New Data Request" size="lg">
         <div className="space-y-4">
+          {renderModalError()}
           <div>
             <label className={INPUT.label}>Request Type</label>
             <select id="gdpr-request-type" className={INPUT.select} value={form.request_type || ''} onChange={e => setForm({ ...form, request_type: e.target.value })}>
@@ -1152,6 +1178,7 @@ export default function GdprDashboard() {
     return (
       <Modal isOpen={true} onClose={closeModal} title="Report Data Breach" size="lg">
         <div className="space-y-4">
+          {renderModalError()}
           <div>
             <label className={INPUT.label}>Title</label>
             <input id="gdpr-breach-title" className={INPUT.base} value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief description of the breach" />
@@ -1209,6 +1236,7 @@ export default function GdprDashboard() {
     return (
       <Modal isOpen={true} onClose={closeModal} title="Record Consent" size="lg">
         <div className="space-y-4">
+          {renderModalError()}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Subject Type</label>
@@ -1254,6 +1282,7 @@ export default function GdprDashboard() {
     return (
       <Modal isOpen={true} onClose={closeModal} title={isEditing ? 'Edit Processor' : 'Add Processor'} size="lg">
         <div className="space-y-4">
+          {renderModalError()}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Provider Name</label>
@@ -1334,6 +1363,7 @@ export default function GdprDashboard() {
     return (
       <Modal isOpen={true} onClose={closeModal} title="Log DP Complaint" size="lg">
         <div className="space-y-4">
+          {renderModalError()}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Date Received</label>

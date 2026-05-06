@@ -43,6 +43,18 @@ const SELF_SERVICE_ROUTES = new Set([
 const CUSTOM_AUTHZ_ROUTES = new Map([
   ['GET /api/audit', 'custom scoped audit-log authorization'],
   ['GET /api/gdpr/access-log', 'custom scoped GDPR access-log authorization'],
+  ['POST /api/handover', 'custom handover category authorization'],
+  ['PUT /api/handover/:id', 'custom handover category authorization'],
+  ['POST /api/handover/:id/acknowledge', 'custom handover category authorization'],
+  ['DELETE /api/handover/:id', 'custom handover category authorization'],
+  ['GET /api/notifications/digest', 'custom active-user notification authorization'],
+  ['GET /api/notifications', 'custom active-user notification authorization'],
+  ['POST /api/notifications/read', 'custom active-user notification authorization'],
+  ['POST /api/notifications/read-all', 'custom active-user notification authorization'],
+  ['GET /api/record-attachments/download/:id', 'custom record-module attachment authorization'],
+  ['GET /api/record-attachments/:module/:recordId', 'custom record-module attachment authorization'],
+  ['POST /api/record-attachments/:module/:recordId', 'custom record-module attachment authorization'],
+  ['DELETE /api/record-attachments/:id', 'custom record-module attachment authorization'],
   ['GET /api/portfolio/kpis', 'custom per-home portfolio authorization'],
   ['GET /api/portfolio/board-pack', 'custom per-home portfolio authorization'],
   ['GET /api/portfolio-snapshots', 'custom per-home portfolio authorization'],
@@ -54,9 +66,11 @@ const CUSTOM_AUTHZ_ROUTES = new Map([
 const AUTH_Z_PATTERNS = [
   'requireAdmin',
   'requirePlatformAdmin',
-  'requireHomeAccess',
   'requireModule',
   'requireHomeManager',
+  'requireStaffSelf',
+  'requireAnyHandoverRead',
+  'requireScanInboxAccess',
   'staffReadChain',
   'staffWriteChain',
 ];
@@ -125,6 +139,25 @@ function collectImports(source, filePath) {
   return imports;
 }
 
+function collectMiddlewareArrays(source) {
+  const arrays = new Map();
+  const arrayPattern = /const\s+(\w+)\s*=\s*\[([\s\S]*?)\];/g;
+  let match;
+  while ((match = arrayPattern.exec(source)) !== null) {
+    arrays.set(match[1], match[2]);
+  }
+  return arrays;
+}
+
+function expandMiddlewareStr(source, middlewareStr, depth = 0) {
+  if (depth > 5) return middlewareStr;
+  const arrays = collectMiddlewareArrays(source);
+  return middlewareStr.replace(/\.\.\.(\w+)/g, (_whole, name) => {
+    const body = arrays.get(name);
+    return body ? expandMiddlewareStr(source, body, depth + 1) : '';
+  });
+}
+
 function addCaseFactoryRoutes(source, filePath, mountPath, output) {
   const casePattern = /registerCaseRoutes\(\s*router\s*,\s*\{([\s\S]*?)\}\s*\);/g;
   let match;
@@ -160,7 +193,7 @@ function collectRouterRoutes(filePath, mountPath, output, seen = new Set()) {
   while ((routeMatch = pattern.exec(source)) !== null) {
     const method = routeMatch[1].toUpperCase();
     const subPath = routeMatch[2];
-    const middlewareStr = routeMatch[3];
+    const middlewareStr = expandMiddlewareStr(source, routeMatch[3]);
     output.push({
       key: `${method} ${joinRoutePath(mountPath, subPath)}`,
       middlewareStr,
