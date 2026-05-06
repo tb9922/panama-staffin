@@ -47,6 +47,7 @@ export const RISK_SCORE_BANDS = [
 export const RISK_STATUSES = [
   { id: 'open',      name: 'Open',      badgeKey: 'red' },
   { id: 'mitigated', name: 'Mitigated', badgeKey: 'amber' },
+  { id: 'accepted',  name: 'Accepted',  badgeKey: 'blue' },
   { id: 'closed',    name: 'Closed',    badgeKey: 'green' },
 ];
 

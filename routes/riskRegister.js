@@ -11,6 +11,8 @@ import { nullableDateInput } from '../lib/zodHelpers.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { validateRiskStatusChange } from '../lib/statusTransitions.js';
 import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
+import { queueAutoLinkClear, queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
+import * as actionItemRepo from '../repositories/actionItemRepo.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -44,6 +46,17 @@ const riskUpdateSchema = riskBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
+function hasText(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function riskAccountabilityError(data) {
+  if ((data.status || 'open') === 'closed') return null;
+  if (!hasText(data.owner)) return 'Open risks need an owner';
+  if (!data.next_review) return 'Open risks need a next review date';
+  return null;
+}
+
 // GET /api/risk-register?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), async (req, res, next) => {
   try {
@@ -59,10 +72,13 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const parsed = riskBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'risk_register')) return;
+    const accountabilityError = riskAccountabilityError(parsed.data);
+    if (accountabilityError) return res.status(400).json({ error: accountabilityError });
     parsed.data.inherent_risk = (parsed.data.likelihood ?? 0) * (parsed.data.impact ?? 0);
     parsed.data.residual_risk = (parsed.data.residual_likelihood ?? 0) * (parsed.data.residual_impact ?? 0);
     const risk = await riskRepo.upsert(req.home.id, parsed.data);
     await auditService.log('risk_create', req.home.slug, req.user.username, { id: risk?.id });
+    queueAutoLinkSync(req.home.id, 'risk', risk, req.user.username);
     res.status(201).json(risk);
   } catch (err) { next(err); }
 });
@@ -86,12 +102,16 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const residualImpact = payload.residual_impact ?? existing.residual_impact ?? 0;
     payload.inherent_risk = likelihood * impact;
     payload.residual_risk = residualLikelihood * residualImpact;
+    const merged = { ...existing, ...payload };
+    const accountabilityError = riskAccountabilityError(merged);
+    if (accountabilityError) return res.status(400).json({ error: accountabilityError });
     const risk = await riskRepo.update(idParsed.data, req.home.id, payload, version);
     if (risk === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, risk);
+    const changes = diffFields(existing, risk, { extraSensitive: ['description', 'controls', 'actions'] });
     await auditService.log('risk_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'risk', risk, req.user.username);
     res.json(risk);
   } catch (err) { next(err); }
 });
@@ -103,7 +123,9 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await riskRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await actionItemRepo.cancelAllBySource(req.home.id, 'risk', idParsed.data, req.authDbUser?.id ?? null);
     await auditService.log('risk_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    queueAutoLinkClear(req.home.id, 'risk', idParsed.data);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -29,6 +29,7 @@ vi.mock('../../hooks/useLiveDate.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import * as excel from '../../lib/excel.js';
 
 // ── Fixture data ───────────────────────────────────────────────────────────────
 
@@ -38,7 +39,8 @@ const CURRENT_POLICY = {
   policy_name: 'Safeguarding Adults & Children',
   policy_ref: 'POL-001',
   category: 'safeguarding',
-  version: '2.1',
+  doc_version: '2.1',
+  version: 7,
   last_reviewed: '2026-01-15',
   next_review_due: '2027-01-15',
   review_frequency_months: 12,
@@ -57,7 +59,8 @@ const OVERDUE_POLICY = {
   policy_name: 'Health & Safety',
   policy_ref: 'POL-002',
   category: 'health-safety',
-  version: '1.3',
+  doc_version: '1.3',
+  version: 4,
   last_reviewed: '2024-01-01',
   next_review_due: '2025-01-01',  // Past today (2026-03-08) → overdue
   review_frequency_months: 12,
@@ -93,6 +96,7 @@ beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getPolicies.mockResolvedValue(MOCK_POLICIES_RESPONSE);
   api.getRecordAttachments.mockResolvedValue([]);
+  excel.downloadXLSX.mockClear();
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -198,6 +202,20 @@ describe('PolicyReviewTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
     });
+  });
+
+  it('exports the document version instead of the optimistic lock version', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Safeguarding Adults & Children')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Export Excel/i }));
+
+    expect(excel.downloadXLSX).toHaveBeenCalledTimes(1);
+    const sheets = excel.downloadXLSX.mock.calls[0][1];
+    expect(sheets[0].rows.find(row => row[0] === CURRENT_POLICY.policy_name)[3]).toBe('2.1');
   });
 
   it('shows policy count in the filter bar', async () => {

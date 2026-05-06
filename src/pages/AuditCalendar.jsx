@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BADGE, BTN, CARD, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
@@ -146,6 +147,7 @@ function TaskModal({ isOpen, task, form, setForm, saveError, canEdit, onClose, o
 }
 
 export default function AuditCalendar() {
+  const [searchParams] = useSearchParams();
   const filterStatusId = useId();
   const filterCategoryId = useId();
   const { activeHome, canWrite } = useData();
@@ -156,7 +158,10 @@ export default function AuditCalendar() {
   const [allTasks, setAllTasks] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [filters, setFilters] = useState({ status: '', category: '' });
+  const [filters, setFilters] = useState(() => ({
+    status: STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : '',
+    category: '',
+  }));
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
@@ -251,7 +256,7 @@ export default function AuditCalendar() {
     const ok = await confirm({ title: 'Delete Audit Task', message: 'Delete this audit task?', confirmLabel: 'Delete', variant: 'danger' });
     if (!ok) return;
     try {
-      await deleteAuditTask(activeHome, editing.id);
+      await deleteAuditTask(activeHome, editing.id, editing.version);
       setModalOpen(false);
       showNotice('Audit task deleted.');
       await load();

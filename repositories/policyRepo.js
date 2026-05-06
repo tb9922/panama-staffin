@@ -31,7 +31,9 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function sync(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
+  // Partial imports may omit policy_reviews. Never treat an empty array as a
+  // command to wipe regulated policy evidence.
+  if (!arr || arr.length === 0) return;
   const incomingIds = arr.map(p => p.id);
 
   // Batch upsert — 13 per-row params (id + 11 fields + notes; homeId=$1, updated_at=NOW())
@@ -77,6 +79,7 @@ export async function sync(homeId, arr, client) {
          changes                  = EXCLUDED.changes,
          notes                    = EXCLUDED.notes,
          updated_at               = NOW(),
+         version                  = policy_reviews.version + 1,
          deleted_at               = NULL`,
       [homeId, ...values]
     );
@@ -87,8 +90,6 @@ export async function sync(homeId, arr, client) {
       `UPDATE policy_reviews SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
       [homeId, incomingIds]
     );
-  } else {
-    await conn.query(`UPDATE policy_reviews SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
   }
 }
 

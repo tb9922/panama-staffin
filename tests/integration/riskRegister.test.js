@@ -206,4 +206,24 @@ describe('Risk Register: sync safety', () => {
     expect(await riskRepo.findById(first.id, homeA)).not.toBeNull();
     expect(await riskRepo.findById(second.id, homeA)).not.toBeNull();
   });
+
+  it('bumps the row version when sync updates an existing risk', async () => {
+    const created = await riskRepo.upsert(homeA, {
+      title: 'Sync version risk',
+      category: 'compliance',
+      owner: 'Registered Manager',
+      next_review: '2026-07-01',
+      status: 'open',
+    });
+    ids.push(created.id);
+
+    await riskRepo.sync(homeA, [{
+      ...created,
+      title: 'Sync version risk updated',
+    }]);
+
+    const updated = await riskRepo.findById(created.id, homeA);
+    expect(updated.title).toBe('Sync version risk updated');
+    expect(updated.version).toBe(created.version + 1);
+  });
 });

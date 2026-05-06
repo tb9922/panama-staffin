@@ -253,11 +253,14 @@ function buildSearchFilters(roleId, filters = {}) {
   if (requestedSources.length === 0) return null;
 
   const readableRecordModules = getReadableRecordAttachmentModules(roleId).map((entry) => entry.id);
+  const requestedRecordModules = Array.isArray(filters.recordModules) && filters.recordModules.length > 0
+    ? filters.recordModules.filter((moduleId) => readableRecordModules.includes(moduleId))
+    : readableRecordModules;
 
   return {
     ...filters,
     sourceModules: requestedSources,
-    recordModules: readableRecordModules.length > 0 ? readableRecordModules : null,
+    recordModules: requestedSources.includes('record') && requestedRecordModules.length > 0 ? requestedRecordModules : null,
     excludedOnboardingSections: canAccessSensitiveOnboarding(roleId)
       ? null
       : SENSITIVE_ONBOARDING_SECTIONS,
@@ -288,7 +291,8 @@ export async function search(home, roleId, filters = {}) {
 
     const rows = Object.values(grouped).flat().sort((a, b) => createdAtMs(b.createdAt) - createdAtMs(a.createdAt));
     for (const row of rows) {
-      row.sourceLabel = getEvidenceSourceLabel(row.sourceModule);
+      const recordMeta = row.sourceModule === 'record' ? getRecordAttachmentModule(row.sourceSubType) : null;
+      row.sourceLabel = recordMeta?.label || getEvidenceSourceLabel(row.sourceModule);
       row.canDelete = canDeleteEvidenceSource(roleId, row.sourceModule, row.sourceSubType);
     }
 

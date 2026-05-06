@@ -10,6 +10,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { validateWhistleblowingStatusChange } from '../lib/statusTransitions.js';
+import { queueAutoLinkClear, queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -41,8 +42,13 @@ const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial(
   _version: z.number().int().nonnegative().optional(),
 });
 
+function requireWhistleblowingManager(req, res, next) {
+  if (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') return next();
+  return res.status(403).json({ error: 'Manager access is required for whistleblowing concerns' });
+}
+
 // GET /api/whistleblowing?home=X
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), requireWhistleblowingManager, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const concernsResult = await whistleblowingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
@@ -68,7 +74,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/whistleblowing?home=X
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), requireWhistleblowingManager, async (req, res, next) => {
   try {
     const parsed = concernBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -79,13 +85,14 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     }
     const concern = await whistleblowingRepo.upsert(req.home.id, createData);
     await auditService.log('whistleblowing_create', req.home.slug, req.user.username, { id: concern?.id });
+    queueAutoLinkSync(req.home.id, 'whistleblowing', concern, req.user.username);
     const safe = concern.anonymous ? (({ raised_by_role: _raised_by_role, ...rest }) => rest)(concern) : concern;
     res.status(201).json(safe);
   } catch (err) { next(err); }
 });
 
 // PUT /api/whistleblowing/:id?home=X
-router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), requireWhistleblowingManager, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -117,19 +124,21 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
       changes = changes.filter(c => c.field !== 'raised_by_role');
     }
     await auditService.log('whistleblowing_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'whistleblowing', concern, req.user.username);
     const safe = concern.anonymous ? (({ raised_by_role: _raised_by_role, ...rest }) => rest)(concern) : concern;
     res.json(safe);
   } catch (err) { next(err); }
 });
 
 // DELETE /api/whistleblowing/:id?home=X
-router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), requireWhistleblowingManager, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await whistleblowingRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     await auditService.log('whistleblowing_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    queueAutoLinkClear(req.home.id, 'whistleblowing', idParsed.data);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

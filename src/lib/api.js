@@ -738,9 +738,11 @@ export async function verifyAuditTask(homeSlug, id, data = {}) {
   });
 }
 
-export async function deleteAuditTask(homeSlug, id) {
+export async function deleteAuditTask(homeSlug, id, version = undefined) {
   return apiFetch(`${API_BASE}/audit-tasks/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
-    method: 'DELETE', headers: authHeaders(),
+    method: 'DELETE',
+    headers: authHeaders(),
+    ...(version === undefined ? {} : { body: JSON.stringify({ _version: version }) }),
   });
 }
 

@@ -112,6 +112,18 @@ describe('action items API', () => {
     expect(completed.body.status).toBe('completed');
     expect(completed.body.evidence_notes).toBe('Evidence uploaded.');
 
+    await request(app)
+      .put(`/api/action-items/${created.body.id}?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ status: 'open', _version: completed.body.version })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/action-items/${created.body.id}/complete?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ _version: completed.body.version, evidence_notes: 'Overwrite evidence.' })
+      .expect(400);
+
     const verified = await request(app)
       .post(`/api/action-items/${created.body.id}/verify?home=${HOME_A}`)
       .set('Authorization', `Bearer ${managerToken}`)

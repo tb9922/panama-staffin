@@ -10,6 +10,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { validatePolicyStatusChange } from '../lib/statusTransitions.js';
+import { queueAutoLinkClear, queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -53,6 +54,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     const policy = await policyRepo.upsert(req.home.id, parsed.data);
     await auditService.log('policy_create', req.home.slug, req.user.username, { id: policy?.id });
+    queueAutoLinkSync(req.home.id, 'policy_review', policy, req.user.username);
     res.status(201).json(policy);
   } catch (err) { next(err); }
 });
@@ -75,8 +77,9 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (policy === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, policy);
+    const changes = diffFields(existing, policy, { extraSensitive: ['changes', 'notes'] });
     await auditService.log('policy_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'policy_review', policy, req.user.username);
     res.json(policy);
   } catch (err) { next(err); }
 });
@@ -89,6 +92,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     const deleted = await policyRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     await auditService.log('policy_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    queueAutoLinkClear(req.home.id, 'policy_review', idParsed.data);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

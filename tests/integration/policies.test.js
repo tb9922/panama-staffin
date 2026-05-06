@@ -174,3 +174,22 @@ describe('Policy Review: soft delete', () => {
     expect(byId).toBeNull();
   });
 });
+
+describe('Policy Review: sync safety', () => {
+  it('does not soft-delete every policy when sync receives an empty array', async () => {
+    const first = await policyRepo.upsert(homeA, {
+      policy_name: 'Sync safety policy A',
+      status: 'current',
+    });
+    const second = await policyRepo.upsert(homeA, {
+      policy_name: 'Sync safety policy B',
+      status: 'current',
+    });
+    ids.push(first.id, second.id);
+
+    await policyRepo.sync(homeA, []);
+
+    expect(await policyRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await policyRepo.findById(second.id, homeA)).not.toBeNull();
+  });
+});

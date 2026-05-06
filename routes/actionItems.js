@@ -9,6 +9,7 @@ import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js'
 import { diffFields } from '../lib/audit.js';
 import {
   ACTION_ITEM_CATEGORIES,
+  ACTION_ITEM_OPEN_STATUSES,
   ACTION_ITEM_PRIORITIES,
   ACTION_ITEM_SOURCE_TYPES,
   ACTION_ITEM_STATUSES,
@@ -114,7 +115,7 @@ function isProtectedWorkflowStatus(status) {
 function isProtectedWorkflowTransition(existing, updates) {
   return updates.status !== undefined
     && updates.status !== existing?.status
-    && isProtectedWorkflowStatus(updates.status);
+    && (isProtectedWorkflowStatus(existing?.status) || isProtectedWorkflowStatus(updates.status));
 }
 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), async (req, res, next) => {
@@ -209,8 +210,8 @@ router.post('/:id/complete', writeRateLimiter, requireAuth, requireHomeAccess, r
 
     const existing = await actionItemRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Action item not found' });
-    if (['verified', 'cancelled'].includes(existing.status)) {
-      return res.status(400).json({ error: 'Verified or cancelled actions cannot be completed' });
+    if (!ACTION_ITEM_OPEN_STATUSES.includes(existing.status)) {
+      return res.status(400).json({ error: 'Only open, in-progress, or blocked actions can be completed' });
     }
     if (existing.evidence_required && !hasRequiredEvidence(existing, parsed.data.evidence_notes)) {
       return res.status(400).json({ error: 'Evidence notes are required before completing this action' });

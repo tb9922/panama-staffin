@@ -40,6 +40,13 @@ export function RequireUserManagement({ children }) {
   return children;
 }
 
+export function RequireHomeRole({ roles = [], children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { homeRole } = useData();
+  if (!isPlatformAdmin && !roles.includes(homeRole)) return <Navigate to="/" replace />;
+  return children;
+}
+
 export function RequireEvidenceHub({ children }) {
   const { isPlatformAdmin } = useAuth();
   const { homeRole, canRead } = useData();

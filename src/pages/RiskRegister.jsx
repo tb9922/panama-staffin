@@ -49,6 +49,7 @@ const HEATMAP_COLORS = {
 export default function RiskRegister() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
+  const legacyActionsReadOnly = true;
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { confirm, ConfirmDialog } = useConfirm();
   const [risks, setRisks] = useState([]);
@@ -157,12 +158,14 @@ export default function RiskRegister() {
       residual_score: getRiskScore(form.residual_likelihood, form.residual_impact),
       _version: form._version,
     };
+    const payload = { ...record };
+    delete payload.actions;
     try {
       if (editingId) {
-        await updateRisk(home, editingId, record);
+        await updateRisk(home, editingId, payload);
         showNotice('Risk updated.');
       } else {
-        await createRisk(home, record);
+        await createRisk(home, payload);
         showNotice('Risk created.');
       }
       setShowModal(false);
@@ -406,7 +409,7 @@ export default function RiskRegister() {
                 const _residualBand = getRiskBand(residual);
                 const reviewOverdue = risk.next_review && risk.next_review < today;
                 return (
-                  <tr key={risk.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(risk), { disabled: !canEdit, label: `Open risk ${risk.title}` })}>
+                  <tr key={risk.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(risk), { label: `Open risk ${risk.title}` })}>
                     <td className={TABLE.td}>
                       <div className="font-medium text-gray-900">{risk.title}</div>
                       {risk.description && <div className="text-xs text-gray-400 truncate max-w-xs">{risk.description}</div>}
@@ -463,7 +466,7 @@ export default function RiskRegister() {
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Owner</label>
+                    <label className={INPUT.label}>Owner *</label>
                     <input type="text" className={INPUT.base} value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })} />
                   </div>
                   <div>
@@ -566,7 +569,7 @@ export default function RiskRegister() {
                       <input type="date" className={INPUT.base} value={form.last_reviewed} onChange={e => setForm({ ...form, last_reviewed: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Next Review</label>
+                      <label className={INPUT.label}>Next Review *</label>
                       <input type="date" className={INPUT.base} value={form.next_review} onChange={e => setForm({ ...form, next_review: e.target.value })} />
                     </div>
                   </div>
@@ -579,28 +582,35 @@ export default function RiskRegister() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between mb-1">
                   <label className={INPUT.label}>Risk Actions</label>
-                  <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
-                    onClick={() => setForm({ ...form, actions: [...form.actions, { id: 'act-' + Date.now(), description: '', owner: '', due_date: '', status: 'open', completed_date: '' }] })}>
-                    + Add Action
-                  </button>
+                  {canEdit && !legacyActionsReadOnly && (
+                    <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+                      onClick={() => setForm({ ...form, actions: [...form.actions, { id: 'act-' + Date.now(), description: '', owner: '', due_date: '', status: 'open', completed_date: '' }] })}>
+                      + Add Action
+                    </button>
+                  )}
                 </div>
+                {legacyActionsReadOnly && (
+                  <p className="text-xs text-gray-500">Legacy risk actions are read-only. Manage accountable actions in Manager Actions.</p>
+                )}
                 {form.actions.length === 0 && <p className="text-xs text-gray-400">No actions recorded</p>}
                 {form.actions.map((action, i) => (
                   <div key={action.id || i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
                     <div className="flex gap-2">
-                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description}
+                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], description: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
-                        onClick={() => setForm({ ...form, actions: form.actions.filter((_, j) => j !== i) })}>Remove</button>
+                      {canEdit && !legacyActionsReadOnly && (
+                        <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                          onClick={() => setForm({ ...form, actions: form.actions.filter((_, j) => j !== i) })}>Remove</button>
+                      )}
                     </div>
                     <div className="grid grid-cols-4 gap-2">
-                      <input type="text" className={INPUT.sm} placeholder="Owner" value={action.owner}
+                      <input type="text" className={INPUT.sm} placeholder="Owner" value={action.owner} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], owner: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <input type="date" className={INPUT.sm} title="Due date" value={action.due_date}
+                      <input type="date" className={INPUT.sm} title="Due date" value={action.due_date} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], due_date: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <input type="date" className={INPUT.sm} title="Completed date" value={action.completed_date}
+                      <input type="date" className={INPUT.sm} title="Completed date" value={action.completed_date} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], completed_date: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <select className={INPUT.sm} value={action.status}
+                      <select className={INPUT.sm} value={action.status} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], status: e.target.value }; setForm({ ...form, actions: a }); }}>
                         <option value="open">Open</option>
                         <option value="in_progress">In Progress</option>
@@ -641,7 +651,7 @@ export default function RiskRegister() {
                 </div>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {canEdit && <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
+              {canEdit && <button onClick={handleSave} disabled={!form.title || !form.category || (form.status !== 'closed' && (!form.owner || !form.next_review))} className={BTN.primary}>
                 {editingId ? 'Update' : 'Save'}
               </button>}
             </div>

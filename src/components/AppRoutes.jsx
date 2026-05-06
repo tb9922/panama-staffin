@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
-import { RequireAnyModule, RequireEvidenceHub, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
+import { RequireAnyModule, RequireEvidenceHub, RequireHomeRole, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
 import { SCAN_INTAKE_ACCESS_MODULES } from '../../shared/scanIntake.js';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
@@ -124,7 +124,7 @@ export default function AppRoutes() {
       <Route path="/audit-calendar" element={<RouteErrorBoundary><RequireModule module="governance"><AuditCalendar /></RequireModule></RouteErrorBoundary>} />
       <Route path="/risks" element={<RouteErrorBoundary><RequireModule module="governance"><RiskRegister /></RequireModule></RouteErrorBoundary>} />
       <Route path="/policies" element={<RouteErrorBoundary><RequireModule module="governance"><PolicyReviewTracker /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/speak-up" element={<RouteErrorBoundary><RequireModule module="governance"><WhistleblowingTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/speak-up" element={<RouteErrorBoundary><RequireModule module="governance"><RequireHomeRole roles={['home_manager', 'deputy_manager']}><WhistleblowingTracker /></RequireHomeRole></RequireModule></RouteErrorBoundary>} />
       <Route path="/maintenance" element={<RouteErrorBoundary><RequireModule module="compliance"><MaintenanceTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/maintenance/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><MaintenanceDocsTracker /></RequireModule></RouteErrorBoundary>} />
 

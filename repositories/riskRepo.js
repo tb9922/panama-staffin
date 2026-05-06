@@ -81,6 +81,7 @@ export async function sync(homeId, arr, client) {
          next_review          = EXCLUDED.next_review,
          status               = EXCLUDED.status,
          updated_at           = NOW(),
+         version              = risk_register.version + 1,
          deleted_at           = NULL`,
       [homeId, ...values]
     );

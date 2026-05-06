@@ -8,14 +8,26 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { app } from '../../server.js';
 import { pool } from '../../db.js';
 import * as whistleblowingRepo from '../../repositories/whistleblowingRepo.js';
 
 let homeA, homeB;
 const ids = [];
+const MANAGER_USERNAME = 'wbl-test-manager';
+const TRAINING_USERNAME = 'wbl-test-training';
+const PASSWORD = 'WhistleblowingTest1!';
+let managerToken;
+let trainingToken;
 
 beforeAll(async () => {
   await pool.query(`DELETE FROM whistleblowing_concerns WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'wbl-test-%')`).catch(() => {});
+  await pool.query(`DELETE FROM audit_log WHERE home_slug LIKE 'wbl-test-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username IN ($1, $2)`, [MANAGER_USERNAME, TRAINING_USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM token_denylist WHERE username IN ($1, $2)`, [MANAGER_USERNAME, TRAINING_USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM users WHERE username IN ($1, $2)`, [MANAGER_USERNAME, TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'wbl-test-%'`);
 
   const { rows: [ha] } = await pool.query(
@@ -26,12 +38,50 @@ beforeAll(async () => {
   );
   homeA = ha.id;
   homeB = hb.id;
+
+  const hash = await bcrypt.hash(PASSWORD, 4);
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'Whistleblowing Manager', 'test-setup')`,
+    [MANAGER_USERNAME, hash]
+  );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'Whistleblowing Training Lead', 'test-setup')`,
+    [TRAINING_USERNAME, hash]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'home_manager', 'test-setup')`,
+    [MANAGER_USERNAME, homeA]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'training_lead', 'test-setup')`,
+    [TRAINING_USERNAME, homeA]
+  );
+
+  const managerLogin = await request(app)
+    .post('/api/login')
+    .send({ username: MANAGER_USERNAME, password: PASSWORD })
+    .expect(200);
+  managerToken = managerLogin.body.token;
+
+  const trainingLogin = await request(app)
+    .post('/api/login')
+    .send({ username: TRAINING_USERNAME, password: PASSWORD })
+    .expect(200);
+  trainingToken = trainingLogin.body.token;
 });
 
 afterAll(async () => {
   for (const id of ids) {
     await pool.query('DELETE FROM whistleblowing_concerns WHERE id = $1', [id]).catch(() => {});
   }
+  await pool.query(`DELETE FROM audit_log WHERE home_slug LIKE 'wbl-test-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username IN ($1, $2)`, [MANAGER_USERNAME, TRAINING_USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM token_denylist WHERE username IN ($1, $2)`, [MANAGER_USERNAME, TRAINING_USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM users WHERE username IN ($1, $2)`, [MANAGER_USERNAME, TRAINING_USERNAME]).catch(() => {});
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);
 });
@@ -75,6 +125,65 @@ describe('Whistleblowing: create and read', () => {
   it('blocks cross-home read', async () => {
     const found = await whistleblowingRepo.findById(concernId, homeB);
     expect(found).toBeNull();
+  });
+});
+
+// HTTP route controls protect PIDA-sensitive concerns from broad governance readers.
+describe('Whistleblowing: HTTP RBAC and route redaction', () => {
+  it('blocks governance read-only roles from listing whistleblowing concerns', async () => {
+    const created = await request(app)
+      .post('/api/whistleblowing?home=wbl-test-a')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        date_raised: '2026-04-12',
+        raised_by_role: 'Night Carer',
+        anonymous: false,
+        category: 'safety',
+        description: 'Named reporter raised a safety concern',
+        severity: 'high',
+        status: 'registered',
+      })
+      .expect(201);
+    ids.push(created.body.id);
+
+    await request(app)
+      .get('/api/whistleblowing?home=wbl-test-a')
+      .set('Authorization', `Bearer ${trainingToken}`)
+      .expect(403);
+
+    const managerList = await request(app)
+      .get('/api/whistleblowing?home=wbl-test-a')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+
+    expect(managerList.body.concerns.some(c => c.id === created.body.id)).toBe(true);
+  });
+
+  it('strips reporter role from anonymous route responses', async () => {
+    const created = await request(app)
+      .post('/api/whistleblowing?home=wbl-test-a')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        date_raised: '2026-04-13',
+        raised_by_role: 'Senior Carer',
+        anonymous: true,
+        category: 'bullying',
+        description: 'Anonymous concern details',
+        severity: 'medium',
+        status: 'registered',
+      })
+      .expect(201);
+    ids.push(created.body.id);
+
+    expect(created.body.raised_by_role).toBeUndefined();
+
+    const listed = await request(app)
+      .get('/api/whistleblowing?home=wbl-test-a')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    const concern = listed.body.concerns.find(c => c.id === created.body.id);
+    expect(concern).toBeTruthy();
+    expect(concern.raised_by_role).toBeUndefined();
   });
 });
 

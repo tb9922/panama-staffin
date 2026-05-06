@@ -377,7 +377,7 @@ export async function complete(id, homeId, userId, version = null, evidenceNotes
      WHERE id = $1
        AND home_id = $2
        AND deleted_at IS NULL
-       AND status NOT IN ('verified', 'cancelled')
+       AND status IN ('open', 'in_progress', 'blocked')
   `;
   if (version != null) {
     params.push(version);

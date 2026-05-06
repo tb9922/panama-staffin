@@ -38,6 +38,10 @@ const completeSchema = z.object({
   evidence_notes: z.string().max(5000).nullable().optional(),
 });
 
+const deleteSchema = z.object({
+  _version: z.number().int().nonnegative().optional(),
+});
+
 const generateSchema = z.object({
   from: requiredDateInput.optional(),
   to: requiredDateInput.optional(),
@@ -70,7 +74,20 @@ function isProtectedWorkflowStatus(status) {
 function isProtectedWorkflowTransition(existing, updates) {
   return updates.status !== undefined
     && updates.status !== existing?.status
-    && isProtectedWorkflowStatus(updates.status);
+    && (isProtectedWorkflowStatus(existing?.status) || isProtectedWorkflowStatus(updates.status));
+}
+
+function canSeeAuditTaskDetails(req) {
+  return req.user?.is_platform_admin
+    || req.homeRole === 'home_manager'
+    || req.homeRole === 'deputy_manager';
+}
+
+function safeAuditTaskForRead(req, task) {
+  if (canSeeAuditTaskDetails(req)) return task;
+  const safe = { ...task };
+  if (safe.evidence_notes) safe.evidence_notes = '[REDACTED]';
+  return safe;
 }
 
 async function validateOwner(homeId, ownerUserId) {
@@ -113,7 +130,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const parsed = listSchema.safeParse(req.query);
     if (!parsed.success) return zodError(res, parsed);
     const result = await auditTaskRepo.findByHome(req.home.id, parsed.data);
-    res.json({ tasks: result.rows, _total: result.total });
+    res.json({ tasks: result.rows.map(task => safeAuditTaskForRead(req, task)), _total: result.total });
   } catch (err) { next(err); }
 });
 
@@ -212,6 +229,9 @@ router.post('/:id/verify', writeRateLimiter, requireAuth, requireHomeAccess, req
     const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Audit task not found' });
     if (existing.status !== 'completed') return res.status(400).json({ error: 'Complete the audit task before QA sign-off' });
+    if (existing.completed_by != null && existing.completed_by === actorId(req)) {
+      return res.status(400).json({ error: 'QA sign-off must be completed by a different user' });
+    }
     if (existing.evidence_required && !hasRequiredEvidence(existing)) {
       return res.status(400).json({ error: 'Evidence notes are required before QA sign-off' });
     }
@@ -228,7 +248,18 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid task ID' });
+    const parsed = deleteSchema.safeParse(req.body || {});
+    if (!parsed.success) return zodError(res, parsed);
     const existing = await auditTaskRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Audit task not found' });
+    if (isProtectedWorkflowStatus(existing.status)) {
+      if (parsed.data._version == null) {
+        return res.status(400).json({ error: 'Version is required to delete completed or verified audit tasks' });
+      }
+      if (parsed.data._version !== existing.version) {
+        return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+      }
+    }
     const deleted = await auditTaskRepo.softDelete(idParsed.data, req.home.id, actorId(req));
     if (!deleted) return res.status(404).json({ error: 'Audit task not found' });
     await auditService.log('audit_task_delete', req.home.slug, req.user.username, {

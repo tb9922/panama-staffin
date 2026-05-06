@@ -8,11 +8,13 @@ const PREFIX = 'v1-os-test';
 const HOME_A = `${PREFIX}-home-a`;
 const HOME_B = `${PREFIX}-home-b`;
 const MANAGER = `${PREFIX}-manager`;
+const QA_MANAGER = `${PREFIX}-qa-manager`;
 const PASSWORD = 'V1OsTest1!';
 
 let homeAId;
 let homeBId;
 let managerToken;
+let qaToken;
 
 async function cleanup() {
   const { rows } = await pool.query(`SELECT id FROM homes WHERE slug LIKE $1`, [`${PREFIX}-%`]);
@@ -52,13 +54,25 @@ beforeAll(async () => {
     [MANAGER, hash],
   );
   await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'V1 OS QA Manager', 'test-setup')`,
+    [QA_MANAGER, hash],
+  );
+  await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
      VALUES ($1, $2, 'home_manager', 'test-setup')`,
     [MANAGER, homeAId],
   );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'deputy_manager', 'test-setup')`,
+    [QA_MANAGER, homeAId],
+  );
 
   const login = await request(app).post('/api/login').send({ username: MANAGER, password: PASSWORD }).expect(200);
   managerToken = login.body.token;
+  const qaLogin = await request(app).post('/api/login').send({ username: QA_MANAGER, password: PASSWORD }).expect(200);
+  qaToken = qaLogin.body.token;
 }, 20000);
 
 afterAll(async () => {
@@ -67,6 +81,10 @@ afterAll(async () => {
 
 function authed(method, path) {
   return request(app)[method](path).set('Authorization', `Bearer ${managerToken}`);
+}
+
+function qaAuthed(method, path) {
+  return request(app)[method](path).set('Authorization', `Bearer ${qaToken}`);
 }
 
 describe('V1 operating-system API foundations', () => {
@@ -94,11 +112,34 @@ describe('V1 operating-system API foundations', () => {
 
     expect(completed.body.status).toBe('completed');
     expect(completed.body.completed_at).toBeTruthy();
-    expect(completed.body.manager_signed_off_at).toBeNull();
-    expect(completed.body.manager_signed_off_by).toBeNull();
+    expect(completed.body.manager_signed_off_at).toBeTruthy();
+    expect(completed.body.manager_signed_off_by).toBe(completed.body.completed_by);
+
+    await authed('put', `/api/audit-tasks/${created.body.id}?home=${HOME_A}`)
+      .send({ status: 'open', _version: completed.body.version })
+      .expect(400);
+
+    await authed('post', `/api/audit-tasks/${created.body.id}/verify?home=${HOME_A}`)
+      .send({ _version: completed.body.version })
+      .expect(400);
+
+    const verified = await qaAuthed('post', `/api/audit-tasks/${created.body.id}/verify?home=${HOME_A}`)
+      .send({ _version: completed.body.version })
+      .expect(200);
+
+    expect(verified.body.status).toBe('verified');
+    expect(verified.body.qa_signed_off_at).toBeTruthy();
+    expect(verified.body.qa_signed_off_by).not.toBe(verified.body.completed_by);
+
+    await authed('delete', `/api/audit-tasks/${created.body.id}?home=${HOME_A}`)
+      .expect(400);
+
+    await authed('delete', `/api/audit-tasks/${created.body.id}?home=${HOME_A}`)
+      .send({ _version: completed.body.version })
+      .expect(409);
 
     await authed('post', `/api/audit-tasks/${created.body.id}/complete?home=${HOME_A}`)
-      .send({ _version: completed.body.version, evidence_notes: 'Trying to complete again.' })
+      .send({ _version: verified.body.version, evidence_notes: 'Trying to complete again.' })
       .expect(400);
 
     await authed('get', `/api/audit-tasks?home=${HOME_B}`).expect(403);

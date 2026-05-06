@@ -64,6 +64,7 @@ export default function AppLayout() {
     if (item.requiresUserManagement && !canManageUsers) return false;
     if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
     if (item.requiresStaffPortal && !staffPortalEnabled) return false;
+    if (item.allowedHomeRoles && !isPlatformAdmin && !item.allowedHomeRoles.includes(homeRole)) return false;
     const effectiveModules = item.modules || (item.module || sectionModule ? [item.module || sectionModule] : []);
     if (effectiveModules.length > 0) {
       const allowOwn = item.ownDataSafe === true;

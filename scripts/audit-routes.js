@@ -229,6 +229,20 @@ const REQUIRED_DISCOVERED_ROUTES = [
   'POST /api/hr/cases/grievance/:id/actions',
   'GET /api/hr/attachments/download/:id',
   'POST /api/hr/admin/purge-expired',
+  'GET /api/action-items',
+  'POST /api/action-items',
+  'POST /api/action-items/:id/complete',
+  'POST /api/action-items/:id/verify',
+  'GET /api/audit-tasks',
+  'POST /api/audit-tasks',
+  'POST /api/audit-tasks/:id/complete',
+  'POST /api/audit-tasks/:id/verify',
+  'GET /api/risk-register',
+  'POST /api/risk-register',
+  'GET /api/policies',
+  'POST /api/policies',
+  'GET /api/whistleblowing',
+  'POST /api/whistleblowing',
 ];
 const discoveredKeys = new Set(allRoutes.map(route => route.key));
 for (const requiredRoute of REQUIRED_DISCOVERED_ROUTES) {

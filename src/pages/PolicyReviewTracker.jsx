@@ -191,7 +191,6 @@ export default function PolicyReviewTracker() {
     const record = {
       ...form,
       doc_version: newVersion,
-      version: newVersion,
       last_reviewed: today,
       next_review_due: nextDue,
       changes: [...(policy.changes || []), newChange],
@@ -229,7 +228,7 @@ export default function PolicyReviewTracker() {
         p.policy_name,
         p.policy_ref,
         p.category,
-        p.version,
+        p.doc_version || '-',
         p.last_reviewed || 'Never',
         p.next_review_due || '-',
         s.status.charAt(0).toUpperCase() + s.status.slice(1),
@@ -372,10 +371,10 @@ export default function PolicyReviewTracker() {
               {filtered.map(policy => {
                 const s = getPolicyStatus(policy, today);
                 return (
-                  <tr key={policy.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(policy), { disabled: !canEdit, label: `Open policy review for ${policy.name}` })}>
+                  <tr key={policy.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(policy), { label: `Open policy review for ${policy.policy_name}` })}>
                     <td className={TABLE.td}>{policy.policy_name}</td>
                     <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
-                    <td className={TABLE.td}>{policy.version}</td>
+                    <td className={TABLE.td}>{policy.doc_version || '-'}</td>
                     <td className={TABLE.td}>{policy.last_reviewed || 'Never'}</td>
                     <td className={TABLE.td}>{policy.next_review_due || '-'}</td>
                     <td className={TABLE.td}>

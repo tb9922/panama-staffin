@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BADGE, BTN, CARD, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
@@ -184,6 +185,7 @@ function ActionItemModal({ isOpen, item, form, setForm, saveError, onClose, onSa
 }
 
 export default function ManagerActions() {
+  const [searchParams] = useSearchParams();
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
   const { notice, showNotice, clearNotice } = useTransientNotice();
@@ -194,7 +196,12 @@ export default function ManagerActions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saveError, setSaveError] = useState(null);
-  const [filters, setFilters] = useState({ status: '', priority: '', source_type: '', overdue: '' });
+  const [filters, setFilters] = useState(() => ({
+    status: ACTION_ITEM_STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : '',
+    priority: '',
+    source_type: '',
+    overdue: '',
+  }));
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });

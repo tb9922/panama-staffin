@@ -14,6 +14,7 @@ import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getReadableEvidenceSources } from '../../shared/evidenceHub.js';
+import { getReadableRecordAttachmentModules } from '../../shared/recordAttachmentModules.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const PAGE_SIZE = 50;
@@ -61,7 +62,14 @@ export default function EvidenceHub() {
   const [error, setError] = useState(null);
   const requestRef = useRef(0);
 
-  const availableSources = getReadableEvidenceSources(homeRole);
+  const availableSources = [
+    ...getReadableEvidenceSources(homeRole).filter((source) => source.id !== 'record'),
+    ...getReadableRecordAttachmentModules(homeRole).map((source) => ({
+      id: `record:${source.id}`,
+      label: source.label,
+      module: source.permissionModule,
+    })),
+  ];
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(filters.q.trim()), 300);
