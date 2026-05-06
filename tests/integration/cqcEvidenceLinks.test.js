@@ -21,6 +21,7 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM incidents WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
   await pool.query(`DELETE FROM complaints WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
   await pool.query(`DELETE FROM maintenance WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
+  await pool.query('DELETE FROM audit_log WHERE home_slug IN ($1, $2)', [HOME_A, HOME_B]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM token_denylist WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [USERNAME]).catch(() => {});
@@ -81,6 +82,7 @@ afterAll(async () => {
   if (homeAId) await pool.query('DELETE FROM complaints WHERE home_id = $1', [homeAId]).catch(() => {});
   if (homeBId) await pool.query('DELETE FROM complaints WHERE home_id = $1', [homeBId]).catch(() => {});
   if (homeAId) await pool.query('DELETE FROM maintenance WHERE home_id = $1', [homeAId]).catch(() => {});
+  await pool.query('DELETE FROM audit_log WHERE home_slug IN ($1, $2)', [HOME_A, HOME_B]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM token_denylist WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [USERNAME]).catch(() => {});
@@ -218,6 +220,19 @@ describe('cqc evidence links', () => {
       .send({ rationale: 'Manager checked it', _version: created.version })
       .expect(200);
     expect(updated.body.version).toBe(created.version + 1);
+
+    const { rows: auditRows } = await pool.query(
+      `SELECT details FROM audit_log
+        WHERE home_slug = $1
+          AND action = 'cqc_evidence_link_update'
+        ORDER BY ts DESC
+        LIMIT 1`,
+      [HOME_A]
+    );
+    const auditDetails = JSON.stringify(auditRows[0]?.details || {});
+    expect(auditDetails).not.toContain('Needs review');
+    expect(auditDetails).not.toContain('Manager checked it');
+    expect(auditDetails).toContain('[REDACTED]');
 
     const confirmed = await auth('post', `/api/cqc-evidence-links/${created.id}/confirm?home=${HOME_A}`)
       .expect(200);

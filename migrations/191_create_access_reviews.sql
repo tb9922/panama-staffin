@@ -64,16 +64,27 @@ INSERT INTO retention_schedule (
   applies_to_table,
   special_category,
   notes
-) VALUES (
-  'Platform access reviews',
-  '7 years',
-  2555,
-  'CQC Reg 17, GDPR Art 5(1)(f), UK GDPR accountability',
-  'Legitimate interests and legal obligation',
-  'access_reviews, access_review_assignments',
-  FALSE,
-  'Quarterly/monthly role and access certification trail. Stores only account metadata and decisions; no passwords, tokens, or secrets.'
-)
+) VALUES
+  (
+    'Platform access reviews',
+    '7 years',
+    2555,
+    'CQC Reg 17, GDPR Art 5(1)(f), UK GDPR accountability',
+    'Legitimate interests and legal obligation',
+    'access_reviews',
+    FALSE,
+    'Quarterly/monthly access review headers. Stores only account metadata; no passwords, tokens, or secrets.'
+  ),
+  (
+    'Platform access review assignments',
+    '7 years',
+    2555,
+    'CQC Reg 17, GDPR Art 5(1)(f), UK GDPR accountability',
+    'Legitimate interests and legal obligation',
+    'access_review_assignments',
+    FALSE,
+    'Access certification assignment snapshots and current decisions.'
+  )
 ON CONFLICT (data_category) DO UPDATE SET
   retention_period = EXCLUDED.retention_period,
   retention_days = EXCLUDED.retention_days,

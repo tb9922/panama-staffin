@@ -447,7 +447,9 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     const { version, payload } = splitVersion(parsed.data);
     const result = await gdprService.updateDPComplaint(idP.data, req.home.id, payload, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    const changes = diffFields(existing, result);
+    const changes = diffFields(existing, result, {
+      extraSensitive: ['description', 'resolution', 'ico_reference'],
+    });
     await auditService.log('gdpr_complaint_update', req.home.slug, req.user.username, { id: idP.data, changes });
     res.json(result);
   } catch (err) { next(err); }
@@ -510,8 +512,9 @@ router.put('/processors/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findProcessorById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Processor record not found' });
-    if ((parsed.data.dpa_status === 'signed' || (!('dpa_status' in parsed.data) && existing.dpa_status === 'signed'))
-        && parsed.data.signed_date === null) {
+    const finalDpaStatus = parsed.data.dpa_status ?? existing.dpa_status;
+    const finalSignedDate = parsed.data.signed_date === undefined ? existing.signed_date : parsed.data.signed_date;
+    if (finalDpaStatus === 'signed' && !finalSignedDate) {
       return res.status(400).json({ error: 'signed_date is required when DPA status is signed' });
     }
     const { version, payload } = splitVersion(parsed.data);

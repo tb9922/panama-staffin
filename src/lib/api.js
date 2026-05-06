@@ -2293,13 +2293,19 @@ export async function deletePlatformHome(id) {
   });
 }
 
-// Fire-and-forget audit log for report downloads
-export function logReportDownload(reportType, dateRange) {
+// Audit log for report downloads. Callers can require success before export.
+export function logReportDownload(reportType, dateRange, { required = false } = {}) {
   const home = getCurrentHome();
-  if (!home) return;
-  apiFetch(`${API_BASE}/audit/report-download?home=${encodeURIComponent(home)}`, {
+  if (!home) {
+    const err = new Error('No active home selected for report audit');
+    if (required) return Promise.reject(err);
+    return Promise.resolve(false);
+  }
+  const request = apiFetch(`${API_BASE}/audit/report-download?home=${encodeURIComponent(home)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
-  }).catch(e => console.warn('Audit log failed:', e.message)); // fire-and-forget
+  });
+  if (required) return request;
+  return request.catch(e => console.warn('Audit log failed:', e.message));
 }
 
 

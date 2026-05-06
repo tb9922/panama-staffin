@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
 import * as dashboardService from './dashboardService.js';
-import { computeCqcReadiness } from './assessmentService.js';
+import { computeCqcReadiness, CQC_NON_HR_SOURCE_MODULES } from './assessmentService.js';
 import * as actionItemRepo from '../repositories/actionItemRepo.js';
 import * as agencyAttemptRepo from '../repositories/agencyAttemptRepo.js';
 import * as outcomeMetricRepo from '../repositories/outcomeMetricRepo.js';
@@ -728,9 +728,14 @@ export async function getPortfolioKpisForUser({ username, isPlatformAdmin = fals
   ]);
 
   const rows = await Promise.all(homes.map(async (home) => {
+    const canReadHrEvidence = home.role_id === 'platform_admin'
+      || hasModuleAccess(home.role_id, 'hr', 'read', { includeOwn: false });
+    const cqcReadinessOptions = canReadHrEvidence
+      ? {}
+      : { cqcEvidenceLinkSourceModules: CQC_NON_HR_SOURCE_MODULES };
     const [summary, readiness, derivedOutcomes, manualMetrics, staffing] = await Promise.all([
       dashboardService.getDashboardSummary(home.id),
-      computeCqcReadiness(home.id, 28).catch(() => null),
+      computeCqcReadiness(home.id, 28, undefined, cqcReadinessOptions).catch(() => null),
       outcomeMetricRepo.getDerivedMetrics(home.id).catch(() => null),
       outcomeMetricRepo.findManualMetrics(home.id).catch(() => []),
       getStaffingPressure(home).catch(() => ({

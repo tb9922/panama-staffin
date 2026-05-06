@@ -7,6 +7,7 @@ import * as assessmentRepo from '../repositories/assessmentRepo.js';
 import * as assessmentService from '../services/assessmentService.js';
 import * as auditService from '../services/auditService.js';
 import { zodError } from '../errors.js';
+import { hasModuleAccess } from '../shared/roles.js';
 
 const router = Router();
 
@@ -20,6 +21,11 @@ const signOffSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 
+function canReadHrEvidenceSources(req) {
+  return req.authDbUser?.is_platform_admin === true
+    || hasModuleAccess(req.homeRole, 'hr', 'read', { includeOwn: false });
+}
+
 // POST /api/assessment/snapshot?home=X — server-authoritative: compute + persist a snapshot
 router.post('/snapshot', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
@@ -28,7 +34,13 @@ router.post('/snapshot', writeRateLimiter, requireAuth, requireHomeAccess, requi
 
     // Server computes the score — client no longer sends overall_score, band, or result
     const computed = await assessmentService.computeSnapshot(
-      req.home.id, parsed.data.engine, parsed.data.window_from, parsed.data.window_to
+      req.home.id,
+      parsed.data.engine,
+      parsed.data.window_from,
+      parsed.data.window_to,
+      parsed.data.engine === 'cqc' && !canReadHrEvidenceSources(req)
+        ? { cqcEvidenceLinkSourceModules: assessmentService.CQC_NON_HR_SOURCE_MODULES }
+        : {}
     );
     if (!computed) return res.status(500).json({ error: 'Failed to compute snapshot' });
 

@@ -77,8 +77,11 @@ const SOURCE_TABLES = {
   hr_tupe: { table: 'hr_tupe_transfers', idExpr: 'id::text', softDelete: true },
   hr_renewal: { table: 'hr_rtw_dbs_renewals', idExpr: 'id::text', softDelete: true },
 };
-const HR_SOURCE_MODULES = new Set(SOURCE_MODULES.filter((module) => module.startsWith('hr_')));
-const NON_HR_SOURCE_MODULES = SOURCE_MODULES.filter((module) => !HR_SOURCE_MODULES.has(module));
+const RESTRICTED_SOURCE_MODULES = new Set(SOURCE_MODULES.filter((module) => (
+  module.startsWith('hr_')
+  || ['onboarding', 'care_certificate', 'whistleblowing', 'dols', 'mca_assessment'].includes(module)
+)));
+const NON_HR_SOURCE_MODULES = SOURCE_MODULES.filter((module) => !RESTRICTED_SOURCE_MODULES.has(module));
 
 const idSchema = z.coerce.number().int().positive();
 const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/);
@@ -142,7 +145,7 @@ function canReadHr(req) {
 }
 
 function isHrSourceModule(sourceModule) {
-  return HR_SOURCE_MODULES.has(sourceModule);
+  return RESTRICTED_SOURCE_MODULES.has(sourceModule);
 }
 
 function visibleSourceModulesFor(req) {
@@ -159,7 +162,6 @@ function enforceHrSourceAccess(req, res, sourceModule) {
 
 function auditLinkSnapshot(link) {
   if (!link) return null;
-  const isHr = isHrSourceModule(link.sourceModule);
   return {
     id: link.id,
     source_module: link.sourceModule,
@@ -168,7 +170,7 @@ function auditLinkSnapshot(link) {
     evidence_category: link.evidenceCategory,
     requires_review: link.requiresReview,
     source_recorded_at: link.sourceRecordedAt,
-    rationale: isHr && link.rationale ? '[REDACTED]' : link.rationale,
+    rationale: link.rationale ? '[REDACTED]' : link.rationale,
     version: link.version,
   };
 }

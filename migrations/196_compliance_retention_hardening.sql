@@ -23,7 +23,7 @@ VALUES
   ('GDPR data requests', '7 years', 2555, 'UK GDPR Art 12-15 accountability', 'UK GDPR', 'data_requests', FALSE, 'SAR/rights request handling evidence.'),
   ('GDPR data breaches', '7 years', 2555, 'UK GDPR Art 33 accountability', 'UK GDPR', 'data_breaches', TRUE, 'Personal data breach records and notifications.'),
   ('Data protection complaints', '7 years', 2555, 'UK GDPR accountability', 'UK GDPR', 'dp_complaints', TRUE, 'Data protection complaint records.'),
-  ('GDPR processors', '7 years after contract end', 2555, 'UK GDPR Art 28 accountability', 'UK GDPR', 'processors', FALSE, 'Processor due diligence and contract records.'),
+  ('GDPR processors', '7 years after contract end', 2555, 'UK GDPR Art 28 accountability', 'UK GDPR', 'gdpr_processors', FALSE, 'Processor due diligence and contract records.'),
   ('Consent records', '7 years after withdrawal or end of processing', 2555, 'UK GDPR consent accountability', 'UK GDPR', 'consent_records', TRUE, 'Consent evidence and withdrawal history.'),
   ('Sick periods', '6 years after leaving', 2190, 'Limitation Act 1980 s.11', 'Special category', 'sick_periods', TRUE, 'Sickness and SSP records using the current sick_periods table.')
 ON CONFLICT (data_category) DO UPDATE SET

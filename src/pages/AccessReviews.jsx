@@ -4,6 +4,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import {
+  completeAccessReview,
   getAccessReview,
   listAccessReviews,
   startAccessReview,
@@ -283,14 +284,46 @@ export default function AccessReviews() {
     }));
     try {
       const updated = await updateAccessReviewAssignment(detail.review.id, item.id, { status, notes });
-      setDetail(current => ({
-        ...current,
-        assignments: (current?.assignments || []).map(row => (row.id === item.id ? updated : row)),
-      }));
+      setDetail(current => {
+        const assignments = (current?.assignments || []).map(row => (row.id === item.id ? updated : row));
+        const assignmentCounts = assignments.reduce((counts, row) => ({
+          ...counts,
+          [row.status]: Number(counts[row.status] || 0) + 1,
+        }), {});
+        return {
+          ...current,
+          review: {
+            ...current?.review,
+            assignment_counts: {
+              ...(current?.review?.assignment_counts || {}),
+              pending: Number(assignmentCounts.pending || 0),
+              needs_change: Number(assignmentCounts.needs_change || 0),
+              reviewed: Number(assignmentCounts.reviewed || 0),
+              revoked_requested: Number(assignmentCounts.revoked_requested || 0),
+            },
+          },
+          assignments,
+        };
+      });
       setError(null);
     } catch (err) {
       setDetail(previous);
       setError(err.message || 'Failed to update assignment');
+    }
+  }
+
+  async function handleCompleteReview() {
+    if (!detail?.review?.id) return;
+    setBusy(true);
+    try {
+      await completeAccessReview(detail.review.id);
+      await loadReviews();
+      await loadDetail(detail.review.id);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to complete access review');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -351,6 +384,14 @@ export default function AccessReviews() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={`${BTN.primary} ${BTN.sm}`}
+                        onClick={handleCompleteReview}
+                        disabled={busy || detail.review.status === 'completed' || Number(detail.review.assignment_counts?.pending || 0) > 0}
+                      >
+                        Complete review
+                      </button>
                       <label className="inline-flex items-center gap-2 text-sm text-[var(--ink-2)]">
                         <input
                           type="checkbox"

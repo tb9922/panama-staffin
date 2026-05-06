@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { mkdirSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { stat, unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
@@ -11,9 +11,10 @@ import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
 import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
 import * as auditService from '../services/auditService.js';
-import { computeCqcReadiness } from '../services/assessmentService.js';
+import { computeCqcReadiness, CQC_NON_HR_SOURCE_MODULES } from '../services/assessmentService.js';
 import { queueAutoLinkClear, queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
+import { hasModuleAccess } from '../shared/roles.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
@@ -81,6 +82,11 @@ const readinessQuerySchema = z.object({
   dateRange: z.coerce.number().int().min(28).max(365).optional(),
 });
 
+function canReadHrEvidenceSources(req) {
+  return req.authDbUser?.is_platform_admin === true
+    || hasModuleAccess(req.homeRole, 'hr', 'read', { includeOwn: false });
+}
+
 function hasInvalidEvidenceDateOrder(payload) {
   return Boolean(payload?.date_from && payload?.date_to && payload.date_to < payload.date_from);
 }
@@ -99,7 +105,12 @@ router.get('/readiness', readRateLimiter, requireAuth, requireHomeAccess, requir
   try {
     const parsed = readinessQuerySchema.safeParse(req.query);
     if (!parsed.success) return zodError(res, parsed);
-    const readiness = await computeCqcReadiness(req.home.id, parsed.data.dateRange || 28);
+    const readiness = await computeCqcReadiness(
+      req.home.id,
+      parsed.data.dateRange || 28,
+      undefined,
+      { cqcEvidenceLinkSourceModules: canReadHrEvidenceSources(req) ? undefined : CQC_NON_HR_SOURCE_MODULES }
+    );
     res.json(readiness || { entries: [], questionSummary: [], gaps: [], overall: null, computedAt: null });
   } catch (err) {
     next(err);
@@ -144,7 +155,9 @@ router.put('/narratives/:statementId', writeRateLimiter, requireAuth, requireHom
     if (saved === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = existing ? diffFields(existing, saved) : { created: true };
+    const changes = existing
+      ? diffFields(existing, saved, { extraSensitive: ['narrative', 'risks', 'actions'] })
+      : { created: true };
     await auditService.log('cqc_narrative_update', req.home.slug, req.user.username, {
       quality_statement: statementParsed.data,
       changes,
@@ -264,6 +277,18 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       att.stored_name
     ));
     if (!isPathInsideRoot(uploadRoot, filePath)) return res.status(403).json({ error: 'Forbidden' });
+    try {
+      await stat(filePath);
+    } catch (err) {
+      if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+        return res.status(404).json({ error: 'Attachment file is missing' });
+      }
+      throw err;
+    }
+    await auditService.log('cqc_evidence_file_download', req.home.slug, req.user.username, {
+      evidenceId: att.evidence_id,
+      fileId: id,
+    });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,

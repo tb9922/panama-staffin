@@ -123,6 +123,34 @@ jobs:
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           ALLOWED_ORIGIN: http://localhost:5173
 
+      - name: Verify HR EDI encryption
+        run: npm run verify:hr-edi-encryption
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
+
+      - name: Verify HR health encryption
+        run: npm run verify:hr-health-encryption
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
+
       - name: Seed E2E test data
         run: node scripts/seed-e2e.js
         env:

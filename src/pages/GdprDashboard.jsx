@@ -1074,11 +1074,9 @@ export default function GdprDashboard() {
       <div>
         <h2 className="text-lg font-semibold mb-4">Access Log</h2>
         {accessLogData.length >= 500 && (
-          <InlineNotice
-            type="warning"
-            message="Showing the latest 500 access-log entries. Use the audit export for a complete evidence trail."
-            className="mb-4"
-          />
+          <InlineNotice variant="warning" className="mb-4">
+            Showing the latest 500 access-log entries. Use the audit export for a complete evidence trail.
+          </InlineNotice>
         )}
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
@@ -1116,7 +1114,7 @@ export default function GdprDashboard() {
   // ── Modals ─────────────────────────────────────────────────────────────
 
   function renderModalError() {
-    return modalError ? <InlineNotice type="error" message={modalError} /> : null;
+    return modalError ? <InlineNotice variant="error">{modalError}</InlineNotice> : null;
   }
 
   function renderRequestModal() {

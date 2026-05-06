@@ -37,6 +37,8 @@ export const RECORD_ATTACHMENT_MODULES = [
 ];
 
 export const RECORD_ATTACHMENT_MODULE_IDS = RECORD_ATTACHMENT_MODULES.map((entry) => entry.id);
+export const SENSITIVE_RECORD_ATTACHMENT_MODULE_IDS = new Set(['dols', 'mca_assessment', 'whistleblowing']);
+const SENSITIVE_RECORD_ATTACHMENT_ROLES = new Set(['home_manager', 'deputy_manager']);
 
 const RECORD_ATTACHMENT_MODULE_MAP = Object.fromEntries(
   RECORD_ATTACHMENT_MODULES.map((entry) => [entry.id, entry])
@@ -51,7 +53,7 @@ export function getRecordAttachmentModule(moduleId) {
 }
 
 export function getReadableRecordAttachmentModules(roleId) {
-  return RECORD_ATTACHMENT_MODULES.filter((entry) => hasModuleAccess(roleId, entry.permissionModule, 'read'));
+  return RECORD_ATTACHMENT_MODULES.filter((entry) => canReadRecordAttachmentModule(roleId, entry.id));
 }
 
 export function getWritableRecordAttachmentModules(roleId) {
@@ -60,7 +62,9 @@ export function getWritableRecordAttachmentModules(roleId) {
 
 export function canReadRecordAttachmentModule(roleId, moduleId) {
   const entry = getRecordAttachmentModule(moduleId);
-  return Boolean(entry && hasModuleAccess(roleId, entry.permissionModule, 'read'));
+  if (!entry || !hasModuleAccess(roleId, entry.permissionModule, 'read')) return false;
+  if (!SENSITIVE_RECORD_ATTACHMENT_MODULE_IDS.has(moduleId)) return true;
+  return SENSITIVE_RECORD_ATTACHMENT_ROLES.has(roleId);
 }
 
 export function canWriteRecordAttachmentModule(roleId, moduleId) {

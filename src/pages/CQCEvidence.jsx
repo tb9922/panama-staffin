@@ -264,7 +264,8 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
-  const hasPartialLoadErrors = partialLoadErrors.length > 0;
+  const [evidenceLoadError, setEvidenceLoadError] = useState(null);
+  const hasPartialLoadErrors = partialLoadErrors.length > 0 || Boolean(evidenceLoadError);
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState([]);
@@ -276,6 +277,7 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
 
   const loadEvidence = useCallback(async () => {
     try {
+      if (isMounted.current) setEvidenceLoadError(null);
       const home = getCurrentHome();
       const all = [];
       let offset = 0;
@@ -290,8 +292,10 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
       }
       if (isMounted.current) setEvidence(all);
     } catch (err) {
-      // Non-fatal: evidence list stays empty rather than breaking the whole page
-      if (isMounted.current) console.error('Failed to load CQC evidence:', err);
+      if (isMounted.current) {
+        setEvidence([]);
+        setEvidenceLoadError(err?.message || 'Manual CQC evidence failed to load');
+      }
     } finally {
       if (isMounted.current) setEvidenceLoading(false);
     }
@@ -632,8 +636,8 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
     try {
       await new Promise(r => setTimeout(r, 100));
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
+      await logReportDownload('cqc-evidence', `${dateRangeDays} days`, { required: true });
       generateEvidencePackPDF(dataWithEvidence, dateRangeDays);
-      logReportDownload('cqc-evidence', `${dateRangeDays} days`);
     } catch (err) {
       setPdfError('Failed to generate PDF: ' + err.message);
     } finally {
@@ -641,27 +645,33 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
     }
   }
 
-  function handleExportExcel() {
+  async function handleExportExcel() {
     if (hasPartialLoadErrors) {
       setPdfError('Excel export blocked because some CQC source modules failed to load. Refresh before export.');
       return;
     }
-    const rows = [];
-    for (const qs of QUALITY_STATEMENTS) {
-      const ev = evidenceByStatement[qs.id];
-      if (!ev) continue;
-      for (const ae of ev.autoEvidence) {
-        rows.push([qs.cqcRef, qs.name, 'Auto', ae.label, `${ae.value}${ae.unit}`, ae.detail || '', ae.source]);
+    setPdfError(null);
+    try {
+      await logReportDownload('cqc-evidence-excel', `${dateRangeDays} days`, { required: true });
+      const rows = [];
+      for (const qs of QUALITY_STATEMENTS) {
+        const ev = evidenceByStatement[qs.id];
+        if (!ev) continue;
+        for (const ae of ev.autoEvidence) {
+          rows.push([qs.cqcRef, qs.name, 'Auto', ae.label, `${ae.value}${ae.unit}`, ae.detail || '', ae.source]);
+        }
+        for (const me of ev.manualEvidence) {
+          rows.push([qs.cqcRef, qs.name, me.type, me.title, '', me.description, `${me.date_from || ''} - ${me.date_to || 'ongoing'}`]);
+        }
       }
-      for (const me of ev.manualEvidence) {
-        rows.push([qs.cqcRef, qs.name, me.type, me.title, '', me.description, `${me.date_from || ''} - ${me.date_to || 'ongoing'}`]);
-      }
+      downloadXLSX(`CQC_Evidence_${formatDate(new Date())}`, [{
+        name: 'CQC Evidence',
+        headers: ['CQC Ref', 'Statement', 'Type', 'Title', 'Value', 'Detail', 'Source / Date Range'],
+        rows,
+      }]);
+    } catch (err) {
+      setPdfError('Failed to export Excel: ' + err.message);
     }
-    downloadXLSX(`CQC_Evidence_${formatDate(new Date())}`, [{
-      name: 'CQC Evidence',
-      headers: ['CQC Ref', 'Statement', 'Type', 'Title', 'Value', 'Detail', 'Source / Date Range'],
-      rows,
-    }]);
   }
 
   const categories = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
@@ -689,7 +699,7 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
       {pdfError && <InlineNotice variant="error" className="mb-3" role="alert">{pdfError}</InlineNotice>}
       {hasPartialLoadErrors && (
         <InlineNotice variant="warning" className="mb-3" role="alert">
-          CQC source data is incomplete: {partialLoadErrors.map((item) => item.label).join(', ')} failed to load. Refresh before saving snapshots or exporting packs.
+          CQC source data is incomplete: {[...partialLoadErrors.map((item) => item.label), evidenceLoadError && 'Manual CQC evidence'].filter(Boolean).join(', ')} failed to load. Refresh before saving snapshots or exporting packs.
         </InlineNotice>
       )}
       {snapshotNotice && <InlineNotice variant="warning" className="mb-3">{snapshotNotice}</InlineNotice>}
@@ -1089,7 +1099,7 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
               <div className="p-4">
                 <EmptyState
                   title="No snapshots saved yet"
-                  description="Save a snapshot to freeze the current score, readiness summary, and evidence pack data."
+                  description="Save a snapshot to freeze the current score and readiness summary."
                   actionLabel={canEdit ? 'Save Snapshot' : undefined}
                   onAction={canEdit ? handleCreateSnapshot : undefined}
                   compact
@@ -1221,12 +1231,12 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                   throw new Error('This snapshot was created before frozen PDF exports were added. Create a new snapshot to export a signed-off evidence pack.');
                 }
                 const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
+                await logReportDownload('cqc-evidence', `snapshot ${viewingSnapshot?.id || ''}`.trim(), { required: true });
                 generateEvidencePackPDF(
                   frozenData,
                   viewingSnapshot?.result?.evidencePackMeta?.date_range_days || dateRangeDays,
                   viewingSnapshot
                 );
-                logReportDownload('cqc-evidence', `snapshot ${viewingSnapshot?.id || ''}`.trim());
               } catch (e) { setSnapshotError(e.message); }
               finally { setGenerating(false); }
             }} disabled={generating || !snapshotPdfAvailable}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>

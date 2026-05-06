@@ -43,6 +43,69 @@ import { formatDate, parseDate, addDays } from '../shared/rotation.js';
 import { endOfLocalMonthISO, startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 
 const ASSESSMENT_PAGE_SIZE = 500;
+const CQC_HR_SOURCE_MODULES = new Set([
+  'onboarding',
+  'care_certificate',
+  'whistleblowing',
+  'dols',
+  'mca_assessment',
+  'hr_disciplinary',
+  'hr_grievance',
+  'hr_performance',
+  'hr_rtw_interview',
+  'hr_oh_referral',
+  'hr_contract',
+  'hr_family_leave',
+  'hr_flexible_working',
+  'hr_edi',
+  'hr_tupe',
+  'hr_renewal',
+]);
+const CQC_SOURCE_MODULES = [
+  'incident',
+  'complaint',
+  'training_record',
+  'supervision',
+  'appraisal',
+  'fire_drill',
+  'ipc_audit',
+  'maintenance',
+  'risk',
+  'policy_review',
+  'whistleblowing',
+  'dols',
+  'mca_assessment',
+  'cqc_evidence',
+  'cqc_partner_feedback',
+  'cqc_observation',
+  'handover',
+  'onboarding',
+  'care_certificate',
+  'hr_disciplinary',
+  'hr_grievance',
+  'hr_performance',
+  'hr_rtw_interview',
+  'hr_oh_referral',
+  'hr_contract',
+  'hr_family_leave',
+  'hr_flexible_working',
+  'hr_edi',
+  'hr_tupe',
+  'hr_renewal',
+];
+export const CQC_NON_HR_SOURCE_MODULES = CQC_SOURCE_MODULES.filter((module) => !CQC_HR_SOURCE_MODULES.has(module));
+
+function filterCqcDataForSourceVisibility(data, { cqcEvidenceLinkSourceModules } = {}) {
+  if (!cqcEvidenceLinkSourceModules) return data;
+  return {
+    ...data,
+    whistleblowing_concerns: [],
+    dols: [],
+    mca_assessments: [],
+    onboarding: {},
+    care_certificate: {},
+  };
+}
 
 function mergePagedRows(target, pageRows) {
   if (Array.isArray(pageRows)) {
@@ -81,7 +144,7 @@ async function loadAllPages(findPage, seed) {
 // ── CQC Data Assembly ───────────────────────────────────────────────────────
 // Gathers the same data shape that CQCEvidence.jsx builds client-side.
 
-async function gatherCqcData(homeId, windowFrom, windowTo) {
+async function gatherCqcData(homeId, windowFrom, windowTo, { cqcEvidenceLinkSourceModules } = {}) {
   const home = await homeRepo.findById(homeId);
   if (!home) return null;
 
@@ -115,7 +178,7 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     careCertRepo.findByHome(homeId),
     onboardingRepo.findByHome(homeId),
     loadAllPages((pg) => cqcEvidenceRepo.findByHome(homeId, pg), []),
-    cqcEvidenceLinksRepo.findAllByHome(homeId),
+    cqcEvidenceLinksRepo.findAllByHome(homeId, { sourceModules: cqcEvidenceLinkSourceModules }),
     cqcNarrativeRepo.findByHome(homeId),
   ]);
 
@@ -182,12 +245,13 @@ async function gatherGdprData(homeId) {
 
 // ── Compute Snapshot ────────────────────────────────────────────────────────
 
-export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
+export async function computeSnapshot(homeId, engine, windowFrom, windowTo, options = {}) {
   const today = todayLocalISO();
 
   if (engine === 'cqc') {
-    const data = await gatherCqcData(homeId, windowFrom, windowTo);
-    if (!data) return null;
+    const gatheredData = await gatherCqcData(homeId, windowFrom, windowTo, options);
+    if (!gatheredData) return null;
+    const data = filterCqcDataForSourceVisibility(gatheredData, options);
     // Honor explicit window dates if provided; otherwise default to 28 days ending today
     let dateRange;
     if (windowFrom && windowTo) {
@@ -210,13 +274,13 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
       band: result.band.label,
       result: {
         ...result,
-        evidencePackData: data,
         evidencePackMeta: {
           window_from: formatDate(dateRange.from),
           window_to: formatDate(dateRange.to),
           date_range_days: dateRange.days,
           as_of_date: asOfDate,
         },
+        evidencePackData: data,
         readiness,
       },
     };
@@ -236,9 +300,10 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
   return null;
 }
 
-export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = todayLocalISO()) {
+export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = todayLocalISO(), options = {}) {
   const dateRange = getDateRange(dateRangeDays);
-  const data = await gatherCqcData(homeId, formatDate(dateRange.from), formatDate(dateRange.to));
-  if (!data) return null;
+  const gatheredData = await gatherCqcData(homeId, formatDate(dateRange.from), formatDate(dateRange.to), options);
+  if (!gatheredData) return null;
+  const data = filterCqcDataForSourceVisibility(gatheredData, options);
   return buildReadinessPayload(data, dateRange, asOfDate);
 }

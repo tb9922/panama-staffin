@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireHomeAccess, requireModule, requirePlatformAdmin } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requirePlatformAdmin } from '../middleware/auth.js';
 import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { findHomeSlugsForUser, getHomeRole } from '../repositories/userHomeRepo.js';
@@ -118,14 +118,22 @@ router.delete('/purge', writeRateLimiter, requireAuth, requirePlatformAdmin, req
 
 // POST /api/audit/report-download — log report PDF generation
 const reportDownloadSchema = z.object({
-  reportType: z.enum(['roster', 'cost', 'coverage', 'staff', 'boardpack', 'cqc-evidence']),
+  reportType: z.enum(['roster', 'cost', 'coverage', 'staff', 'boardpack', 'cqc-evidence', 'cqc-evidence-excel']),
   dateRange: z.string().max(100).optional().default(''),
 });
 
-router.post('/report-download', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('reports', 'read'), async (req, res, next) => {
+function reportAuditModule(reportType) {
+  return String(reportType || '').startsWith('cqc-evidence') ? 'compliance' : 'reports';
+}
+
+router.post('/report-download', writeRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = reportDownloadSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    const moduleId = reportAuditModule(parsed.data.reportType);
+    const allowed = isVerifiedPlatformAdmin(req)
+      || hasModuleAccess(req.homeRole, moduleId, 'read', { includeOwn: false });
+    if (!allowed) return res.status(403).json({ error: `You do not have ${moduleId} read access for this report audit` });
     await auditService.log('report_download', req.home.slug, req.user.username, parsed.data);
     res.json({ ok: true });
   } catch (err) {

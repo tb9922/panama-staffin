@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { mkdirSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { stat, unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
@@ -23,12 +23,23 @@ const router = Router();
 const moduleSchema = z.enum(RECORD_ATTACHMENT_MODULE_IDS);
 const recordIdSchema = z.string().min(1).max(50);
 const descriptionSchema = z.string().max(5000).nullable().optional();
+const SENSITIVE_RECORD_ATTACHMENT_MODULES = new Set(['dols', 'mca_assessment', 'whistleblowing']);
+const SENSITIVE_RECORD_ATTACHMENT_ROLES = new Set(['home_manager', 'deputy_manager']);
 
 function safePath(segment) {
   return String(segment).replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
+function canAccessSensitiveRecordAttachment(req, moduleId) {
+  if (!SENSITIVE_RECORD_ATTACHMENT_MODULES.has(moduleId)) return true;
+  if (req.authDbUser?.is_platform_admin === true && req.homeRole != null) return true;
+  return SENSITIVE_RECORD_ATTACHMENT_ROLES.has(req.homeRole);
+}
+
 function withRecordModuleAccess(req, res, next, moduleId, level, handler) {
+  if (!canAccessSensitiveRecordAttachment(req, moduleId)) {
+    return res.status(403).json({ error: 'Manager access is required for sensitive record attachments' });
+  }
   return requireModule(RECORD_ATTACHMENT_PERMISSION_BY_MODULE[moduleId], level)(req, res, () => {
     Promise.resolve(handler()).catch(next);
   });
@@ -92,6 +103,19 @@ router.get('/download/:id', readRateLimiter, requireAuth, requireHomeAccess, asy
       if (!isPathInsideRoot(uploadDir, filePath)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
+      try {
+        await stat(filePath);
+      } catch (err) {
+        if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+          return res.status(404).json({ error: 'Attachment file is missing' });
+        }
+        throw err;
+      }
+      await auditService.log('record_attachment_download', req.home.slug, req.user.username, {
+        module: attachment.module,
+        recordId: attachment.record_id,
+        fileId: id,
+      });
       sendStoredDownload(res, next, filePath, {
         originalName: attachment.original_name,
         mimeType: attachment.mime_type,

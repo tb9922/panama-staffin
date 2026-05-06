@@ -12,6 +12,8 @@ describe('release gate wiring', () => {
     expect(releaseScript).toContain('npm run test:ci');
     expect(releaseScript).toContain('npm run test:integration');
     expect(releaseScript).toContain('npm run audit:routes');
+    expect(releaseScript).toContain('npm run verify:hr-edi-encryption');
+    expect(releaseScript).toContain('npm run verify:hr-health-encryption');
     expect(releaseScript).toContain('npm run verify:action-backfill');
     expect(releaseScript).toContain('npm run verify:v1-operational');
     expect(releaseScript).toContain('npm run test:v1-scale');
@@ -21,6 +23,8 @@ describe('release gate wiring', () => {
 
   it('keeps CI wired to operational, scale, and stress gates', () => {
     expect(workflow).toContain('Run integration tests');
+    expect(workflow).toContain('Verify HR EDI encryption');
+    expect(workflow).toContain('Verify HR health encryption');
     expect(workflow).toContain('Run V1 action backfill gate');
     expect(workflow).toContain('Run V1 operational gate');
     expect(workflow).toContain('Run V1 scale/load gate');

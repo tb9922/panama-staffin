@@ -42,6 +42,7 @@ const SELF_SERVICE_ROUTES = new Set([
 
 const CUSTOM_AUTHZ_ROUTES = new Map([
   ['GET /api/audit', 'custom scoped audit-log authorization'],
+  ['POST /api/audit/report-download', 'custom report-type authorization'],
   ['GET /api/gdpr/access-log', 'custom scoped GDPR access-log authorization'],
   ['POST /api/handover', 'custom handover category authorization'],
   ['PUT /api/handover/:id', 'custom handover category authorization'],

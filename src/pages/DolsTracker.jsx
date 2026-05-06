@@ -315,7 +315,7 @@ export default function DolsTracker() {
       const statusDef = MCA_STATUSES.find(s => s.id === st.status);
       return [
         mca.resident_name, mca.assessment_date, mca.assessor || '',
-        mca.decision_area || '', mca.lacks_capacity ? 'Yes' : 'No',
+        mca.decision_area || '', 'lacks_capacity' in mca ? (mca.lacks_capacity ? 'Yes' : 'No') : 'Restricted',
         mca.best_interest_decision || '', mca.next_review_date || '',
         statusDef?.name || st.status, mca.notes || '',
       ];
@@ -526,9 +526,11 @@ export default function DolsTracker() {
                         <td className={TABLE.td}>{mca.assessor || '-'}</td>
                         <td className={TABLE.td}>{mca.decision_area || '-'}</td>
                         <td className={TABLE.td}>
-                          {mca.lacks_capacity
-                            ? <span className={BADGE.red}>Lacks Capacity</span>
-                            : <span className={BADGE.green}>Has Capacity</span>}
+                          {'lacks_capacity' in mca
+                            ? (mca.lacks_capacity
+                              ? <span className={BADGE.red}>Lacks Capacity</span>
+                              : <span className={BADGE.green}>Has Capacity</span>)
+                            : <span className={BADGE.gray}>Restricted</span>}
                         </td>
                         <td className={TABLE.td}>{mca.next_review_date || '-'}</td>
                         <td className={TABLE.td}><span className={mcaStatusBadge(st.status)}>{statusDef?.name || st.status}</span></td>

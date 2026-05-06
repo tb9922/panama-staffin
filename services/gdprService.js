@@ -17,6 +17,21 @@ function dedupeById(rows) {
   return rows.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
 }
 
+async function loadAllRepoRows(findPage, pageSize = 500) {
+  const rows = [];
+  let offset = 0;
+  let total = Infinity;
+  while (offset < total) {
+    const result = await findPage({ limit: pageSize, offset });
+    const pageRows = result?.rows || [];
+    rows.push(...pageRows);
+    total = Number.isFinite(Number(result?.total)) ? Number(result.total) : rows.length;
+    if (pageRows.length === 0 || rows.length >= total) break;
+    offset += pageRows.length;
+  }
+  return { rows };
+}
+
 function normaliseMatchValues(values) {
   return [...new Set((values || [])
     .map((value) => typeof value === 'string' ? value.trim() : '')
@@ -105,6 +120,75 @@ export async function deleteErasureAttachmentFiles(filePaths) {
       }
     }
   }
+}
+
+async function queueRetentionPurgeFiles(client, entries) {
+  const ids = [];
+  for (const entry of entries) {
+    if (!entry?.filePath) continue;
+    const { rows } = await client.query(
+      `INSERT INTO retention_purge_files
+         (home_id, source_module, source_table, source_id, file_path)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [
+        entry.homeId,
+        entry.sourceModule,
+        entry.sourceTable,
+        String(entry.sourceId),
+        entry.filePath,
+      ],
+    );
+    ids.push(rows[0].id);
+  }
+  return ids;
+}
+
+export async function processQueuedRetentionPurgeFiles(ids, { throwOnFailure = false } = {}) {
+  if (!ids?.length) return { deleted: 0, failed: 0 };
+  const { rows } = await pool.query(
+    `SELECT id, file_path
+       FROM retention_purge_files
+      WHERE id = ANY($1::bigint[])
+        AND status IN ('pending', 'failed')
+      ORDER BY id`,
+    [ids],
+  );
+  let deleted = 0;
+  let failed = 0;
+  const uploadRoot = path.resolve(appConfig.upload.dir);
+  for (const row of rows) {
+    try {
+      const resolved = path.resolve(row.file_path);
+      if (!isPathInsideRoot(uploadRoot, resolved)) {
+        throw new ValidationError('Attachment path is outside the upload directory');
+      }
+      try {
+        await fs.unlink(resolved);
+      } catch (err) {
+        if (err?.code !== 'ENOENT') throw err;
+      }
+      await pool.query(
+        `UPDATE retention_purge_files
+            SET status = 'deleted', error = NULL, processed_at = NOW()
+          WHERE id = $1`,
+        [row.id],
+      );
+      deleted += 1;
+    } catch (err) {
+      failed += 1;
+      await pool.query(
+        `UPDATE retention_purge_files
+            SET status = 'failed', error = $2, processed_at = NOW()
+          WHERE id = $1`,
+        [row.id, err?.message || 'Unable to delete file'],
+      );
+    }
+  }
+  if (failed > 0 && throwOnFailure) {
+    throw new Error(`${failed} queued retention file purge(s) failed`);
+  }
+  return { deleted, failed };
 }
 
 async function resolveAnonymisedStaffName(client, homeId, staffId, startDate) {
@@ -289,8 +373,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
            WHERE gc.home_id = $1 AND gc.staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — absence management
-        () => conn.query(`SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        () => conn.query(`SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => loadAllRepoRows((pag) => hrRepo.findRtwInterviews(homeId, { staffId: subjectId }, conn, pag)),
+        () => loadAllRepoRows((pag) => hrRepo.findOhReferrals(homeId, { staffId: subjectId }, conn, pag)),
         // HR module — contracts, family leave, flexible working, EDI
         () => conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -347,10 +431,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
              ${hrSubjectCaseCondition('a')}
            )`, [homeId, subjectId, staffName || null]),
         () => conn.query(
-          `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+          `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
           [homeId, subjectId]),
         () => conn.query(
-          `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+          `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
           [homeId, subjectId]),
         // Payroll shift detail (per-day hours, rates, amounts)
         () => conn.query(
@@ -681,7 +765,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
  * Uses transaction — all-or-nothing. Preserves record structure for CQC auditability.
  */
 export async function executeErasure(staffId, homeId, requestId, username, homeSlug) {
-  return withTransaction(async (client) => {
+  const attachmentFilePurges = [];
+  let queuedFilePurgeIds = [];
+  const result = await withTransaction(async (client) => {
     if (requestId) {
       const request = await gdprRepo.findRequestById(requestId, homeId, client);
       if (!request) throw new ValidationError('Data request not found');
@@ -757,26 +843,30 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
     const { rows: trainingAttachments } = await client.query(
-      `SELECT stored_name, training_type
+      `SELECT id, stored_name, training_type
          FROM training_file_attachments
-        WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
-    await deleteErasureAttachmentFiles(trainingAttachments.map((attachment) => (
-      erasureAttachmentPath(
+    attachmentFilePurges.push(...trainingAttachments.map((attachment) => ({
+      homeId,
+      sourceModule: 'training',
+      sourceTable: 'training_file_attachments',
+      sourceId: attachment.id,
+      filePath: erasureAttachmentPath(
         String(homeId),
         'training',
         String(staffId),
         String(attachment.training_type),
         attachment.stored_name,
-      )
-    )));
+      ),
+    })));
     await client.query(
       `UPDATE training_file_attachments
           SET original_name = CONCAT('redacted-training-evidence-', id),
               description = NULL,
-              deleted_at = NOW()
-        WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+              deleted_at = COALESCE(deleted_at, NOW())
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
 
@@ -843,7 +933,10 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `UPDATE hr_oh_referrals SET
          reason = $2, questions_for_oh = '[]'::jsonb,
          report_summary = NULL, adjustments_recommended = NULL,
-         adjustments_implemented = '[]'::jsonb
+         adjustments_implemented = '[]'::jsonb,
+         sensitive_encrypted = NULL,
+         sensitive_iv = NULL,
+         sensitive_tag = NULL
        WHERE home_id = $1 AND staff_id = $3`,
       [homeId, anon, staffId]
     );
@@ -851,7 +944,12 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Param is $2 not $3 — no anon value needed, just NULL.
     await client.query(
       `UPDATE hr_rtw_interviews SET
-         notes = NULL, adjustments_detail = NULL, fit_note_adjustments = NULL
+         notes = NULL,
+         adjustments_detail = NULL,
+         fit_note_adjustments = NULL,
+         sensitive_encrypted = NULL,
+         sensitive_iv = NULL,
+         sensitive_tag = NULL
        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
@@ -892,14 +990,17 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Delete HR file attachments linked to this staff member's cases (documents may contain personal data)
     const hrCaseCondition = hrSubjectCaseCondition('a', '$3');
     const { rows: attachments } = await client.query(
-      `SELECT a.stored_name, a.case_type, a.case_id FROM hr_file_attachments a
+      `SELECT a.id, a.stored_name, a.case_type, a.case_id FROM hr_file_attachments a
        WHERE a.home_id = $1 AND (${hrCaseCondition})`,
       [homeId, staffId, originalName || null]
     );
-    // Delete physical files before metadata so failures leave the DB reference intact.
-    await deleteErasureAttachmentFiles(attachments.map((att) => (
-      erasureAttachmentPath(String(homeId), att.case_type, String(att.case_id), att.stored_name)
-    )));
+    attachmentFilePurges.push(...attachments.map((att) => ({
+      homeId,
+      sourceModule: `hr_${att.case_type}`,
+      sourceTable: 'hr_file_attachments',
+      sourceId: att.id,
+      filePath: erasureAttachmentPath(String(homeId), att.case_type, String(att.case_id), att.stored_name),
+    })));
     // Delete attachment metadata
     await client.query(
       `DELETE FROM hr_file_attachments a WHERE a.home_id = $1 AND (${hrCaseCondition})`,
@@ -993,28 +1094,47 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
 
-    // Remove onboarding data (pre-employment checks — not needed after erasure)
+    // Redact onboarding data while preserving the regulated evidence shell.
     await client.query(
-      `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = $2`,
+      `UPDATE onboarding
+          SET data = COALESCE((
+                SELECT jsonb_object_agg(section_key, jsonb_build_object('redacted', true))
+                  FROM jsonb_object_keys(
+                    CASE
+                      WHEN jsonb_typeof(onboarding.data) = 'object' THEN onboarding.data
+                      ELSE '{}'::jsonb
+                    END
+                  ) AS section_key
+              ), '{}'::jsonb),
+              updated_at = NOW()
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
     const { rows: onboardingAttachments } = await client.query(
-      `SELECT stored_name, section
+      `SELECT id, stored_name, section
          FROM onboarding_file_attachments
-        WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
-    await deleteErasureAttachmentFiles(onboardingAttachments.map((attachment) => (
-      erasureAttachmentPath(
+    attachmentFilePurges.push(...onboardingAttachments.map((attachment) => ({
+      homeId,
+      sourceModule: 'onboarding',
+      sourceTable: 'onboarding_file_attachments',
+      sourceId: attachment.id,
+      filePath: erasureAttachmentPath(
         String(homeId),
         'onboarding',
         String(staffId),
         String(attachment.section),
         attachment.stored_name,
-      )
-    )));
+      ),
+    })));
     await client.query(
-      `DELETE FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      `UPDATE onboarding_file_attachments
+          SET original_name = CONCAT('redacted-onboarding-evidence-', id),
+              description = NULL,
+              deleted_at = COALESCE(deleted_at, NOW())
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
     // Clear care certificate progress (supervisor name and assessment notes)
@@ -1204,8 +1324,14 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Audit the erasure
     await auditRepo.log('erasure', homeSlug || null, username, `Erased staff ${staffId} from home ${homeId}`, client);
 
+    queuedFilePurgeIds = await queueRetentionPurgeFiles(client, attachmentFilePurges);
     return { anonymised: true, staff_id: staffId };
   });
+  const purgeResult = await processQueuedRetentionPurgeFiles(queuedFilePurgeIds);
+  if (purgeResult.failed > 0) {
+    logger.warn({ queuedFilePurgeIds, purgeResult }, 'Some GDPR erasure file purges failed and remain queued');
+  }
+  return result;
 }
 
 /**
@@ -1474,7 +1600,12 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
   'action_items', 'reflective_practice', 'agency_approval_attempts',
   'audit_tasks', 'outcome_metrics',
-  'retention_schedule', 'cqc_statement_narratives',
+  'retention_schedule', 'complaint_surveys', 'mca_assessments', 'cqc_evidence',
+  'cqc_evidence_links', 'cqc_evidence_files', 'cqc_partner_feedback',
+  'cqc_observations', 'cqc_statement_narratives', 'training_file_attachments',
+  'record_file_attachments', 'ropa_activities', 'dpia_assessments',
+  'data_requests', 'data_breaches', 'dp_complaints', 'gdpr_processors',
+  'consent_records', 'access_reviews', 'access_review_assignments', 'access_review_decisions',
   // HR module tables (6-year retention per Limitation Act 1980)
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',
@@ -1485,7 +1616,7 @@ const RETENTION_ALLOWED_TABLES = new Set([
 
 // Global tables skipped from per-home retention scan (see scanRetention).
 // These lack meaningful per-home scoping — their counts reflect all homes combined.
-const GLOBAL_TABLES = new Set(['retention_schedule']);
+const GLOBAL_TABLES = new Set(['retention_schedule', 'access_reviews', 'access_review_decisions']);
 
 // Date column overrides for tables that don't use 'created_at'.
 const RETENTION_DATE_COLUMNS = Object.freeze({
@@ -1494,6 +1625,11 @@ const RETENTION_DATE_COLUMNS = Object.freeze({
   onboarding: 'updated_at',
   pension_enrolments: 'updated_at',
   outcome_metrics: 'recorded_at',
+  data_requests: 'date_received',
+  data_breaches: 'discovered_date',
+  dp_complaints: 'date_received',
+  consent_records: 'COALESCE(withdrawn, created_at)',
+  access_review_decisions: 'decided_at',
 });
 
 export async function scanRetention(homeId) {

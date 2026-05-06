@@ -238,6 +238,21 @@ describe('Processor Register — /processors', () => {
     }).expect(400);
   });
 
+  it('PUT rejects signed status without a final signed_date', async () => {
+    const created = await adminPost(`/processors?home=${homeASlug}`, {
+      provider_name: 'Pending Processor',
+      provider_role: 'processor',
+      categories_of_data: 'Staff records',
+      categories_of_subjects: 'Staff',
+      dpa_status: 'requested',
+    }).expect(201);
+
+    await adminPut(`/processors/${created.body.id}?home=${homeASlug}`, {
+      _version: created.body.version,
+      dpa_status: 'signed',
+    }).expect(400);
+  });
+
   it('tenant isolation hides other home processor entries', async () => {
     await adminPost(`/processors?home=${homeBSlug}`, {
       provider_name: 'Home B Processor',
@@ -812,6 +827,27 @@ describe('DP Complaints — /complaints', () => {
 
     expect(res.body.status).toBe('investigating');
     expect(res.body.ico_involved).toBe(true);
+  });
+
+  it('redacts DP complaint narrative diffs from the audit log', async () => {
+    const secretResolution = 'Sensitive complaint resolution details';
+    await adminPut(`/complaints/${complaintId}?home=${homeASlug}`, {
+      resolution: secretResolution,
+      ico_reference: 'ICO-SENSITIVE-REF',
+    }).expect(200);
+
+    const { rows } = await pool.query(
+      `SELECT details FROM audit_log
+        WHERE home_slug = $1
+          AND action = 'gdpr_complaint_update'
+        ORDER BY ts DESC
+        LIMIT 1`,
+      [homeASlug]
+    );
+    const details = JSON.stringify(rows[0]?.details || {});
+    expect(details).not.toContain(secretResolution);
+    expect(details).not.toContain('ICO-SENSITIVE-REF');
+    expect(details).toContain('[REDACTED]');
   });
 
   it('POST rejects invalid category (Zod)', async () => {

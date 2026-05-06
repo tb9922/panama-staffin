@@ -226,6 +226,15 @@ beforeAll(async () => {
   ERASURE_FILE_PATHS.onboarding = await createUploadFixture(
     path.join(String(homeA), 'onboarding', STAFF[0], 'contract', 'gdpr-onboarding-doc.pdf')
   );
+  await pool.query(
+    `INSERT INTO onboarding_file_attachments
+       (home_id, staff_id, section, original_name, stored_name, mime_type, size_bytes, description, uploaded_by, deleted_at)
+     VALUES ($1, $2, 'dbs_check', 'old-dbs.pdf', 'gdpr-onboarding-old-dbs.pdf', 'application/pdf', 24, 'Old DBS evidence', 'test-runner', NOW())`,
+    [homeA, STAFF[0]]
+  );
+  ERASURE_FILE_PATHS.onboardingDeleted = await createUploadFixture(
+    path.join(String(homeA), 'onboarding', STAFF[0], 'dbs_check', 'gdpr-onboarding-old-dbs.pdf')
+  );
 
   // ── Care Certificate ───────────────────────────────────────────────────
   await pool.query(
@@ -319,6 +328,7 @@ beforeAll(async () => {
 async function cleanHome(hid) {
   // Reverse FK order cleanup
   const tables = [
+    { sql: `DELETE FROM retention_purge_files WHERE home_id = $1` },
     { sql: `DELETE FROM cqc_evidence_files WHERE evidence_id IN (SELECT id FROM cqc_evidence WHERE home_id = $1)` },
     { sql: `DELETE FROM cqc_evidence_links WHERE home_id = $1` },
     { sql: `DELETE FROM cqc_partner_feedback WHERE home_id = $1` },
@@ -577,6 +587,29 @@ describe('gatherPersonalData: staff', () => {
       status: 'open',
       notes: 'Occupational health follow-up',
     });
+    await hrRepo.createRtwInterview(homeA, {
+      staff_id: STAFF[0],
+      absence_start_date: '2025-09-01',
+      absence_end_date: '2025-09-03',
+      absence_reason: 'Stress related absence',
+      rtw_date: '2025-09-04',
+      rtw_conducted_by: 'HR Manager',
+      adjustments_needed: true,
+      adjustments_detail: 'Phased return',
+      notes: 'Private RTW notes',
+      created_by: 'test-runner',
+    });
+    await hrRepo.createOhReferral(homeA, {
+      staff_id: STAFF[0],
+      referral_date: '2025-09-05',
+      referred_by: 'HR Manager',
+      reason: 'Back pain affecting role',
+      questions_for_oh: ['Can the employee safely lift?'],
+      report_summary: 'OH report contains private health details',
+      adjustments_recommended: 'Avoid heavy lifting',
+      notes: 'Private OH notes',
+      created_by: 'test-runner',
+    });
     result = await gdprService.gatherPersonalData('staff', STAFF[0], homeA);
   });
 
@@ -632,6 +665,15 @@ describe('gatherPersonalData: staff', () => {
     expect(result.data.hr_edi_records.length).toBeGreaterThanOrEqual(1);
     expect(result.data.hr_edi_records[0].condition_description).toContain('Back injury');
     expect(result.data.hr_edi_records[0].adjustments).toContain('Height-adjustable desk');
+  });
+
+  it('returns decrypted HR health fields in SAR output', () => {
+    expect(result.data.hr_rtw_interviews.length).toBeGreaterThanOrEqual(1);
+    expect(result.data.hr_rtw_interviews[0].absence_reason).toContain('Stress related absence');
+    expect(result.data.hr_rtw_interviews[0].adjustments_detail).toContain('Phased return');
+    expect(result.data.hr_oh_referrals.length).toBeGreaterThanOrEqual(1);
+    expect(result.data.hr_oh_referrals[0].reason).toContain('Back pain');
+    expect(result.data.hr_oh_referrals[0].report_summary).toContain('private health details');
   });
 
   it('includes DP complaints linked by subject_id even when the complainant name differs', async () => {
@@ -802,10 +844,17 @@ describe('executeErasure', () => {
     expect(trainingFiles[0].deleted_at).toBeTruthy();
 
     const { rows: onboardingFiles } = await pool.query(
-      `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      `SELECT original_name, description, deleted_at
+         FROM onboarding_file_attachments
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeA, targetStaff]
     );
-    expect(onboardingFiles).toHaveLength(0);
+    expect(onboardingFiles).toHaveLength(2);
+    for (const file of onboardingFiles) {
+      expect(file.original_name).toMatch(/^redacted-onboarding-evidence-/);
+      expect(file.description).toBeNull();
+      expect(file.deleted_at).toBeTruthy();
+    }
 
     const { rows: hrFiles } = await pool.query(
       `SELECT * FROM hr_file_attachments WHERE home_id = $1`,
@@ -815,7 +864,18 @@ describe('executeErasure', () => {
 
     await expect(fs.access(ERASURE_FILE_PATHS.training)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(fs.access(ERASURE_FILE_PATHS.onboarding)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(ERASURE_FILE_PATHS.onboardingDeleted)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(fs.access(ERASURE_FILE_PATHS.hr)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const { rows: purgeRows } = await pool.query(
+      `SELECT source_table, status
+         FROM retention_purge_files
+        WHERE home_id = $1
+          AND source_table IN ('training_file_attachments', 'onboarding_file_attachments', 'hr_file_attachments')`,
+      [homeA]
+    );
+    expect(purgeRows.length).toBeGreaterThanOrEqual(4);
+    expect(purgeRows.every((row) => row.status === 'deleted')).toBe(true);
   });
 
   it('anonymises supervisions', async () => {
@@ -904,6 +964,36 @@ describe('executeErasure', () => {
     expect(rows[0].sensitive_tag).toBeNull();
   });
 
+  it('clears encrypted OH and RTW payloads during erasure', async () => {
+    const { rows: rtwRows } = await pool.query(
+      `SELECT absence_reason, adjustments_detail, notes, sensitive_encrypted, sensitive_iv, sensitive_tag
+         FROM hr_rtw_interviews
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(rtwRows.length).toBeGreaterThanOrEqual(1);
+    expect(rtwRows[0].absence_reason).toBeNull();
+    expect(rtwRows[0].adjustments_detail).toBeNull();
+    expect(rtwRows[0].notes).toBeNull();
+    expect(rtwRows[0].sensitive_encrypted).toBeNull();
+    expect(rtwRows[0].sensitive_iv).toBeNull();
+    expect(rtwRows[0].sensitive_tag).toBeNull();
+
+    const { rows: ohRows } = await pool.query(
+      `SELECT reason, report_summary, adjustments_recommended, sensitive_encrypted, sensitive_iv, sensitive_tag
+         FROM hr_oh_referrals
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(ohRows.length).toBeGreaterThanOrEqual(1);
+    expect(ohRows[0].reason).toMatch(/REDACTED/);
+    expect(ohRows[0].report_summary).toBeNull();
+    expect(ohRows[0].adjustments_recommended).toBeNull();
+    expect(ohRows[0].sensitive_encrypted).toBeNull();
+    expect(ohRows[0].sensitive_iv).toBeNull();
+    expect(ohRows[0].sensitive_tag).toBeNull();
+  });
+
   it('redacts name-keyed records (case notes, addenda, handovers)', async () => {
     // HR case notes — author replaced with anon, content redacted
     const { rows: notes } = await pool.query(
@@ -929,12 +1019,15 @@ describe('executeErasure', () => {
     expect(handovers[0].content).toBe('[REDACTED]');
   });
 
-  it('deletes onboarding, anonymises care certs and complaints', async () => {
-    // Onboarding deleted entirely (pre-employment checks)
+  it('redacts onboarding, anonymises care certs and complaints', async () => {
+    // Onboarding is retained as a regulated evidence shell, with section payloads redacted.
     const { rows: ob } = await pool.query(
       `SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeA, targetStaff]
     );
-    expect(ob).toHaveLength(0);
+    expect(ob).toHaveLength(1);
+    expect(Object.values(ob[0].data || {})).toEqual(
+      expect.arrayContaining([expect.objectContaining({ redacted: true })])
+    );
 
     // Care certificate — supervisor anonymised, standards cleared
     const { rows: cc } = await pool.query(

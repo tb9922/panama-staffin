@@ -12,6 +12,21 @@ import { validateDpiaStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 
+const DPIA_AUDIT_SENSITIVE_FIELDS = [
+  'processing_description',
+  'purpose',
+  'scope',
+  'screening_rationale',
+  'high_risk_triggers',
+  'necessity_assessment',
+  'proportionality_assessment',
+  'risk_assessment',
+  'measures',
+  'dpo_advice',
+  'stakeholder_views',
+  'notes',
+];
+
 const dpiaStatusSchema = z.enum(['screening', 'in_progress', 'completed', 'approved', 'review_due']).optional();
 
 const idSchema = z.coerce.number().int().positive();
@@ -96,7 +111,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const { version, payload } = splitVersion(parsed.data);
     const result = await dpiaRepo.update(idP.data, req.home.id, payload, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    await auditService.log('dpia_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) });
+    await auditService.log('dpia_update', req.home.slug, req.user.username, {
+      id: idP.data,
+      changes: diffFields(existing, result, { extraSensitive: DPIA_AUDIT_SENSITIVE_FIELDS }),
+    });
     res.json(result);
   } catch (err) { next(err); }
 });
