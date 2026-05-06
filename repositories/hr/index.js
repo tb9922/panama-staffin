@@ -4,7 +4,7 @@
 
 export { createShaper, paginate, softDeleteCase } from './shared.js';
 export { findDisciplinary, findDisciplinaryById, createDisciplinary, updateDisciplinary } from './disciplinary.js';
-export { findGrievance, findGrievanceById, createGrievance, updateGrievance, findGrievanceActions, createGrievanceAction, updateGrievanceAction } from './grievance.js';
+export { findGrievance, findGrievanceById, createGrievance, updateGrievance, findGrievanceActions, findGrievanceActionById, createGrievanceAction, updateGrievanceAction } from './grievance.js';
 export { findPerformance, findPerformanceById, createPerformance, updatePerformance } from './performance.js';
 export { findRtwInterviews, findRtwInterviewById, createRtwInterview, updateRtwInterview } from './rtw.js';
 export { findOhReferrals, findOhReferralById, createOhReferral, updateOhReferral } from './oh.js';

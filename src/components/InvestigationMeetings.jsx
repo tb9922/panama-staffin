@@ -42,6 +42,7 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [form, setForm] = useState(initialForm);
   const meetingDateId = useId();
@@ -90,10 +91,12 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
   }
 
   async function handleSave() {
+    if (saving) return;
     setError(null);
     if (!form.meeting_date) { setError('Meeting date is required'); return; }
     if (form.attendees.length === 0) { setError('At least one attendee is required'); return; }
     if (form.attendees.some(a => !a.name.trim())) { setError('All attendees must have a name'); return; }
+    setSaving(true);
     try {
       await createHrMeeting(caseType, caseId, form);
       setShowForm(false);
@@ -101,6 +104,8 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
       await loadMeetings();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -235,8 +240,10 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
 
           {/* Footer */}
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button onClick={() => setShowForm(false)} className={BTN.secondary + ' ' + BTN.sm}>Cancel</button>
-            <button onClick={handleSave} className={BTN.primary + ' ' + BTN.sm}>Save Meeting</button>
+            <button type="button" onClick={() => setShowForm(false)} disabled={saving} className={BTN.secondary + ' ' + BTN.sm}>Cancel</button>
+            <button type="button" onClick={handleSave} disabled={saving} className={BTN.primary + ' ' + BTN.sm}>
+              {saving ? 'Saving...' : 'Save Meeting'}
+            </button>
           </div>
         </div>
       )}

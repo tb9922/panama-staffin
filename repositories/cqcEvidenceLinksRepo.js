@@ -55,6 +55,45 @@ function addDateRange(where, params, dateFrom, dateTo) {
   }
 }
 
+function addActiveHrSourceFilter(where) {
+  where.push(`(
+    source_module NOT LIKE 'hr\\_%' ESCAPE '\\'
+    OR (source_module = 'hr_disciplinary' AND EXISTS (
+      SELECT 1 FROM hr_disciplinary_cases s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_grievance' AND EXISTS (
+      SELECT 1 FROM hr_grievance_cases s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_performance' AND EXISTS (
+      SELECT 1 FROM hr_performance_cases s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_rtw_interview' AND EXISTS (
+      SELECT 1 FROM hr_rtw_interviews s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_oh_referral' AND EXISTS (
+      SELECT 1 FROM hr_oh_referrals s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_contract' AND EXISTS (
+      SELECT 1 FROM hr_contracts s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_family_leave' AND EXISTS (
+      SELECT 1 FROM hr_family_leave s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_flexible_working' AND EXISTS (
+      SELECT 1 FROM hr_flexible_working s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_edi' AND EXISTS (
+      SELECT 1 FROM hr_edi_records s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_tupe' AND EXISTS (
+      SELECT 1 FROM hr_tupe_transfers s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+    OR (source_module = 'hr_renewal' AND EXISTS (
+      SELECT 1 FROM hr_rtw_dbs_renewals s WHERE s.home_id = cqc_evidence_links.home_id AND s.id::text = cqc_evidence_links.source_id AND s.deleted_at IS NULL
+    ))
+  )`);
+}
+
 function buildHomeQuery(
   homeId,
   { sourceModules, statements, categories, autoLinked, requiresReview, dateFrom, dateTo } = {}
@@ -83,6 +122,7 @@ function buildHomeQuery(
     where.push(`requires_review = $${params.length}`);
   }
   addDateRange(where, params, dateFrom, dateTo);
+  addActiveHrSourceFilter(where);
 
   return { where, params };
 }
@@ -99,10 +139,26 @@ export async function findById(id, homeId, client = pool) {
   return shapeRow(rows[0]);
 }
 
-export async function findByStatement(homeId, statementId, { dateFrom, dateTo, limit = 100, offset = 0 } = {}, client = pool) {
-  const where = ['home_id = $1', 'quality_statement = $2', 'deleted_at IS NULL'];
-  const params = [homeId, statementId];
-  addDateRange(where, params, dateFrom, dateTo);
+export async function findByIds(homeId, ids, client = pool) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const { rows } = await client.query(
+    `SELECT ${COLS}
+       FROM cqc_evidence_links
+      WHERE home_id = $1
+        AND id = ANY($2::int[])
+        AND deleted_at IS NULL`,
+    [homeId, ids]
+  );
+  return rows.map(shapeRow);
+}
+
+export async function findByStatement(homeId, statementId, { dateFrom, dateTo, limit = 100, offset = 0, sourceModules } = {}, client = pool) {
+  const { where, params } = buildHomeQuery(homeId, {
+    statements: [statementId],
+    sourceModules,
+    dateFrom,
+    dateTo,
+  });
   params.push(Math.min(limit, 500), Math.max(offset, 0));
 
   const { rows } = await client.query(
@@ -180,10 +236,12 @@ export async function findAllByHome(
   return rows.map(shapeRow);
 }
 
-export async function countByStatement(homeId, { dateFrom, dateTo } = {}, client = pool) {
-  const where = ['home_id = $1', 'deleted_at IS NULL'];
-  const params = [homeId];
-  addDateRange(where, params, dateFrom, dateTo);
+export async function countByStatement(homeId, { dateFrom, dateTo, sourceModules } = {}, client = pool) {
+  const { where, params } = buildHomeQuery(homeId, {
+    sourceModules,
+    dateFrom,
+    dateTo,
+  });
 
   const { rows } = await client.query(
     `SELECT quality_statement,
@@ -366,6 +424,21 @@ export async function softDelete(id, homeId, client = pool) {
     [id, homeId]
   );
   return rowCount > 0;
+}
+
+export async function softDeleteBySource(homeId, sourceModule, sourceId, client = pool) {
+  const { rows } = await client.query(
+    `UPDATE cqc_evidence_links
+        SET deleted_at = NOW(),
+            updated_at = NOW()
+      WHERE home_id = $1
+        AND source_module = $2
+        AND source_id = $3
+        AND deleted_at IS NULL
+      RETURNING id`,
+    [homeId, sourceModule, String(sourceId)]
+  );
+  return rows.map((row) => row.id);
 }
 
 export async function confirmAutoLink(id, homeId, username, client = pool) {

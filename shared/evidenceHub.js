@@ -3,6 +3,7 @@ import {
   canWriteRecordAttachmentModule,
   getReadableRecordAttachmentModules,
 } from './recordAttachmentModules.js';
+import { canAccessSensitiveOnboarding, isSensitiveOnboardingSection } from './staffPolicy.js';
 
 export const EVIDENCE_SOURCE_IDS = ['hr', 'cqc_evidence', 'onboarding', 'training', 'record'];
 
@@ -43,6 +44,9 @@ export function canAccessEvidenceHub(roleId) {
 export function canDeleteEvidenceSource(roleId, sourceId, sourceSubType = null) {
   if (sourceId === 'record') {
     return Boolean(sourceSubType) && canWriteRecordAttachmentModule(roleId, sourceSubType);
+  }
+  if (sourceId === 'onboarding' && isSensitiveOnboardingSection(sourceSubType) && !canAccessSensitiveOnboarding(roleId)) {
+    return false;
   }
   const source = getEvidenceSource(sourceId);
   return Boolean(source?.module && hasModuleAccess(roleId, source.module, 'write'));

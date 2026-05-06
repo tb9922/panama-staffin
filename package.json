@@ -14,7 +14,11 @@
     "audit:routes": "node scripts/audit-routes.js",
     "verify:action-backfill": "node scripts/verify-action-backfill.js",
     "verify:v1-operational": "node scripts/verify-v1-operational-gates.js",
+    "verify:hr-edi-encryption": "node scripts/verify-hr-edi-encryption.js",
+    "verify:hr-health-encryption": "node scripts/verify-hr-health-encryption.js",
     "backfill:hr-edi-encryption": "node scripts/backfill-hr-edi-encryption.js",
+    "backfill:hr-health-encryption": "node scripts/backfill-hr-health-encryption.js",
+    "seed:hr-legacy-encryption-fixtures": "node scripts/seed-hr-legacy-encryption-fixtures.js",
     "invite:staff": "node scripts/invite-staff.js",
     "test": "npm run test:ci",
     "test:ci": "vitest run tests/unit src/contexts src/lib src/hooks",
@@ -28,9 +32,13 @@
     "test:staff:frontend": "vitest run --config vitest.config.frontend.js src/pages/__tests__/StaffRegister.test.jsx src/pages/__tests__/OnboardingTracker.test.jsx src/pages/__tests__/TrainingMatrix.test.jsx",
     "test:staff:integration": "node scripts/run-bash-script.mjs scripts/test-staff-integration.sh",
     "test:staff": "npm run test:staff:unit && npm run test:staff:frontend && npm run test:staff:integration",
+    "test:hr:unit": "vitest run tests/unit/hrFieldMapping.test.js tests/unit/hrSchemas.test.js tests/unit/hrService.test.js",
+    "test:hr:frontend": "vitest run --config vitest.config.frontend.js src/pages/__tests__/HrDashboard.test.jsx src/pages/__tests__/AbsenceManager.test.jsx src/pages/__tests__/DisciplinaryTracker.test.jsx src/pages/__tests__/GrievanceTracker.test.jsx src/pages/__tests__/PerformanceTracker.test.jsx src/pages/__tests__/ContractManager.test.jsx src/pages/__tests__/FamilyLeaveTracker.test.jsx src/pages/__tests__/FlexWorkingTracker.test.jsx src/pages/__tests__/EdiTracker.test.jsx src/pages/__tests__/TupeManager.test.jsx src/pages/__tests__/RtwDbsRenewals.test.jsx src/pages/__tests__/InvestigationMeetings.test.jsx",
+    "test:hr:integration": "node scripts/run-bash-script.mjs scripts/test-hr-integration.sh",
+    "test:hr": "npm run test:hr:unit && npm run test:hr:frontend && npm run test:hr:integration",
     "test:e2e": "node scripts/run-bash-script.mjs scripts/test-e2e.sh",
     "test:golden": "playwright test tests/e2e/golden-journey.spec.js tests/e2e/role-matrix.spec.js --project=chromium",
-    "test:release": "npm run lint && npm run build && npm run test:frontend && npm run test:ci && npm run test:integration && npm run audit:routes && npm run verify:action-backfill && npm run verify:v1-operational && npm run test:v1-scale && npm run test:e2e && npm run test:ui-stress && npm audit --omit=dev"
+    "test:release": "npm run lint && npm run build && npm run test:frontend && npm run test:ci && npm run test:hr && npm run test:integration && npm run audit:routes && npm run verify:hr-edi-encryption && npm run verify:hr-health-encryption && npm run verify:action-backfill && npm run verify:v1-operational && npm run test:v1-scale && npm run test:e2e && npm run test:ui-stress && npm audit --omit=dev"
   },
   "dependencies": {
     "@sentry/node": "^10.40.0",

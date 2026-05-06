@@ -1,11 +1,13 @@
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
+import * as cqcEvidenceLinksRepo from '../../repositories/cqcEvidenceLinksRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { diffFields } from '../../lib/hrFieldMappers.js';
 import { zodError } from '../../errors.js';
 import { z } from 'zod';
 import { idSchema } from './schemas.js';
 import { splitVersion } from '../../lib/versionedPayload.js';
+import { withTransaction } from '../../db.js';
 
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
@@ -29,6 +31,8 @@ export function registerCaseRoutes(router, {
   auditPrefix,
   table,
   auditSensitiveFields = [],
+  cqcSourceModule = null,
+  beforeDelete = null,
 }) {
   const prefix = auditPrefix || type;
 
@@ -52,8 +56,11 @@ export function registerCaseRoutes(router, {
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed);
       const mapped = mapFields ? mapFields(parsed.data, null) : parsed.data;
-      const result = await repoCreate(req.home.id, { ...mapped, created_by: req.user.username });
-      await auditService.log(`hr_${prefix}_create`, req.home.slug, req.user.username, { id: result.id });
+      const result = await withTransaction(async (client) => {
+        const created = await repoCreate(req.home.id, { ...mapped, created_by: req.user.username }, client);
+        await auditService.log(`hr_${prefix}_create`, req.home.slug, req.user.username, { id: created.id }, client);
+        return created;
+      });
       res.status(201).json(result);
     } catch (err) { next(err); }
   });
@@ -81,17 +88,23 @@ export function registerCaseRoutes(router, {
       if (!parsed.success) return zodError(res, parsed);
 
       const { version, payload } = splitVersion(parsed.data);
-      const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;
-      if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
+      const outcome = await withTransaction(async (client) => {
+        const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id, client) : null;
+        if (repoFindById && !existing) return { status: 'not_found' };
 
-      const mapped = mapFields ? mapFields(payload, existing) : payload;
-      const result = await repoUpdate(idParsed.data, req.home.id, mapped, null, version);
-      if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+        const mapped = mapFields ? mapFields(payload, existing) : payload;
+        const result = await repoUpdate(idParsed.data, req.home.id, mapped, client, version);
+        if (result === null) return { status: 'conflict' };
 
-      const changes = existing
-        ? diffFields(existing, result, auditSensitiveFields.length ? { extraSensitive: auditSensitiveFields } : undefined)
-        : [];
-      await auditService.log(`hr_${prefix}_update`, req.home.slug, req.user.username, { id: result.id, changes });
+        const changes = existing
+          ? diffFields(existing, result, auditSensitiveFields.length ? { extraSensitive: auditSensitiveFields } : undefined)
+          : [];
+        await auditService.log(`hr_${prefix}_update`, req.home.slug, req.user.username, { id: result.id, changes }, client);
+        return { status: 'ok', result };
+      });
+      if (outcome.status === 'not_found') return res.status(404).json({ error: `${type} case not found` });
+      if (outcome.status === 'conflict') return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+      const { result } = outcome;
       res.json(result);
     } catch (err) { next(err); }
   });
@@ -102,9 +115,31 @@ export function registerCaseRoutes(router, {
       try {
         const idParsed = idSchema.safeParse(req.params.id);
         if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
-        const deleted = await hrRepo.softDeleteCase(table, idParsed.data, req.home.id);
-        if (!deleted) return res.status(404).json({ error: `${type} case not found` });
-        await auditService.log(`hr_${prefix}_delete`, req.home.slug, req.user.username, { id: idParsed.data });
+        const parsed = z.object({ _version: z.number().int().nonnegative() }).safeParse(req.body || {});
+        if (!parsed.success) return res.status(400).json({ error: '_version is required' });
+        const outcome = await withTransaction(async (client) => {
+          const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id, client) : null;
+          if (repoFindById && !existing) return { status: 'not_found' };
+          const deleted = await hrRepo.softDeleteCase(table, idParsed.data, req.home.id, client, parsed.data._version);
+          if (!deleted) return { status: 'conflict' };
+          if (beforeDelete) {
+            await beforeDelete({ req, id: idParsed.data, existing: deleted || existing, client });
+          }
+          const retiredCqcLinks = cqcSourceModule
+            ? await cqcEvidenceLinksRepo.softDeleteBySource(req.home.id, cqcSourceModule, idParsed.data, client)
+            : [];
+          await auditService.log(`hr_${prefix}_delete`, req.home.slug, req.user.username, { id: idParsed.data }, client);
+          if (retiredCqcLinks.length > 0) {
+            await auditService.log('hr_cqc_links_retired', req.home.slug, req.user.username, {
+              source_module: cqcSourceModule,
+              source_id: String(idParsed.data),
+              link_ids: retiredCqcLinks,
+            }, client);
+          }
+          return { status: 'deleted' };
+        });
+        if (outcome.status === 'not_found') return res.status(404).json({ error: `${type} case not found` });
+        if (outcome.status === 'conflict') return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
         res.status(204).end();
       } catch (err) { next(err); }
     });

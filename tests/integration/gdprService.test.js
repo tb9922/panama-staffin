@@ -769,19 +769,37 @@ describe('executeErasure', () => {
     expect(staff.active).toBe(false);
   });
 
-  it('deletes training records', async () => {
+  it('anonymises training records while retaining CQC evidence skeletons', async () => {
     const { rows } = await pool.query(
-      `SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeA, targetStaff]
-    );
-    expect(rows).toHaveLength(0);
-  });
-
-  it('deletes attachment metadata and physical files after commit', async () => {
-    const { rows: trainingFiles } = await pool.query(
-      `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      `SELECT training_type_id, completed, expiry, trainer, certificate_ref, evidence_ref, notes
+         FROM training_records
+        WHERE home_id = $1 AND staff_id = $2
+        ORDER BY training_type_id`,
       [homeA, targetStaff]
     );
-    expect(trainingFiles).toHaveLength(0);
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of rows) {
+      expect(row.training_type_id).toBeTruthy();
+      expect(row.completed).toBeTruthy();
+      expect(row.expiry).toBeTruthy();
+      expect(row.trainer).toBeNull();
+      expect(row.certificate_ref).toBeNull();
+      expect(row.evidence_ref).toBeNull();
+      expect(row.notes).toBeNull();
+    }
+  });
+
+  it('redacts attachment metadata and deletes physical files after commit', async () => {
+    const { rows: trainingFiles } = await pool.query(
+      `SELECT original_name, description, deleted_at
+         FROM training_file_attachments
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(trainingFiles).toHaveLength(1);
+    expect(trainingFiles[0].original_name).toMatch(/^redacted-training-evidence-/);
+    expect(trainingFiles[0].description).toBeNull();
+    expect(trainingFiles[0].deleted_at).toBeTruthy();
 
     const { rows: onboardingFiles } = await pool.query(
       `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,

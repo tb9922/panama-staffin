@@ -239,7 +239,7 @@ export default function AbsenceManager() {
       if (e.message?.includes('modified by another user')) {
         setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
-      } else { setError(e.message); }
+      } else { setFormError(e.message || 'Unable to save RTW interview.'); }
     } finally { setSaving(false); }
   }
 
@@ -279,7 +279,7 @@ export default function AbsenceManager() {
       if (e.message?.includes('modified by another user')) {
         setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
-      } else { setError(e.message); }
+      } else { setFormError(e.message || 'Unable to save OH referral.'); }
     } finally { setSaving(false); }
   }
 

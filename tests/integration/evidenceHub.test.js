@@ -251,7 +251,8 @@ describe('Evidence Hub integration', () => {
 
     const hrRow = response.body.rows.find((row) => row.sourceModule === 'hr');
     expect(hrRow.parentLabel).toMatch(/Disciplinary/i);
-    expect(hrRow.parentLabel).toMatch(/Late handover/);
+    expect(hrRow.parentLabel).toMatch(/misconduct/i);
+    expect(hrRow.parentLabel).not.toMatch(/Late handover/);
     expect(hrRow.staffName).toBe('Alice Evidence');
     expect(hrRow.canDelete).toBe(true);
 
@@ -294,13 +295,23 @@ describe('Evidence Hub integration', () => {
 
     expect(response.body.rows.map((row) => row.sourceModule).sort()).toEqual([
       'cqc_evidence',
-      'onboarding',
       'record',
       'record',
       'record',
       'training',
     ]);
     expect(response.body.rows.every((row) => row.sourceModule !== 'hr')).toBe(true);
+    expect(response.body.rows.every((row) => row.sourceSubType !== 'dbs_check')).toBe(true);
+  });
+
+  it('training lead cannot see sensitive onboarding evidence metadata', async () => {
+    const response = await request(app)
+      .get(`/api/evidence-hub/search?home=${homeSlug}&modules=onboarding&q=dbs`)
+      .set('Authorization', `Bearer ${trainingLeadToken}`)
+      .expect(200);
+
+    expect(response.body.total).toBe(0);
+    expect(response.body.rows).toHaveLength(0);
   });
 
   it('finance officer sees only finance/payroll-backed operational evidence', async () => {

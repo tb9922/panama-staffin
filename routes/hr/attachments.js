@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { mkdirSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { stat, unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
@@ -12,6 +12,7 @@ import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { caseTypeSchema } from './schemas.js';
+import { withTransaction } from '../../db.js';
 
 const router = Router();
 
@@ -46,10 +47,25 @@ router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireM
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
     const att = await hrRepo.findAttachmentById(id, req.home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
-    const uploadDir = path.resolve(config.upload.dir);
-    const filePath = path.resolve(path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name));
-    const withinUploadDir = filePath === uploadDir || filePath.startsWith(`${uploadDir}${path.sep}`);
-    if (!withinUploadDir) return res.status(403).json({ error: 'Forbidden' });
+    const storedName = String(att.stored_name || '');
+    if (!storedName || path.basename(storedName) !== storedName) return res.status(403).json({ error: 'Forbidden' });
+    const caseDir = path.resolve(config.upload.dir, String(req.home.id), safePath(att.case_type), String(att.case_id));
+    const filePath = path.resolve(caseDir, storedName);
+    const withinCaseDir = filePath.startsWith(`${caseDir}${path.sep}`);
+    if (!withinCaseDir) return res.status(403).json({ error: 'Forbidden' });
+    try {
+      await stat(filePath);
+    } catch (err) {
+      if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+        return res.status(404).json({ error: 'Attachment file is missing' });
+      }
+      throw err;
+    }
+    await auditService.log('hr_attachment_download', req.home.slug, req.user.username, {
+      id: att.id,
+      caseType: att.case_type,
+      caseId: att.case_id,
+    });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,
@@ -90,15 +106,18 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
         await assertGenericAttachmentUploadSafe(req.file);
         const descParsed = z.string().max(500).optional().safeParse(req.body.description);
         const description = descParsed.success ? (descParsed.data || null) : null;
-        const attachment = await hrRepo.createAttachment(req.home.id, caseTypeParsed.data, caseId, {
-          original_name: req.file.originalname,
-          stored_name: req.file.filename,
-          mime_type: req.file.mimetype,
-          size_bytes: req.file.size,
-          description: description,
-          uploaded_by: req.user.username,
+        const attachment = await withTransaction(async (client) => {
+          const created = await hrRepo.createAttachment(req.home.id, caseTypeParsed.data, caseId, {
+            original_name: req.file.originalname,
+            stored_name: req.file.filename,
+            mime_type: req.file.mimetype,
+            size_bytes: req.file.size,
+            description: description,
+            uploaded_by: req.user.username,
+          }, client);
+          await auditService.log('hr_attachment_upload', req.home.slug, req.user.username, { id: created.id }, client);
+          return created;
         });
-        await auditService.log('hr_attachment_upload', req.home.slug, req.user.username, { id: attachment.id });
         res.status(201).json(attachment);
       } catch (e) {
         await unlink(req.file.path).catch(() => {});
@@ -113,11 +132,15 @@ router.delete('/attachments/:id', requireAuth, requireHomeAccess, requireModule(
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
-    const att = await hrRepo.deleteAttachment(id, req.home.id);
+    const att = await withTransaction(async (client) => {
+      const deleted = await hrRepo.deleteAttachment(id, req.home.id, client);
+      if (!deleted) return null;
+      await auditService.log('hr_attachment_delete', req.home.slug, req.user.username, { id, caseType: deleted.case_type, caseId: deleted.case_id }, client);
+      return deleted;
+    });
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
     // Physical file retained on disk — only removed during GDPR retention purge.
     // Deleting on soft-delete would destroy evidence still referenced in the audit trail.
-    await auditService.log('hr_attachment_delete', req.home.slug, req.user.username, { id, caseType: att.case_type, caseId: att.case_id });
     res.json({ deleted: true });
   } catch (err) { next(err); }
 });

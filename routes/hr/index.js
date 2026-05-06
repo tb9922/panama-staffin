@@ -12,7 +12,7 @@ import { withTransaction } from '../../db.js';
 import { calculateEscalationLevel } from '../../lib/actionItems.js';
 import { definedWithoutVersion, splitVersion } from '../../lib/versionedPayload.js';
 import {
-  mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
+  diffFields, mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
   mapRtwFields, mapOhFields, mapContractFields, mapFamilyLeaveFields,
   mapFlexFields, mapEdiFields, mapTupeFields, mapRenewalFields,
 } from '../../lib/hrFieldMappers.js';
@@ -54,9 +54,24 @@ const EDI_AUDIT_SENSITIVE_FIELDS = [
   'notes',
   'category',
 ];
+const HR_ACTION_AUDIT_SENSITIVE_FIELDS = ['description'];
+
+function hrActionItemTitle(action) {
+  return `HR grievance action due ${action.due_date}`;
+}
 
 function actorId(req) {
   return req.authDbUser?.id || null;
+}
+
+async function cancelGrievanceLinkedRecords({ req, id, client }) {
+  return actionItemRepo.cancelAllBySource(
+    req.home.id,
+    'hr_grievance',
+    String(id),
+    actorId(req),
+    client,
+  );
 }
 
 function normalizeActionItemStatus(status) {
@@ -64,15 +79,25 @@ function normalizeActionItemStatus(status) {
 }
 
 async function syncGrievanceActionItem(req, grievanceId, action, client) {
-  if (!action?.due_date) return null;
+  const sourceActionKey = `grievance_action:${action.id}`;
+  if (!action?.due_date || action.status === 'cancelled') {
+    return actionItemRepo.cancelBySource(
+      req.home.id,
+      'hr_grievance',
+      String(grievanceId),
+      sourceActionKey,
+      actorId(req),
+      client,
+    );
+  }
   const status = normalizeActionItemStatus(action.status);
   const priority = 'medium';
   const { item } = await actionItemRepo.syncBySource(req.home.id, {
     source_type: 'hr_grievance',
     source_id: String(grievanceId),
-    source_action_key: `grievance_action:${action.id}`,
-    title: action.description,
-    description: action.description,
+    source_action_key: sourceActionKey,
+    title: hrActionItemTitle(action),
+    description: 'Restricted HR grievance action. Open the HR grievance case for details.',
     category: 'hr',
     priority,
     owner_name: action.responsible || null,
@@ -119,6 +144,7 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findDisciplinary, repoFindById: hrRepo.findDisciplinaryById,
   repoCreate: hrRepo.createDisciplinary, repoUpdate: hrRepo.updateDisciplinary,
   table: 'hr_disciplinary_cases',
+  cqcSourceModule: 'hr_disciplinary',
 });
 
 registerCaseRoutes(router, {
@@ -129,6 +155,9 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findGrievance, repoFindById: hrRepo.findGrievanceById,
   repoCreate: hrRepo.createGrievance, repoUpdate: hrRepo.updateGrievance,
   table: 'hr_grievance_cases',
+  auditSensitiveFields: ['description'],
+  cqcSourceModule: 'hr_grievance',
+  beforeDelete: cancelGrievanceLinkedRecords,
 });
 
 // ── Grievance Actions ───────────────────────────────────────────────────────
@@ -155,11 +184,15 @@ router.post('/cases/grievance/:id/actions', requireAuth, requireHomeAccess, requ
     const result = await withTransaction(async (client) => {
       const action = await hrRepo.createGrievanceAction(idP.data, req.home.id, parsed.data, client);
       if (!action) return null;
-      await syncGrievanceActionItem(req, idP.data, action, client);
+      const actionItem = await syncGrievanceActionItem(req, idP.data, action, client);
+      await auditService.log('hr_grievance_action_create', req.home.slug, req.user.username, {
+        id: action.id,
+        action_item_id: actionItem?.id || actionItem?.item?.id || null,
+        changes: diffFields(null, action, { extraSensitive: HR_ACTION_AUDIT_SENSITIVE_FIELDS }),
+      }, client);
       return action;
     });
     if (!result) return res.status(404).json({ error: 'Grievance case not found' });
-    await auditService.log('hr_grievance_action_create', req.home.slug, req.user.username, { id: result.id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -173,13 +206,19 @@ router.put('/grievance-actions/:id', requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { version } = splitVersion(parsed.data);
     const result = await withTransaction(async (client) => {
+      const existing = await hrRepo.findGrievanceActionById(idP.data, req.home.id, client);
+      if (!existing) return null;
       const action = await hrRepo.updateGrievanceAction(idP.data, req.home.id, definedWithoutVersion(parsed.data), client, version);
       if (!action) return null;
-      await syncGrievanceActionItem(req, action.grievance_id, action, client);
+      const actionItem = await syncGrievanceActionItem(req, action.grievance_id, action, client);
+      await auditService.log('hr_grievance_action_update', req.home.slug, req.user.username, {
+        id: action.id,
+        action_item_id: actionItem?.id || actionItem?.item?.id || null,
+        changes: diffFields(existing, action, { extraSensitive: HR_ACTION_AUDIT_SENSITIVE_FIELDS }),
+      }, client);
       return action;
     });
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
-    await auditService.log('hr_grievance_action_update', req.home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -192,6 +231,8 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findPerformance, repoFindById: hrRepo.findPerformanceById,
   repoCreate: hrRepo.createPerformance, repoUpdate: hrRepo.updatePerformance,
   table: 'hr_performance_cases',
+  auditSensitiveFields: ['description'],
+  cqcSourceModule: 'hr_performance',
 });
 
 // ── Mount sub-routers (stats/absence routes BEFORE case registrations that use path params) ──
@@ -206,6 +247,7 @@ registerCaseRoutes(router, {
   repoCreate: hrRepo.createRtwInterview, repoUpdate: hrRepo.updateRtwInterview,
   auditPrefix: 'rtw',
   table: 'hr_rtw_interviews',
+  cqcSourceModule: 'hr_rtw_interview',
 });
 
 registerCaseRoutes(router, {
@@ -217,6 +259,7 @@ registerCaseRoutes(router, {
   repoCreate: hrRepo.createOhReferral, repoUpdate: hrRepo.updateOhReferral,
   auditPrefix: 'oh_referral',
   table: 'hr_oh_referrals',
+  cqcSourceModule: 'hr_oh_referral',
 });
 
 registerCaseRoutes(router, {
@@ -227,6 +270,7 @@ registerCaseRoutes(router, {
   repoCreate: hrRepo.createContract, repoUpdate: hrRepo.updateContract,
   filters: { staff_id: 'staffId', status: 'status', contract_type: 'contractType' },
   table: 'hr_contracts',
+  cqcSourceModule: 'hr_contract',
 });
 
 registerCaseRoutes(router, {
@@ -237,6 +281,7 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findFamilyLeave, repoFindById: hrRepo.findFamilyLeaveById,
   repoCreate: hrRepo.createFamilyLeave, repoUpdate: hrRepo.updateFamilyLeave,
   table: 'hr_family_leave',
+  cqcSourceModule: 'hr_family_leave',
 });
 
 registerCaseRoutes(router, {
@@ -248,6 +293,7 @@ registerCaseRoutes(router, {
   repoCreate: hrRepo.createFlexWorking, repoUpdate: hrRepo.updateFlexWorking,
   auditPrefix: 'flex_working',
   table: 'hr_flexible_working',
+  cqcSourceModule: 'hr_flexible_working',
 });
 
 registerCaseRoutes(router, {
@@ -259,6 +305,7 @@ registerCaseRoutes(router, {
   repoCreate: hrRepo.createEdi, repoUpdate: hrRepo.updateEdi,
   auditSensitiveFields: EDI_AUDIT_SENSITIVE_FIELDS,
   table: 'hr_edi_records',
+  cqcSourceModule: 'hr_edi',
 });
 
 registerCaseRoutes(router, {
@@ -270,6 +317,7 @@ registerCaseRoutes(router, {
   repoFindById: hrRepo.findTupeById,
   repoCreate: hrRepo.createTupe, repoUpdate: hrRepo.updateTupe,
   table: 'hr_tupe_transfers',
+  cqcSourceModule: 'hr_tupe',
 });
 
 registerCaseRoutes(router, {
@@ -281,6 +329,7 @@ registerCaseRoutes(router, {
   repoCreate: hrRepo.createRenewal, repoUpdate: hrRepo.updateRenewal,
   auditPrefix: 'dbs_renewal',
   table: 'hr_rtw_dbs_renewals',
+  cqcSourceModule: 'hr_renewal',
 });
 
 // ── Mount remaining sub-routers ─────────────────────────────────────────────

@@ -159,6 +159,7 @@ describe('action items API', () => {
         category: 'governance',
         priority: 'medium',
         due_date: '2026-04-30',
+        owner_role: 'Home manager',
       })
       .expect(201);
 

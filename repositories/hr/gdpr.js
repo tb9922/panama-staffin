@@ -45,16 +45,54 @@ function expiredCasePredicate(configEntry, alias = 'p') {
 }
 
 function attachmentPath(homeId, caseType, caseId, storedName) {
-  return path.join(config.upload.dir, String(homeId), caseType, String(caseId), storedName);
+  const safeName = String(storedName || '');
+  if (!safeName || path.basename(safeName) !== safeName) {
+    throw new Error('Refusing to purge HR attachment with unsafe stored name');
+  }
+  const caseDir = path.resolve(config.upload.dir, String(homeId), caseType, String(caseId));
+  const resolved = path.resolve(caseDir, safeName);
+  if (!resolved.startsWith(`${caseDir}${path.sep}`)) {
+    throw new Error('Refusing to purge HR attachment outside case directory');
+  }
+  return resolved;
+}
+
+async function unlinkStoredAttachment(filePath) {
+  await unlink(filePath).catch((err) => {
+    if (err?.code !== 'ENOENT') throw err;
+  });
+}
+
+async function enqueueFilePurge(client, { homeId, sourceModule, sourceTable, sourceId, filePath }) {
+  const { rows } = await client.query(
+    `INSERT INTO retention_purge_files (
+       home_id, source_module, source_table, source_id, file_path
+     ) VALUES ($1, $2, $3, $4, $5)
+     RETURNING id`,
+    [homeId, sourceModule, sourceTable, String(sourceId), filePath]
+  );
+  return rows[0].id;
+}
+
+async function markFilePurge(client, id, status, error = null) {
+  await client.query(
+    `UPDATE retention_purge_files
+        SET status = $2,
+            error = $3,
+            processed_at = NOW()
+      WHERE id = $1`,
+    [id, status, error ? String(error).slice(0, 1000) : null]
+  );
 }
 
 export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = true) {
   const cutoffExpr = `NOW() - make_interval(years => $2)`;
   const client = await pool.connect();
-  const filesToUnlink = [];
+  let committed = false;
   try {
     await client.query('BEGIN');
     const counts = {};
+    const filesToUnlink = [];
     const years = parseInt(retentionYears, 10);
 
     // 1. Purge child rows that were individually soft-deleted past retention.
@@ -69,13 +107,21 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
       } else {
         if (child === 'hr_file_attachments') {
           const { rows: attachments } = await client.query(
-            `SELECT case_type, case_id, stored_name
+            `SELECT id, case_type, case_id, stored_name
                FROM hr_file_attachments
               WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoffExpr}`,
             [homeId, years]
           );
           for (const attachment of attachments) {
-            filesToUnlink.push(attachmentPath(homeId, attachment.case_type, attachment.case_id, attachment.stored_name));
+            const filePath = attachmentPath(homeId, attachment.case_type, attachment.case_id, attachment.stored_name);
+            const queueId = await enqueueFilePurge(client, {
+              homeId,
+              sourceModule: `hr_${attachment.case_type}`,
+              sourceTable: 'hr_file_attachments',
+              sourceId: attachment.id,
+              filePath,
+            });
+            filesToUnlink.push({ queueId, filePath });
           }
         }
         const result = await client.query(
@@ -102,13 +148,21 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
 
         if (child === 'hr_file_attachments') {
           const { rows: attachments } = await client.query(
-            `SELECT case_id, stored_name
+            `SELECT id, case_id, stored_name
              FROM hr_file_attachments
              WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`,
             [homeId, years, configEntry.caseType]
           );
           for (const attachment of attachments) {
-            filesToUnlink.push(attachmentPath(homeId, configEntry.caseType, attachment.case_id, attachment.stored_name));
+            const filePath = attachmentPath(homeId, configEntry.caseType, attachment.case_id, attachment.stored_name);
+            const queueId = await enqueueFilePurge(client, {
+              homeId,
+              sourceModule: `hr_${configEntry.caseType}`,
+              sourceTable: 'hr_file_attachments',
+              sourceId: attachment.id,
+              filePath,
+            });
+            filesToUnlink.push({ queueId, filePath });
           }
         }
 
@@ -152,14 +206,25 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
     }
 
     await client.query('COMMIT');
-    for (const filePath of filesToUnlink) {
-      await unlink(filePath).catch((err) => {
-        if (err?.code !== 'ENOENT') throw err;
-      });
+    committed = true;
+    let unlinkFailures = 0;
+    for (const file of filesToUnlink) {
+      try {
+        await unlinkStoredAttachment(file.filePath);
+        await markFilePurge(client, file.queueId, 'deleted');
+      } catch (err) {
+        unlinkFailures += 1;
+        await markFilePurge(client, file.queueId, 'failed', err.message);
+      }
+    }
+    if (unlinkFailures > 0) {
+      counts.hr_file_unlink_failed = unlinkFailures;
     }
     return counts;
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) {
+      await client.query('ROLLBACK');
+    }
     throw err;
   } finally {
     client.release();

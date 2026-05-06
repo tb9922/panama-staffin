@@ -197,7 +197,7 @@ export default function FlexWorkingTracker() {
       if (e.message?.includes('modified by another user')) {
         setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
-      } else { setError(e.message); }
+      } else { setFormError(e.message || 'Unable to save flexible working request.'); }
     } finally {
       setSaving(false);
     }

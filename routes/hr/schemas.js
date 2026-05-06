@@ -25,7 +25,13 @@ export const caseTypeSchema = z.enum([
 // ── Disciplinary Schemas ────────────────────────────────────────────────────
 
 const jsonOrArray = z.preprocess(
-  v => { if (typeof v === 'string') { try { return JSON.parse(v); } catch { return []; } } return v; },
+  v => {
+    if (typeof v === 'string') {
+      if (v.trim() === '') return [];
+      try { return JSON.parse(v); } catch { return v; }
+    }
+    return v;
+  },
   z.array(z.object({}).passthrough()).max(100)
 ).refine(
   v => JSON.stringify(v).length <= 50000,

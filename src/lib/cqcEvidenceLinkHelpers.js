@@ -23,6 +23,14 @@ const SOURCE_LABELS = {
   hr_disciplinary: 'Disciplinary case',
   hr_grievance: 'Grievance case',
   hr_performance: 'Performance case',
+  hr_rtw_interview: 'Return-to-work interview',
+  hr_oh_referral: 'Occupational health referral',
+  hr_contract: 'HR contract record',
+  hr_family_leave: 'Family leave record',
+  hr_flexible_working: 'Flexible working request',
+  hr_edi: 'EDI record',
+  hr_tupe: 'TUPE transfer',
+  hr_renewal: 'RTW/DBS renewal',
 };
 
 function asIsoDate(value) {

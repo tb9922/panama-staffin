@@ -238,8 +238,8 @@ describe('homeService', () => {
       expect(Array.isArray(data.staff)).toBe(true);
     });
 
-    it('includes staff PII fields for admin', async () => {
-      const data = await homeService.assembleData(SLUG, 'admin');
+    it('includes sensitive staff-management fields for home managers', async () => {
+      const data = await homeService.assembleData(SLUG, 'home_manager');
       const staff = data.staff.find(s => s.id === 'svc-S001');
       expect(staff).toBeTruthy();
       expect(staff).toHaveProperty('hourly_rate');

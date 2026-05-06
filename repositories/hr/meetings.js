@@ -87,11 +87,22 @@ export async function createMeeting(homeId, caseType, caseId, data, client) {
   return shapeMeeting(rows[0]);
 }
 
-export async function deleteMeeting(id, homeId, client) {
+export async function deleteMeeting(id, homeId, client, version) {
   const conn = client || pool;
+  const vals = [id, homeId];
+  let versionPredicate = '';
+  if (version != null) {
+    vals.push(version);
+    versionPredicate = ' AND version = $3';
+  }
   const { rowCount } = await conn.query(
-    `UPDATE hr_investigation_meetings SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
-    [id, homeId]
+    `UPDATE hr_investigation_meetings
+        SET deleted_at = NOW()
+      WHERE id = $1
+        AND home_id = $2
+        AND deleted_at IS NULL
+        ${versionPredicate}`,
+    vals
   );
   return rowCount > 0;
 }

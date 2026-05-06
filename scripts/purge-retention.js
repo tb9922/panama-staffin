@@ -49,6 +49,14 @@ const ALLOWED_TABLES = new Set([
 // Tables without home_id
 const GLOBAL_TABLES = new Set(['audit_log', 'access_log']);
 
+const HR_RETENTION_TABLES = new Set([
+  'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
+  'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',
+  'hr_flexible_working', 'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
+]);
+
+const STAFF_BOUND_RETENTION_TABLES = new Set(['staff']);
+
 // Date column overrides for tables that don't use 'created_at'
 const RETENTION_DATE_COLUMNS = Object.freeze({
   access_log: 'ts',
@@ -86,6 +94,14 @@ async function run() {
     if (!ALLOWED_TABLES.has(rule.applies_to_table)) continue;
 
     const table = rule.applies_to_table;
+    if (STAFF_BOUND_RETENTION_TABLES.has(table)) {
+      console.log(`  ${table}: skipped by generic purge; use staff/GDPR erasure flow after retained HR evidence has been purged`);
+      continue;
+    }
+    if (HR_RETENTION_TABLES.has(table)) {
+      console.log(`  ${table}: skipped by generic purge; use /api/hr/admin/purge-expired or hrRepo.purgeExpiredRecords`);
+      continue;
+    }
     const isGlobal = GLOBAL_TABLES.has(table);
     const dateCol = RETENTION_DATE_COLUMNS[table] || 'created_at';
     const hasSoftDelete = SOFT_DELETE_TABLES.has(table);

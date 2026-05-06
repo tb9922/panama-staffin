@@ -371,6 +371,8 @@ async function confirmRecordAttachment(client, homeId, intakeItem, body, usernam
 }
 
 async function confirmHrAttachment(client, homeId, intakeItem, body, username, movedFiles) {
+  const exists = await hrRepo.caseExists(homeId, body.case_type, body.case_id, client);
+  if (!exists) throw Object.assign(new Error('HR case not found'), { statusCode: 404 });
   const moved = await moveIntoHrStore({
     homeId,
     intakeItem,

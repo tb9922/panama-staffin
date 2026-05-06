@@ -18,6 +18,9 @@ let token;
 beforeAll(async () => {
   await pool.query(`DELETE FROM cqc_evidence_links WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
+  await pool.query(`DELETE FROM incidents WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
+  await pool.query(`DELETE FROM complaints WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
+  await pool.query(`DELETE FROM maintenance WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM token_denylist WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [USERNAME]).catch(() => {});
@@ -31,6 +34,23 @@ beforeAll(async () => {
   );
   homeAId = homes.find((row) => row.slug === HOME_A).id;
   homeBId = homes.find((row) => row.slug === HOME_B).id;
+
+  await pool.query(
+    `INSERT INTO incidents (home_id, id, date, type, severity, description)
+     VALUES ($1, 'inc-001', '2026-04-10', 'fall', 'low', 'CQC link source incident')`,
+    [homeAId]
+  );
+  await pool.query(
+    `INSERT INTO complaints (home_id, id, date, title, status)
+     VALUES ($1, 'cmp-001', '2026-04-09', 'CQC link source complaint', 'open'),
+            ($2, 'cmp-b', '2026-04-09', 'Other tenant complaint', 'open')`,
+    [homeAId, homeBId]
+  );
+  await pool.query(
+    `INSERT INTO maintenance (home_id, id, category, description, next_due)
+     VALUES ($1, 'mnt-001', 'environment', 'CQC link maintenance source', '2026-04-08')`,
+    [homeAId]
+  );
 
   const passwordHash = await bcrypt.hash(PASSWORD, 4);
   await pool.query(
@@ -57,6 +77,10 @@ afterAll(async () => {
   if (homeBId) await pool.query('DELETE FROM cqc_evidence_links WHERE home_id = $1', [homeBId]).catch(() => {});
   if (homeAId) await pool.query('DELETE FROM cqc_evidence WHERE home_id = $1', [homeAId]).catch(() => {});
   if (homeBId) await pool.query('DELETE FROM cqc_evidence WHERE home_id = $1', [homeBId]).catch(() => {});
+  if (homeAId) await pool.query('DELETE FROM incidents WHERE home_id = $1', [homeAId]).catch(() => {});
+  if (homeAId) await pool.query('DELETE FROM complaints WHERE home_id = $1', [homeAId]).catch(() => {});
+  if (homeBId) await pool.query('DELETE FROM complaints WHERE home_id = $1', [homeBId]).catch(() => {});
+  if (homeAId) await pool.query('DELETE FROM maintenance WHERE home_id = $1', [homeAId]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM token_denylist WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [USERNAME]).catch(() => {});

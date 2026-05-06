@@ -5,6 +5,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import * as auditRepo from '../../repositories/auditRepo.js';
+import { isValidIsoDateOnly } from '../../lib/zodHelpers.js';
 
 const router = Router();
 
@@ -13,7 +14,7 @@ const purgeBodySchema = z.object({
   dry_run: z.boolean().default(true),
 });
 
-const dateParamSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateParamSchema = z.string().refine(isValidIsoDateOnly, 'Invalid calendar date');
 
 router.post('/admin/purge-expired', requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
   try {
@@ -39,9 +40,21 @@ router.post('/admin/purge-expired', requireAuth, requireHomeAccess, requireModul
 
 router.get('/admin/audit-export', requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
   try {
-    const from = dateParamSchema.safeParse(req.query.from).success ? req.query.from : '1970-01-01';
-    const to = dateParamSchema.safeParse(req.query.to).success ? req.query.to : '9999-12-31';
+    if (req.query.from !== undefined && !dateParamSchema.safeParse(req.query.from).success) {
+      return res.status(400).json({ error: 'Invalid from date' });
+    }
+    if (req.query.to !== undefined && !dateParamSchema.safeParse(req.query.to).success) {
+      return res.status(400).json({ error: 'Invalid to date' });
+    }
+    const from = req.query.from || '1970-01-01';
+    const to = req.query.to || '9999-12-31';
+    if (from > to) return res.status(400).json({ error: 'from must be on or before to' });
     const rows = await auditRepo.exportHrByHome(req.home.slug, from, to);
+    await auditService.log('hr_audit_export_download', req.home.slug, req.user.username, {
+      from,
+      to,
+      row_count: rows.length,
+    });
     res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${req.home.slug}-${from}-${to}.json"`);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json(rows);

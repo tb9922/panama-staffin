@@ -8,6 +8,7 @@ import { splitVersion } from '../lib/versionedPayload.js';
 import * as auditService from '../services/auditService.js';
 import * as cqcEvidenceLinksRepo from '../repositories/cqcEvidenceLinksRepo.js';
 import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCategories.js';
+import { hasModuleAccess } from '../shared/roles.js';
 import { pool } from '../db.js';
 
 const router = Router();
@@ -76,6 +77,8 @@ const SOURCE_TABLES = {
   hr_tupe: { table: 'hr_tupe_transfers', idExpr: 'id::text', softDelete: true },
   hr_renewal: { table: 'hr_rtw_dbs_renewals', idExpr: 'id::text', softDelete: true },
 };
+const HR_SOURCE_MODULES = new Set(SOURCE_MODULES.filter((module) => module.startsWith('hr_')));
+const NON_HR_SOURCE_MODULES = SOURCE_MODULES.filter((module) => !HR_SOURCE_MODULES.has(module));
 
 const idSchema = z.coerce.number().int().positive();
 const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/);
@@ -134,8 +137,47 @@ async function sourceRecordExists(homeId, sourceModule, sourceId) {
   return rows.length > 0;
 }
 
+function canReadHr(req) {
+  return req.user?.is_platform_admin || hasModuleAccess(req.homeRole, 'hr', 'read', { includeOwn: false });
+}
+
+function isHrSourceModule(sourceModule) {
+  return HR_SOURCE_MODULES.has(sourceModule);
+}
+
+function visibleSourceModulesFor(req) {
+  return canReadHr(req) ? undefined : NON_HR_SOURCE_MODULES;
+}
+
+function enforceHrSourceAccess(req, res, sourceModule) {
+  if (isHrSourceModule(sourceModule) && !canReadHr(req)) {
+    res.status(403).json({ error: 'HR permission is required for HR evidence links' });
+    return false;
+  }
+  return true;
+}
+
+function auditLinkSnapshot(link) {
+  if (!link) return null;
+  const isHr = isHrSourceModule(link.sourceModule);
+  return {
+    id: link.id,
+    source_module: link.sourceModule,
+    source_id: link.sourceId,
+    quality_statement: link.qualityStatement,
+    evidence_category: link.evidenceCategory,
+    requires_review: link.requiresReview,
+    source_recorded_at: link.sourceRecordedAt,
+    rationale: isHr && link.rationale ? '[REDACTED]' : link.rationale,
+    version: link.version,
+  };
+}
+
 async function validateLinkSources(req, res, links) {
   for (const link of links) {
+    if (!enforceHrSourceAccess(req, res, link.source_module)) {
+      return false;
+    }
     if (!await sourceRecordExists(req.home.id, link.source_module, link.source_id)) {
       res.status(400).json({
         error: `Source record does not exist for this home: ${link.source_module}/${link.source_id}`,
@@ -152,9 +194,10 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     if (!parsed.success) return zodError(res, parsed);
 
     const { statement, dateFrom, dateTo, limit, offset } = parsed.data;
+    const sourceModules = visibleSourceModulesFor(req);
     const result = statement
-      ? await cqcEvidenceLinksRepo.findByStatement(req.home.id, statement, { dateFrom, dateTo, limit, offset })
-      : await cqcEvidenceLinksRepo.findByHome(req.home.id, { dateFrom, dateTo, limit, offset });
+      ? await cqcEvidenceLinksRepo.findByStatement(req.home.id, statement, { dateFrom, dateTo, limit, offset, sourceModules })
+      : await cqcEvidenceLinksRepo.findByHome(req.home.id, { dateFrom, dateTo, limit, offset, sourceModules });
 
     res.json({ rows: result.rows, _total: result.total });
   } catch (err) {
@@ -166,6 +209,7 @@ router.get('/source/:module/:id', readRateLimiter, requireAuth, requireHomeAcces
   try {
     const moduleParsed = sourceModuleSchema.safeParse(req.params.module);
     if (!moduleParsed.success) return res.status(400).json({ error: 'Invalid source module' });
+    if (!enforceHrSourceAccess(req, res, moduleParsed.data)) return;
     const sourceId = String(req.params.id || '');
     if (!sourceId) return res.status(400).json({ error: 'Invalid source ID' });
 
@@ -180,7 +224,10 @@ router.get('/counts', readRateLimiter, requireAuth, requireHomeAccess, requireMo
   try {
     const parsed = countsQuerySchema.safeParse(req.query);
     if (!parsed.success) return zodError(res, parsed);
-    const rows = await cqcEvidenceLinksRepo.countByStatement(req.home.id, parsed.data);
+    const rows = await cqcEvidenceLinksRepo.countByStatement(req.home.id, {
+      ...parsed.data,
+      sourceModules: visibleSourceModulesFor(req),
+    });
     res.json(rows);
   } catch (err) {
     next(err);
@@ -249,6 +296,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 
     const existing = await cqcEvidenceLinksRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!enforceHrSourceAccess(req, res, existing.sourceModule)) return;
 
     const { version, payload } = splitVersion(parsed.data);
     const saved = await cqcEvidenceLinksRepo.updateLink(idParsed.data, req.home.id, payload, version);
@@ -258,8 +306,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 
     await auditService.log('cqc_evidence_link_update', req.home.slug, req.user.username, {
       id: idParsed.data,
-      before: existing,
-      after: saved,
+      before: auditLinkSnapshot(existing),
+      after: auditLinkSnapshot(saved),
     });
     res.json(saved);
   } catch (err) {
@@ -274,6 +322,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
 
     const existing = await cqcEvidenceLinksRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!enforceHrSourceAccess(req, res, existing.sourceModule)) return;
 
     await cqcEvidenceLinksRepo.softDelete(idParsed.data, req.home.id);
     await auditService.log('cqc_evidence_link_delete', req.home.slug, req.user.username, {
@@ -295,6 +344,7 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
 
     const existing = await cqcEvidenceLinksRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!enforceHrSourceAccess(req, res, existing.sourceModule)) return;
 
     const saved = await cqcEvidenceLinksRepo.confirmAutoLink(idParsed.data, req.home.id, req.user.username);
     await auditService.log('cqc_evidence_link_confirm', req.home.slug, req.user.username, {
@@ -313,6 +363,10 @@ router.post('/confirm-bulk', writeRateLimiter, requireAuth, requireHomeAccess, r
   try {
     const parsed = confirmBulkSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    const existing = await cqcEvidenceLinksRepo.findByIds(req.home.id, parsed.data.ids);
+    if (existing.some((link) => isHrSourceModule(link.sourceModule)) && !canReadHr(req)) {
+      return res.status(403).json({ error: 'HR permission is required for HR evidence links' });
+    }
 
     const rows = await cqcEvidenceLinksRepo.confirmBulkAutoLinks(req.home.id, parsed.data.ids, req.user.username);
     await auditService.log('cqc_evidence_link_confirm_bulk', req.home.slug, req.user.username, {

@@ -16,6 +16,9 @@ Current expected baseline is documented in
 - [ ] `npm run test:integration` passes for route, auth, migration, compliance, payroll, HR, GDPR, CQC, incident, or cross-module changes
 - [ ] `npm run audit:routes` - exit 0
 - [ ] `npm run verify:action-backfill`, `npm run verify:v1-operational`, and `npm run test:v1-scale` pass
+- [ ] HR encryption gates pass after HR migrations:
+  `npm run backfill:hr-edi-encryption`, `npm run verify:hr-edi-encryption`,
+  `npm run backfill:hr-health-encryption`, `npm run verify:hr-health-encryption`
 - [ ] `npm audit --omit=dev --json` - 0 production vulnerabilities
 - [ ] New migrations reviewed (if any)
 - [ ] `CLAUDE.md` updated if schema/API/test counts changed
@@ -32,10 +35,18 @@ git fetch --prune origin main
 git checkout main
 git merge --ff-only "$EXPECTED_COMMIT"
 test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
-npm ci --omit=dev
+npm ci
 npm run build
+pm2 stop panama
 node scripts/migrate.js
+npm run backfill:hr-edi-encryption
+npm run verify:hr-edi-encryption
+npm run backfill:hr-health-encryption
+npm run verify:hr-health-encryption
+npm prune --omit=dev
 pm2 restart panama
+npm run verify:hr-edi-encryption
+npm run verify:hr-health-encryption
 ```
 
 ## Post-Deploy Verification

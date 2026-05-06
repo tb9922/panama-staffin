@@ -33,6 +33,9 @@ export async function findAttachmentById(id, homeId, client) {
 
 export async function createAttachment(homeId, caseType, caseId, data, client) {
   const conn = client || pool;
+  if (!await caseExists(homeId, caseType, caseId, conn)) {
+    throw Object.assign(new Error('HR case not found'), { statusCode: 404 });
+  }
   const { rows } = await conn.query(
     `INSERT INTO hr_file_attachments (home_id, case_type, case_id, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING ${COLS}`,

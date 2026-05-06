@@ -36,6 +36,7 @@ const SOURCE_QUERIES = {
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
       AND ($6::TEXT[] IS NULL OR TRUE)
+      AND ($7::TEXT[] IS NULL OR TRUE)
   `,
   cqc_evidence: `
     SELECT
@@ -62,6 +63,7 @@ const SOURCE_QUERIES = {
       AND ($4::DATE IS NULL OR (f.created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (f.created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
       AND ($6::TEXT[] IS NULL OR TRUE)
+      AND ($7::TEXT[] IS NULL OR TRUE)
   `,
   onboarding: `
     SELECT
@@ -84,6 +86,7 @@ const SOURCE_QUERIES = {
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
       AND ($6::TEXT[] IS NULL OR TRUE)
+      AND ($7::TEXT[] IS NULL OR section <> ALL($7))
   `,
   training: `
     SELECT
@@ -106,6 +109,7 @@ const SOURCE_QUERIES = {
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
       AND ($6::TEXT[] IS NULL OR TRUE)
+      AND ($7::TEXT[] IS NULL OR TRUE)
   `,
   record: `
     SELECT
@@ -128,6 +132,7 @@ const SOURCE_QUERIES = {
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
       AND ($6::TEXT[] IS NULL OR module = ANY($6))
+      AND ($7::TEXT[] IS NULL OR TRUE)
   `,
 };
 
@@ -168,6 +173,9 @@ function buildParams(homeId, filters = {}) {
     filters.dateFrom || null,
     filters.dateTo || null,
     Array.isArray(filters.recordModules) && filters.recordModules.length > 0 ? filters.recordModules : null,
+    Array.isArray(filters.excludedOnboardingSections) && filters.excludedOnboardingSections.length > 0
+      ? filters.excludedOnboardingSections
+      : null,
   ];
 }
 
@@ -188,7 +196,7 @@ export async function search(homeId, filters = {}, client = pool) {
     SELECT *
       FROM evidence
      ORDER BY created_at DESC
-     LIMIT $7 OFFSET $8
+     LIMIT $8 OFFSET $9
   `;
 
   const countSql = `

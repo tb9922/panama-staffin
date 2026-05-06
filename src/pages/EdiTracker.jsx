@@ -206,7 +206,7 @@ export default function EdiTracker() {
       if (e.message?.includes('modified by another user')) {
         setFormError('This record was modified by another user. Please close and reopen to get the latest version.');
         load();
-      } else { setError(e.message); }
+      } else { setFormError(e.message || 'Unable to save EDI record.'); }
     } finally {
       setSaving(false);
     }

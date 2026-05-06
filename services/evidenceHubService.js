@@ -10,6 +10,10 @@ import {
   getReadableRecordAttachmentModules,
   getRecordAttachmentModule,
 } from '../shared/recordAttachmentModules.js';
+import {
+  canAccessSensitiveOnboarding,
+  SENSITIVE_ONBOARDING_SECTIONS,
+} from '../shared/staffPolicy.js';
 import { getTrainingTypes } from '../shared/training.js';
 
 const SAFE_IDENTIFIER_RE = /^[a-z_]+$/;
@@ -19,31 +23,31 @@ const SAFE_IDENTIFIER_RE = /^[a-z_]+$/;
 const HR_PARENT_META = {
   disciplinary: {
     table: 'hr_disciplinary_cases',
-    titleCol: 'allegation_summary',
+    titleCol: 'category',
     staffCol: 'staff_id',
     pagePath: '/hr/disciplinary',
   },
   grievance: {
     table: 'hr_grievance_cases',
-    titleCol: 'subject_summary',
+    titleCol: 'category',
     staffCol: 'staff_id',
     pagePath: '/hr/grievance',
   },
   performance: {
     table: 'hr_performance_cases',
-    titleCol: 'concern_summary',
+    titleCol: 'type',
     staffCol: 'staff_id',
     pagePath: '/hr/performance',
   },
   rtw_interview: {
     table: 'hr_rtw_interviews',
-    titleCol: 'absence_reason',
+    titleCol: 'rtw_date',
     staffCol: 'staff_id',
     pagePath: '/hr/absence',
   },
   oh_referral: {
     table: 'hr_oh_referrals',
-    titleCol: 'reason',
+    titleCol: 'referral_date',
     staffCol: 'staff_id',
     pagePath: '/hr/absence',
   },
@@ -61,13 +65,13 @@ const HR_PARENT_META = {
   },
   flexible_working: {
     table: 'hr_flexible_working',
-    titleCol: 'requested_change',
+    titleCol: 'request_date',
     staffCol: 'staff_id',
     pagePath: '/hr/flex-working',
   },
   edi: {
     table: 'hr_edi_records',
-    titleCol: 'description',
+    titleCol: 'record_type',
     staffCol: 'staff_id',
     pagePath: '/hr/edi',
   },
@@ -254,6 +258,9 @@ function buildSearchFilters(roleId, filters = {}) {
     ...filters,
     sourceModules: requestedSources,
     recordModules: readableRecordModules.length > 0 ? readableRecordModules : null,
+    excludedOnboardingSections: canAccessSensitiveOnboarding(roleId)
+      ? null
+      : SENSITIVE_ONBOARDING_SECTIONS,
   };
 }
 

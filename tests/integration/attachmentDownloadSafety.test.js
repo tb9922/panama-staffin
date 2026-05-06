@@ -26,6 +26,7 @@ beforeAll(async () => {
     await pool.query(`DELETE FROM cqc_evidence_files WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
     await pool.query(`DELETE FROM onboarding_file_attachments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
     await pool.query(`DELETE FROM training_file_attachments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM audit_log WHERE home_slug = $1`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_disciplinary_cases WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
@@ -120,6 +121,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM cqc_evidence_files WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM onboarding_file_attachments WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM training_file_attachments WHERE home_id = $1`, [homeId]).catch(() => {});
+  await pool.query(`DELETE FROM audit_log WHERE home_slug = $1`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_disciplinary_cases WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]).catch(() => {});
@@ -143,6 +145,18 @@ describe('attachment download safety', () => {
         .expect(404);
       expect(response.body.error).toMatch(/missing/i);
     }
+
+    const { rows } = await pool.query(
+      `SELECT details FROM audit_log
+        WHERE home_slug = $1
+          AND action = 'hr_attachment_download'`,
+      [HOME_SLUG]
+    );
+    const matchingRows = rows.filter((row) => {
+      const details = typeof row.details === 'string' ? JSON.parse(row.details) : row.details;
+      return details.id === hrAttachmentId;
+    });
+    expect(matchingRows).toHaveLength(0);
   });
 
   it('retains regulated staff evidence but hides deleted parent record attachments', async () => {

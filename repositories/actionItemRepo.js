@@ -237,7 +237,8 @@ const SOURCE_SYNC_COLUMNS = [
   'escalation_level',
 ];
 
-const CLOSED_STATUSES = new Set(['completed', 'verified', 'cancelled']);
+const TERMINAL_STATUSES = new Set(['completed', 'verified']);
+const CLOSED_STATUSES = new Set([...TERMINAL_STATUSES, 'cancelled']);
 
 function valuesDiffer(left, right) {
   if (left == null && right == null) return false;
@@ -246,11 +247,14 @@ function valuesDiffer(left, right) {
 
 export async function syncBySource(homeId, data, updatedBy = null, client = pool) {
   const result = await findOrCreateBySource(homeId, data, client);
-  if (result.created || !result.item || CLOSED_STATUSES.has(result.item.status)) {
+  if (result.created || !result.item || TERMINAL_STATUSES.has(result.item.status)) {
     return { ...result, updated: false };
   }
 
   const updates = {};
+  if (result.item.status === 'cancelled') {
+    updates.status = data.status || 'open';
+  }
   for (const key of SOURCE_SYNC_COLUMNS) {
     if (data[key] !== undefined && valuesDiffer(result.item[key], data[key])) {
       updates[key] = data[key];
@@ -279,6 +283,33 @@ export async function cancelBySource(homeId, sourceType, sourceId, sourceActionK
     client,
   );
   return { item, cancelled: Boolean(item) };
+}
+
+export async function cancelAllBySource(homeId, sourceType, sourceId, updatedBy = null, client = pool) {
+  const { rows } = await client.query(
+    `SELECT id
+       FROM action_items
+      WHERE home_id = $1
+        AND source_type = $2
+        AND source_id = $3
+        AND deleted_at IS NULL
+        AND status NOT IN ('completed', 'verified', 'cancelled')`,
+    [homeId, sourceType, String(sourceId)]
+  );
+
+  const cancelled = [];
+  for (const row of rows) {
+    const item = await update(
+      row.id,
+      homeId,
+      { status: 'cancelled', escalation_level: 0 },
+      null,
+      updatedBy,
+      client,
+    );
+    if (item) cancelled.push(item);
+  }
+  return cancelled;
 }
 
 const ALLOWED_UPDATE_COLUMNS = new Set([

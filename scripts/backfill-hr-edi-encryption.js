@@ -44,9 +44,8 @@ async function main() {
       SELECT id, harassment_category, respondent_name, reasonable_steps_evidence,
              condition_description, adjustments, access_to_work_reference,
              description, outcome, notes
-        FROM hr_edi_records
+       FROM hr_edi_records
        WHERE sensitive_encrypted IS NULL
-         AND deleted_at IS NULL
          AND (
            harassment_category IS NOT NULL
            OR respondent_name IS NOT NULL

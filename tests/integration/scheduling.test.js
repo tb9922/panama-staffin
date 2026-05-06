@@ -586,11 +586,10 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
 // ── S3: PII filtering in homeService ─────────────────────────────────────────
 
 describe('homeService: assembleData PII filtering (S3)', () => {
-  it('admin gets all staff fields', async () => {
-    const data = await homeService.assembleData('sched-test-home-a', 'admin');
+  it('home managers get sensitive staff-management fields', async () => {
+    const data = await homeService.assembleData('sched-test-home-a', 'home_manager');
     const staff = data.staff.find(s => s.id === 'sched-S001');
     expect(staff).toBeDefined();
-    // Admin should see all fields including PII
     expect('hourly_rate' in staff).toBe(true);
   });
 
@@ -616,7 +615,7 @@ describe('homeService: assembleData PII filtering (S3)', () => {
     const staff = data.staff[0];
     const allowedKeys = new Set([
       'id', 'name', 'role', 'team', 'pref', 'skill', 'active',
-      'start_date', 'leaving_date',
+      'start_date', 'version',
     ]);
     for (const key of Object.keys(staff)) {
       expect(allowedKeys.has(key)).toBe(true);

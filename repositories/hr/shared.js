@@ -73,12 +73,15 @@ const SOFT_DELETE_TABLES = new Set([
   'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
 ]);
 
-export async function softDeleteCase(table, id, homeId, client) {
+export async function softDeleteCase(table, id, homeId, client, version = null) {
   if (!SOFT_DELETE_TABLES.has(table)) throw new Error(`softDeleteCase: disallowed table: ${table}`);
   const conn = client || pool;
-  const { rowCount } = await conn.query(
-    `UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
-    [id, homeId]
-  );
+  const params = [id, homeId];
+  let sql = `UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  const { rowCount } = await conn.query(sql, params);
   return rowCount > 0;
 }

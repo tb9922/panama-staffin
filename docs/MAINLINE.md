@@ -58,6 +58,15 @@ V1 operational verification, local V1 scale/load, Playwright E2E, UI stress,
 and production dependency audit. The DB-backed gates must point at a local
 dev/test database, never production.
 
+For HR/EDI releases, run the EDI encryption maintenance gate after migrations:
+
+```bash
+npm run backfill:hr-edi-encryption
+npm run verify:hr-edi-encryption
+npm run backfill:hr-health-encryption
+npm run verify:hr-health-encryption
+```
+
 ## Golden Journey Coverage
 
 The golden Playwright pack protects the routes and buttons that should never be

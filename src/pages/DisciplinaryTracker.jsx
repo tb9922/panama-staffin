@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import TabBar from '../components/TabBar.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
@@ -74,6 +75,7 @@ export default function DisciplinaryTracker() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -107,8 +109,8 @@ export default function DisciplinaryTracker() {
         if (filterStaff) filters.staffId = filterStaff;
         if (filterStatus) filters.status = filterStatus;
         const res = await getHrDisciplinary(home, filters);
-        if (!stale) { setCases(res?.rows || []); setTotal(res?.total || 0); setError(null); }
-      } catch (e) { if (!stale) setError(e.message); }
+        if (!stale) { setCases(res?.rows || []); setTotal(res?.total || 0); setLoadError(null); }
+      } catch (e) { if (!stale) setLoadError(e.message); }
       finally { if (!stale) setLoading(false); }
     })();
     return () => { stale = true; };
@@ -254,6 +256,15 @@ export default function DisciplinaryTracker() {
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
           {notice.content}
         </InlineNotice>
+      )}
+
+      {loadError && (
+        <ErrorState
+          title="Unable to load disciplinary cases"
+          message={loadError}
+          onRetry={() => setRefreshKey(k => k + 1)}
+          className="mb-4"
+        />
       )}
 
       {/* Filter bar */}

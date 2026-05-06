@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import TabBar from '../components/TabBar.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
@@ -46,6 +47,7 @@ export default function PerformanceTracker() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
@@ -80,8 +82,8 @@ export default function PerformanceTracker() {
         if (filterStatus) filters.status = filterStatus;
         if (filterType) filters.type = filterType;
         const res = await getHrPerformance(home, filters);
-        if (!stale) { setItems(res?.rows || []); setTotal(res?.total || 0); setError(null); }
-      } catch (e) { if (!stale) setError(e.message); }
+        if (!stale) { setItems(res?.rows || []); setTotal(res?.total || 0); setLoadError(null); }
+      } catch (e) { if (!stale) setLoadError(e.message); }
       finally { if (!stale) setLoading(false); }
     })();
     return () => { stale = true; };
@@ -221,6 +223,15 @@ export default function PerformanceTracker() {
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
           {notice.content}
         </InlineNotice>
+      )}
+
+      {loadError && (
+        <ErrorState
+          title="Unable to load performance cases"
+          message={loadError}
+          onRetry={() => setRefreshKey(k => k + 1)}
+          className="mb-4"
+        />
       )}
 
       {/* Filters */}
