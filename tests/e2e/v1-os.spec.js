@@ -75,7 +75,7 @@ test.describe('V1 operating-system UX', () => {
     await expect(page.locator('tbody tr').filter({ hasText: title }).first().getByText('Verified')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('audit calendar, outcomes and reflective practice core forms save', async ({ page }) => {
+  test('audit calendar, outcomes and reflective practice core forms save', async ({ page, browser }) => {
     const auditTitle = unique('audit task');
     await page.goto('/audit-calendar');
     await expect(page.getByRole('heading', { name: 'Audit Calendar' })).toBeVisible({ timeout: 30_000 });
@@ -94,12 +94,21 @@ test.describe('V1 operating-system UX', () => {
       response.url().includes('/api/audit-tasks/') && response.url().includes('/complete') && response.request().method() === 'POST');
     await auditRow.getByRole('button', { name: 'Complete' }).click();
     await expectApiOk(completeAuditPromise, 'complete audit task');
-    auditRow = page.locator('tbody tr').filter({ hasText: auditTitle }).first();
-    const verifyAuditPromise = page.waitForResponse(response =>
-      response.url().includes('/api/audit-tasks/') && response.url().includes('/verify') && response.request().method() === 'POST');
-    await auditRow.getByRole('button', { name: 'QA Sign-off' }).click();
-    await expectApiOk(verifyAuditPromise, 'verify audit task');
-    await expect(page.locator('tbody tr').filter({ hasText: auditTitle }).first().getByText('Verified')).toBeVisible({ timeout: 10_000 });
+    const managerContext = await browser.newContext({ storageState: '.playwright/manager-state.json' });
+    const managerPage = await managerContext.newPage();
+    try {
+      await managerPage.goto('/audit-calendar');
+      await expect(managerPage.getByRole('heading', { name: 'Audit Calendar' })).toBeVisible({ timeout: 30_000 });
+      auditRow = managerPage.locator('tbody tr').filter({ hasText: auditTitle }).first();
+      await expect(auditRow).toBeVisible({ timeout: 10_000 });
+      const verifyAuditPromise = managerPage.waitForResponse(response =>
+        response.url().includes('/api/audit-tasks/') && response.url().includes('/verify') && response.request().method() === 'POST');
+      await auditRow.getByRole('button', { name: 'QA Sign-off' }).click();
+      await expectApiOk(verifyAuditPromise, 'verify audit task');
+      await expect(managerPage.locator('tbody tr').filter({ hasText: auditTitle }).first().getByText('Verified')).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await managerContext.close();
+    }
 
     const metricNotes = unique('metric notes');
     await page.goto('/outcomes');

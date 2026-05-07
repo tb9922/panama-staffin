@@ -125,6 +125,7 @@ test.describe('Seeded destructive-flow sandbox', () => {
 
   test('completes and verifies disposable action and audit-task workflows', async ({ request }) => {
     const admin = await login(request, 'admin', 'admin12345');
+    const manager = await login(request, 'manager', 'manager12345');
 
     const action = await createAction(request, admin, unique('complete action'));
     const completedAction = await expectJson(
@@ -177,7 +178,7 @@ test.describe('Seeded destructive-flow sandbox', () => {
 
     const verifiedTask = await expectJson(
       await request.post(`${API_BASE}/api/audit-tasks/${auditTask.id}/verify?${HOME_QUERY}`, {
-        headers: authHeaders(admin),
+        headers: authHeaders(manager),
         data: { _version: completedTask.version },
       }),
       'verify sandbox audit task',
@@ -193,6 +194,7 @@ test.describe('Seeded destructive-flow sandbox', () => {
     await expectJson(
       await request.delete(`${API_BASE}/api/audit-tasks/${auditTask.id}?${HOME_QUERY}`, {
         headers: authHeaders(admin),
+        data: { _version: verifiedTask.version },
       }),
       'cleanup verified sandbox audit task',
     );

@@ -273,13 +273,53 @@ describe('Session and logout hardening', () => {
 });
 
 describe('Bootstrap admin seeding', () => {
-  it('repairs an env-seeded admin to platform admin', async () => {
+  it('does not silently repair an env-seeded admin without an explicit flag', async () => {
     const seedUsername = `${TEST_PREFIX}-seed-admin`;
     const seedHash = await bcrypt.hash('SeedAdminPass1X', 4);
     const originalUsers = config.users;
+    const originalRepairFlag = process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR;
 
     try {
       config.users = [{ username: seedUsername, hash: seedHash, role: 'admin' }];
+      delete process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR;
+
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE username = $1', [seedUsername]).catch(() => {});
+
+      await pool.query(
+        `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+         VALUES ($1, $2, 'admin', true, 'Seed Admin', 'system', false)`,
+        [seedUsername, seedHash]
+      );
+
+      await userService.ensureSeedUsers();
+
+      const repaired = await userRepo.findByUsername(seedUsername);
+      expect(repaired).toBeTruthy();
+      expect(repaired.is_platform_admin).toBe(false);
+    } finally {
+      config.users = originalUsers;
+      if (originalRepairFlag === undefined) {
+        delete process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR;
+      } else {
+        process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR = originalRepairFlag;
+      }
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE username = $1', [seedUsername]).catch(() => {});
+    }
+  });
+
+  it('repairs an env-seeded admin to platform admin when explicitly enabled', async () => {
+    const seedUsername = `${TEST_PREFIX}-seed-admin-repair`;
+    const seedHash = await bcrypt.hash('SeedAdminPass1X', 4);
+    const originalUsers = config.users;
+    const originalRepairFlag = process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR;
+
+    try {
+      config.users = [{ username: seedUsername, hash: seedHash, role: 'admin' }];
+      process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR = 'true';
 
       await pool.query('DELETE FROM user_home_roles WHERE username = $1', [seedUsername]).catch(() => {});
       await pool.query('DELETE FROM token_denylist WHERE username = $1', [seedUsername]).catch(() => {});
@@ -298,6 +338,11 @@ describe('Bootstrap admin seeding', () => {
       expect(repaired.is_platform_admin).toBe(true);
     } finally {
       config.users = originalUsers;
+      if (originalRepairFlag === undefined) {
+        delete process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR;
+      } else {
+        process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR = originalRepairFlag;
+      }
       await pool.query('DELETE FROM user_home_roles WHERE username = $1', [seedUsername]).catch(() => {});
       await pool.query('DELETE FROM token_denylist WHERE username = $1', [seedUsername]).catch(() => {});
       await pool.query('DELETE FROM users WHERE username = $1', [seedUsername]).catch(() => {});
