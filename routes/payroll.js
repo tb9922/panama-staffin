@@ -110,6 +110,64 @@ function shapeOwnPayslipData(payslip) {
   };
 }
 
+function shapeOwnPayrollLine(line) {
+  if (!line) return line;
+  return {
+    id: line.id,
+    payroll_run_id: line.payroll_run_id,
+    staff_id: line.staff_id,
+    base_hours: line.base_hours,
+    base_pay: line.base_pay,
+    night_hours: line.night_hours,
+    night_enhancement: line.night_enhancement,
+    weekend_hours: line.weekend_hours,
+    weekend_enhancement: line.weekend_enhancement,
+    bank_holiday_hours: line.bank_holiday_hours,
+    bank_holiday_enhancement: line.bank_holiday_enhancement,
+    overtime_hours: line.overtime_hours,
+    overtime_enhancement: line.overtime_enhancement,
+    sleep_in_count: line.sleep_in_count,
+    sleep_in_pay: line.sleep_in_pay,
+    on_call_hours: line.on_call_hours,
+    on_call_enhancement: line.on_call_enhancement,
+    total_hours: line.total_hours,
+    total_enhancements: line.total_enhancements,
+    gross_pay: line.gross_pay,
+    tax_code: line.tax_code,
+    student_loan_plan: line.student_loan_plan,
+    holiday_days: line.holiday_days,
+    holiday_pay: line.holiday_pay,
+    authorised_absence_hours: line.authorised_absence_hours,
+    authorised_absence_pay: line.authorised_absence_pay,
+    ssp_days: line.ssp_days,
+    ssp_amount: line.ssp_amount,
+    enhanced_sick_amount: line.enhanced_sick_amount,
+    pension_employee: line.pension_employee,
+    tax_deducted: line.tax_deducted,
+    employee_ni: line.employee_ni,
+    student_loan: line.student_loan,
+    other_deductions: line.other_deductions,
+    net_pay: line.net_pay,
+  };
+}
+
+function shapeOwnSickPeriod(period) {
+  if (!period) return period;
+  return {
+    id: period.id,
+    staff_id: period.staff_id,
+    start_date: period.start_date,
+    end_date: period.end_date || null,
+    qualifying_days_per_week: period.qualifying_days_per_week,
+    waiting_days_served: period.waiting_days_served,
+    ssp_weeks_paid: period.ssp_weeks_paid,
+    linked_to_period_id: period.linked_to_period_id || null,
+    created_at: period.created_at,
+    updated_at: period.updated_at,
+    version: period.version,
+  };
+}
+
 async function assertPayrollStaffExists(homeId, staffId, client) {
   const staff = await staffRepo.findById(homeId, staffId, client);
   if (!staff) throw new NotFoundError('Staff member not found');
@@ -684,7 +742,7 @@ router.get('/runs/:runId', readRateLimiter, requireAuth, requireHomeAccess, requ
       }
       lines = lines.filter(l => l.staff_id === req.staffId);
       if (lines.length === 0) return res.status(404).json({ error: 'Run not found' });
-      return res.json({ run: shapeOwnPayrollRunDetail(run), lines });
+      return res.json({ run: shapeOwnPayrollRunDetail(run), lines: lines.map(shapeOwnPayrollLine) });
     }
     res.json({ run, lines });
   } catch (err) { next(err); }
@@ -816,6 +874,10 @@ router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requi
     const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, staffId);
     if (!payslips.length) return res.status(404).json({ error: 'No payslip data found for this staff member' });
     const pdf = generatePayslipPDF(payslips[0]);
+    await auditService.log('payroll_payslip_download', req.home.slug, req.user.username, {
+      runId: runIdP.data,
+      staffId,
+    });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="payslip_${staffId}_${payslips[0].run.period_start}.pdf"`);
     res.setHeader('Cache-Control', SENSITIVE_DOWNLOAD_CACHE_CONTROL);
@@ -1020,7 +1082,7 @@ const taxCodeBodySchema = z.object({
   staff_id:          z.string().min(1).max(20),
   tax_code:          z.string().min(1).max(20).optional().default('1257L'),
   basis:             z.enum(['cumulative', 'w1m1']).optional().default('cumulative'),
-  ni_category:       z.string().length(1).optional().default('A'),
+  ni_category:       z.enum(['A']).optional().default('A'),
   effective_from:    dateSchema.optional(),
   previous_pay:      z.number().nonnegative().optional().default(0),
   previous_tax:      z.number().nonnegative().optional().default(0),
@@ -1180,7 +1242,8 @@ router.get('/sick-periods', readRateLimiter, requireAuth, requireHomeAccess, req
     const staffId = isOwnDataOnly(req.homeRole, 'payroll')
       ? req.staffId
       : safeStr(req.query.staffId, 20);
-    res.json(await sspRepo.listSickPeriods(req.home.id, staffId));
+    const periods = await sspRepo.listSickPeriods(req.home.id, staffId);
+    res.json(isOwnDataOnly(req.homeRole, 'payroll') ? periods.map(shapeOwnSickPeriod) : periods);
   } catch (err) { next(err); }
 });
 
@@ -1194,6 +1257,7 @@ router.post('/sick-periods', writeRateLimiter, requireAuth, requireHomeAccess, r
       if (parsed.data.end_date && parsed.data.end_date < parsed.data.start_date) {
         throw new ValidationError('end_date cannot be before start_date');
       }
+      await client.query('SELECT pg_advisory_xact_lock(20260407, hashtext($1))', [`${req.home.id}:${parsed.data.staff_id}`]);
       const linked = await resolveLinkedSickPeriod(
         req.home.id,
         parsed.data.staff_id,
@@ -1309,6 +1373,10 @@ router.get('/runs/:runId/summary-pdf', readRateLimiter, requireAuth, requireHome
     const lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
     const doc = generateSummaryPDF(run, lines, { name: req.home.config?.home_name || req.home.name });
     const buffer = Buffer.from(doc.output('arraybuffer'));
+    await auditService.log('payroll_summary_download', req.home.slug, req.user.username, {
+      runId: runIdP.data,
+      lineCount: lines.length,
+    });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',

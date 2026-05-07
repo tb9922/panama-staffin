@@ -102,13 +102,15 @@ export async function subtractLiability(homeId, taxYear, taxMonth, amounts, clie
      SET total_paye         = GREATEST(0, total_paye         - $4),
          total_employee_ni  = GREATEST(0, total_employee_ni  - $5),
          total_employer_ni  = GREATEST(0, total_employer_ni  - $6),
-         total_due          = GREATEST(0, total_due          - $7),
+         employment_allowance_offset = GREATEST(0, employment_allowance_offset - $7),
+         total_due          = GREATEST(0, total_due          - $8),
          updated_at         = NOW()
      WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3
-     RETURNING total_paye, total_employee_ni, total_employer_ni, total_due, status,
+     RETURNING total_paye, total_employee_ni, total_employer_ni, employment_allowance_offset, total_due, status,
                reopened_paid_date, reopened_paid_reference, reopened_paid_total_due`,
     [homeId, taxYear, taxMonth,
-     amounts.total_paye, amounts.total_employee_ni, amounts.total_employer_ni, amounts.total_due],
+     amounts.total_paye, amounts.total_employee_ni, amounts.total_employer_ni,
+     amounts.employment_allowance_offset || 0, amounts.total_due],
   );
 
   const row = rows[0];
@@ -118,6 +120,7 @@ export async function subtractLiability(homeId, taxYear, taxMonth, amounts, clie
     parseFloat(row.total_paye || 0) === 0 &&
     parseFloat(row.total_employee_ni || 0) === 0 &&
     parseFloat(row.total_employer_ni || 0) === 0 &&
+    parseFloat(row.employment_allowance_offset || 0) === 0 &&
     parseFloat(row.total_due || 0) === 0;
 
   if (isZeroBalance && row.status !== 'paid') {

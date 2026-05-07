@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { AUDIT_TASK_TEMPLATES } from '../lib/auditTaskTemplates.js';
+import { hasModuleAccess } from '../shared/roles.js';
 
 const REQUIRED_STAFFING_PERIODS = ['early', 'late', 'night'];
 const REQUIRED_SHIFT_CODES = ['E', 'L', 'N'];
@@ -290,7 +291,7 @@ async function getAccessibleHomes(username, isPlatformAdmin) {
       ORDER BY h.name`,
     [normalizeUsername(username)],
   );
-  return rows;
+  return rows.filter(row => hasModuleAccess(row.role_id, 'reports', 'read'));
 }
 
 function rowsByHome(rows, shape) {

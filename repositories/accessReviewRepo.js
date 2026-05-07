@@ -182,6 +182,14 @@ export async function findReviewById(reviewId, client = pool) {
   return shapeReview(rows[0]);
 }
 
+export async function findReviewByIdForUpdate(reviewId, client = pool) {
+  const { rows } = await client.query(
+    `SELECT * FROM access_reviews WHERE id = $1 FOR UPDATE`,
+    [reviewId],
+  );
+  return shapeReview(rows[0]);
+}
+
 export async function listReviews(filters = {}, client = pool) {
   const params = [];
   const clauses = [];

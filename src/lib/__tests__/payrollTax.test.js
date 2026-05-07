@@ -377,10 +377,10 @@ describe('calculateNI', () => {
     expect(r.employeeNI).toBe(0);
   });
 
-  it('empty thresholds → zeros', () => {
-    const r = calculateNI(2000, 'monthly', [], niRatesA2025);
-    expect(r.employeeNI).toBe(0);
-    expect(r.employerNI).toBe(0);
+  it('empty thresholds fail closed', () => {
+    expect(() => calculateNI(2000, 'monthly', [], niRatesA2025)).toThrow(
+      /Missing National Insurance rates or thresholds/
+    );
   });
 
   it('weekly frequency — uses weekly thresholds', () => {
@@ -436,8 +436,10 @@ describe('calculateStudentLoan', () => {
     expect(Math.abs(dual - (plan1 + planPG))).toBeLessThan(0.02);
   });
 
-  it('unknown plan → 0', () => {
-    expect(calculateStudentLoan(3000, 'X', 'monthly', slThresholds)).toBe(0);
+  it('unknown plan fails closed', () => {
+    expect(() => calculateStudentLoan(3000, 'X', 'monthly', slThresholds)).toThrow(
+      /Missing student loan threshold for plan X/
+    );
   });
 });
 

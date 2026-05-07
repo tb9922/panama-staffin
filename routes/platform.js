@@ -8,6 +8,7 @@ import * as homeRepo from '../repositories/homeRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as auditService from '../services/auditService.js';
 import * as authService from '../services/authService.js';
+import { clearPortfolioCache } from '../services/portfolioService.js';
 import { DEFAULT_TRAINING_TYPES } from '../shared/training.js';
 
 const router = Router();
@@ -80,9 +81,9 @@ router.post('/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, async
       return res.status(400).json({ error: 'Generated slug is too short — provide an explicit slug' });
     }
 
-    const exists = await homeRepo.slugExistsActive(slug);
+    const exists = await homeRepo.slugExistsAny(slug);
     if (exists) {
-      return res.status(409).json({ error: `A home with slug "${slug}" already exists` });
+      return res.status(409).json({ error: `A home with slug "${slug}" already exists or has been retired` });
     }
 
     const config = buildDefaultConfig(name, registered_beds, care_type, cycle_start_date);
@@ -94,6 +95,7 @@ router.post('/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, async
       return created;
     });
 
+    clearPortfolioCache();
     res.status(201).json({ id: home.id, slug: home.slug, name });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'A home with that slug already exists' });
@@ -134,6 +136,7 @@ router.put('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin, as
     });
 
     if (result.error) return res.status(result.status).json({ error: result.error });
+    clearPortfolioCache();
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -173,6 +176,7 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
     });
 
     if (result.error) return res.status(result.status).json({ error: result.error });
+    clearPortfolioCache();
 
     // Revoke JWTs for affected users so they can't continue using stale tokens.
     // Exclude self — the requester's token must remain valid to receive this response.

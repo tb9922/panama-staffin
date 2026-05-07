@@ -9,6 +9,7 @@ import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
+import { clearPortfolioCache } from '../services/portfolioService.js';
 import logger from '../logger.js';
 import { USER_MANAGEMENT_ROLE_IDS, canAssignRole } from '../shared/roles.js';
 
@@ -159,6 +160,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
       await auditService.log('user_create', req.home.slug, req.user.username, { username: created.username, role, homeRoleId }, client);
       return created;
     });
+    clearPortfolioCache();
     res.status(201).json(user);
   } catch (err) {
     if (err.message === 'Username already exists') return res.status(409).json({ error: err.message });
@@ -204,6 +206,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireHome
     const updated = await userService.updateUser(id.data, fields, req.user.username);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     void logUserAudit('user_update', req.home.slug, req.user.username, { userId: id.data, changes: fields });
+    if (parsed.data.active !== undefined || parsed.data.role !== undefined) clearPortfolioCache();
     res.json(updated);
   } catch (err) {
     if (err.message?.startsWith('Cannot')) return res.status(400).json({ error: err.message });
@@ -283,6 +286,7 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, as
         userId: id.data, username: user.username, homeIds: parsed.data.homeIds,
       }, client);
     });
+    clearPortfolioCache();
     res.json({ ok: true, homeIds: parsed.data.homeIds });
   } catch (err) {
     if (err.statusCode === 404 && err.message?.startsWith('Unknown home IDs:')) {
@@ -347,6 +351,7 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireHomeAccess, requi
       // request via requireHomeAccess, so the JWT claim is never trusted for per-home role checks.
     }
 
+    if (changed) clearPortfolioCache();
     res.json({ ok: true, roleId: parsed.data.roleId });
   } catch (err) { next(err); }
 });
@@ -403,6 +408,7 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
       }
     });
 
+    clearPortfolioCache();
     res.json({ ok: true, roles: parsed.data.roles });
   } catch (err) {
     if (err.statusCode === 404 && err.message?.startsWith('Unknown home IDs:')) {

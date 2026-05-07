@@ -1296,19 +1296,26 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // - hr_rtw_dbs_renewals: retained for compliance audit trail; notes/DBS cert number cleared above
 
     // Anonymise linked user account (Article 17 — display_name is personal data).
-    // Removes home-level role access and deactivates the account to prevent future logins.
+    // Removes home-level role access and only deactivates once no other active home roles remain.
     // username is preserved (it is the login identifier, not the subject's full name).
     if (linkedUsernames.length > 0) {
       for (const linkedUsername of linkedUsernames) {
         await client.query(
-          `UPDATE users SET display_name = $1, active = false WHERE username = $2`,
-          [anon, linkedUsername]
-        );
-        await client.query(
           `DELETE FROM user_home_roles WHERE username = $1 AND home_id = $2`,
           [linkedUsername, homeId]
         );
-        await authService.revokeUser(linkedUsername, 'admin', client);
+        const { rows: [remainingRole] } = await client.query(
+          `SELECT COUNT(*)::int AS count FROM user_home_roles WHERE username = $1`,
+          [linkedUsername]
+        );
+        const hasOtherHomeAccess = Number(remainingRole?.count || 0) > 0;
+        if (!hasOtherHomeAccess) {
+          await client.query(
+            `UPDATE users SET display_name = $1, active = false WHERE username = $2`,
+            [anon, linkedUsername]
+          );
+          await authService.revokeUser(linkedUsername, 'admin', client);
+        }
       }
     }
 
@@ -1445,16 +1452,16 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     }
 
     // Anonymise finance_residents — use PK if resolved, else fall back to name
-    // Table has: resident_name, room_number, notes, top_up_contact (PII fields)
+    // Table has: resident_name, room_number, notes, top_up_contact/top_up_payer (PII fields)
     if (residentPk) {
       await client.query(
-        `UPDATE finance_residents SET resident_name = $1, top_up_contact = NULL, notes = NULL
+        `UPDATE finance_residents SET resident_name = $1, top_up_contact = NULL, top_up_payer = NULL, notes = NULL
          WHERE home_id = $2 AND id = $3 AND deleted_at IS NULL`,
         [anon, homeId, residentPk]
       );
     } else {
       await client.query(
-        `UPDATE finance_residents SET resident_name = $1, top_up_contact = NULL, notes = NULL
+        `UPDATE finance_residents SET resident_name = $1, top_up_contact = NULL, top_up_payer = NULL, notes = NULL
          WHERE home_id = $2 AND resident_name = $3 AND deleted_at IS NULL`,
         [anon, homeId, matchName]
       );

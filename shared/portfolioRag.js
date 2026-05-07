@@ -19,6 +19,7 @@ export const PORTFOLIO_RAG_THRESHOLDS = Object.freeze({
   careCertificateGaps: { greenAtMost: 0, amberAtMost: 2 },
   cqcEvidenceGaps: { greenAtMost: 0, amberAtMost: 4 },
   agencyEmergencyOverridePct: { greenAtMost: 10, amberAtMost: 20 },
+  agencyShifts28d: { greenAtMost: 4, amberAtMost: 12 },
   falls28d: { greenAtMost: 1, amberAtMost: 3 },
   infections28d: { greenAtMost: 1, amberAtMost: 3 },
   pressureSores28d: { greenAtMost: 0, amberAtMost: 1 },
@@ -55,9 +56,12 @@ export function buildPortfolioRag(kpis) {
     staffing: kpis?.staffing?.gaps_per_100_planned_shifts == null
       ? RAG.UNKNOWN
       : ragAtMost(kpis.staffing.gaps_per_100_planned_shifts, { greenAtMost: 0, amberAtMost: 3 }),
-    agency: kpis?.agency?.emergency_override_pct == null
-      ? RAG.UNKNOWN
-      : ragAtMost(kpis.agency.emergency_override_pct, thresholds.agencyEmergencyOverridePct),
+    agency: kpis?.agency
+      ? overallRag({
+          emergency: ragAtMost(kpis.agency.emergency_override_pct, thresholds.agencyEmergencyOverridePct),
+          volume: ragAtMost(kpis.agency.shifts_28d, thresholds.agencyShifts28d),
+        })
+      : RAG.UNKNOWN,
     training: ragAtLeast(kpis?.training?.compliance_pct, thresholds.trainingCompliancePct),
     care_certificate: ragAtMost(
       (kpis?.care_certificate?.overdue || 0) + (kpis?.care_certificate?.missing || 0),

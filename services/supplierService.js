@@ -28,6 +28,10 @@ export async function listSuppliers(homeId, filters) {
   return supplierRepo.listByHome(homeId, filters);
 }
 
+export async function findSupplierById(id, homeId) {
+  return supplierRepo.findById(id, homeId);
+}
+
 export async function createSupplier(homeId, data, createdBy) {
   const normalizedName = normalizeSupplierName(data.name);
   if (!normalizedName) {

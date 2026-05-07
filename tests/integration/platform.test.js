@@ -432,7 +432,7 @@ describe('Last Home Protection', () => {
 // ── 6. Slug Reuse After Soft Delete ──────────────────────────────────────────
 
 describe('Slug Reuse After Soft Delete', () => {
-  it('allows creating a home with a previously soft-deleted slug', async () => {
+  it('rejects creating a home with a previously soft-deleted slug', async () => {
     // Create and delete a home
     const res1 = await platPost('/homes', {
       name: 'Reuse Slug Home',
@@ -442,13 +442,13 @@ describe('Slug Reuse After Soft Delete', () => {
 
     await platDelete(`/homes/${res1.body.id}`).expect(200);
 
-    // Now create again with the same slug — should succeed
+    // Retired slugs remain reserved so old URLs and audit trails cannot be confused.
     const res2 = await platPost('/homes', {
       name: 'Reuse Slug Home 2',
       slug: `${PREFIX}-reuse-slug`,
       cycle_start_date: '2025-01-06',
-    }).expect(201);
+    }).expect(409);
 
-    expect(res2.body.slug).toBe(`${PREFIX}-reuse-slug`);
+    expect(res2.body.error).toMatch(/slug/i);
   });
 });

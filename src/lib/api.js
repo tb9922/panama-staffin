@@ -213,11 +213,12 @@ export async function logout(options = {}) {
     clearClientSession();
     return { ok: true };
   } catch (err) {
-    if (forceLocal || err.status === 401) {
-      clearClientSession();
-      return { ok: false, localOnly: true };
-    }
-    throw err;
+    clearClientSession();
+    return {
+      ok: false,
+      localOnly: true,
+      warning: forceLocal || err.status === 401 ? null : err.message,
+    };
   }
 }
 
@@ -1893,9 +1894,9 @@ export async function updatePaymentSchedule(homeSlug, id, data) {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function processPaymentSchedule(homeSlug, id) {
+export async function processPaymentSchedule(homeSlug, id, version) {
   return apiFetch(`${API_BASE}/finance/payment-schedules/${id}/process?home=${h(homeSlug)}`, {
-    method: 'POST', headers: authHeaders(),
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ _version: version }),
   });
 }
 
@@ -2259,9 +2260,9 @@ export async function revertBedTransition(homeSlug, bedId, reason) {
   });
 }
 
-export async function moveBedResident(homeSlug, fromBedId, toBedId) {
+export async function moveBedResident(homeSlug, fromBedId, toBedId, fromClientUpdatedAt, toClientUpdatedAt) {
   return apiFetch(`${API_BASE}/beds/move?home=${h(homeSlug)}`, {
-    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ fromBedId, toBedId }),
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ fromBedId, toBedId, fromClientUpdatedAt, toClientUpdatedAt }),
   });
 }
 

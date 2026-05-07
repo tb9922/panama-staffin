@@ -268,8 +268,7 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
 /** Compute total tax on an annual taxable income figure using the band table. */
 function computeTax(annualTaxable, taxBands, parsedCode) {
   if (!taxBands || taxBands.length === 0) {
-    // Fallback: basic rate 20%
-    return annualTaxable * 0.20;
+    throw new Error('Missing PAYE tax bands for payroll tax year');
   }
 
   // BR code: flat 20% on everything
@@ -307,7 +306,7 @@ function computeTax(annualTaxable, taxBands, parsedCode) {
  */
 export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
   if (!niThresholds || niThresholds.length === 0 || !niRates || niRates.length === 0) {
-    return { employeeNI: 0, employerNI: 0 };
+    throw new Error('Missing National Insurance rates or thresholds for payroll tax year/category');
   }
 
   const _periodKey = payFrequency === 'monthly' ? 'monthly_amount' : 'weekly_amount';
@@ -315,7 +314,7 @@ export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
 
   function threshold(name) {
     const row = niThresholds.find(t => t.threshold_name === name);
-    if (!row) return 0;
+    if (!row) throw new Error(`Missing National Insurance threshold ${name}`);
     if (payFrequency === 'monthly') return row.monthly_amount;
     if (payFrequency === 'fortnightly') return row.weekly_amount * 2;
     return row.weekly_amount;
@@ -323,7 +322,8 @@ export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
 
   function rate(type) {
     const row = niRates.find(r => r.rate_type === type);
-    return row ? row.rate : 0;
+    if (!row) throw new Error(`Missing National Insurance rate ${type}`);
+    return row.rate;
   }
 
   const pt  = threshold('PT');  // employee primary threshold
@@ -361,7 +361,8 @@ export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
  * @returns {number} Total deduction amount (sum of all plans).
  */
 export function calculateStudentLoan(grossPay, planTypeStr, payFrequency, thresholds) {
-  if (!planTypeStr || !thresholds || thresholds.length === 0) return 0;
+  if (!planTypeStr) return 0;
+  if (!thresholds || thresholds.length === 0) throw new Error('Missing student loan thresholds for payroll tax year');
 
   const periodsInYear = payFrequency === 'weekly' ? 52 : payFrequency === 'fortnightly' ? 26 : 12;
   const plans = planTypeStr.split(',').map(p => p.trim()).filter(Boolean);
@@ -369,7 +370,7 @@ export function calculateStudentLoan(grossPay, planTypeStr, payFrequency, thresh
   let total = 0;
   for (const plan of plans) {
     const config = thresholds.find(t => t.plan === plan);
-    if (!config) continue;
+    if (!config) throw new Error(`Missing student loan threshold for plan ${plan}`);
     const periodThreshold = config.annual_threshold / periodsInYear;
     if (grossPay > periodThreshold) {
       total += (grossPay - periodThreshold) * config.rate;
@@ -546,9 +547,16 @@ export function calculateSSP(sickPeriod, payDate, sspConfig, averageWeeklyEarnin
     return { eligible: false, sspAmount: 0, sspDays: 0, waitingDaysUsed: 1 };
   }
 
+  // From 2026/27 SSP is the lower of the statutory weekly rate or 80% of AWE.
+  const rawWeeklyRate = Number(sspConfig.weekly_rate) || 0;
+  const awe = Number(averageWeeklyEarnings);
+  const weeklyRate = sspConfig.lel_weekly == null && Number.isFinite(awe) && awe > 0
+    ? Math.min(rawWeeklyRate, round2(awe * 0.8))
+    : rawWeeklyRate;
+
   // SSP daily rate = weekly_rate / qualifying_days_per_week
   const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
-  const dailyRate = round2(sspConfig.weekly_rate / qualDaysPerWeek);
+  const dailyRate = round2(weeklyRate / qualDaysPerWeek);
 
   return {
     eligible: true,

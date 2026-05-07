@@ -138,7 +138,7 @@ export default function PayablesManager() {
     setProcessing(schedule.id);
     setSaving(true);
     try {
-      await processPaymentSchedule(home, schedule.id);
+      await processPaymentSchedule(home, schedule.id, schedule.version);
       showNotice(`Payment processed for ${schedule.supplier}.`, { variant: 'success' });
       showToast({ title: 'Payment processed', message: schedule.supplier });
       await load();

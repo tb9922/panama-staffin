@@ -69,5 +69,7 @@ export function canReadRecordAttachmentModule(roleId, moduleId) {
 
 export function canWriteRecordAttachmentModule(roleId, moduleId) {
   const entry = getRecordAttachmentModule(moduleId);
-  return Boolean(entry && hasModuleAccess(roleId, entry.permissionModule, 'write'));
+  if (!entry || !hasModuleAccess(roleId, entry.permissionModule, 'write')) return false;
+  if (!SENSITIVE_RECORD_ATTACHMENT_MODULE_IDS.has(moduleId)) return true;
+  return SENSITIVE_RECORD_ATTACHMENT_ROLES.has(roleId);
 }

@@ -53,12 +53,23 @@ export async function create(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO dpia_assessments (home_id, title, processing_description, purpose, scope,
-       screening_result, screening_rationale, high_risk_triggers, legal_basis, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING ${COLS}`,
+       screening_result, screening_rationale, high_risk_triggers,
+       necessity_assessment, proportionality_assessment, legal_basis,
+       risk_assessment, risk_level, measures, residual_risk,
+       consultation_required, dpo_advice, dpo_advice_date,
+       ico_consultation, ico_consultation_date, stakeholder_views,
+       status, approved_by, approved_date, review_date, next_review_due, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING ${COLS}`,
     [homeId, data.title, data.processing_description, data.purpose || null, data.scope || null,
      data.screening_result || 'required', data.screening_rationale || null,
-     data.high_risk_triggers || null, data.legal_basis || null,
-     data.status || 'screening', data.created_by]
+     data.high_risk_triggers || null,
+     data.necessity_assessment || null, data.proportionality_assessment || null,
+     data.legal_basis || null, data.risk_assessment || null, data.risk_level || null,
+     data.measures || null, data.residual_risk || null,
+     data.consultation_required ?? false, data.dpo_advice || null, data.dpo_advice_date || null,
+     data.ico_consultation ?? false, data.ico_consultation_date || null, data.stakeholder_views || null,
+     data.status || 'screening', data.approved_by || null, data.approved_date || null,
+     data.review_date || null, data.next_review_due || null, data.notes || null, data.created_by]
   );
   return shape(rows[0]);
 }

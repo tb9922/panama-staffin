@@ -549,7 +549,7 @@ export async function getSSPDaysByRun(runId, homeId, client) {
  * Returns null when no paid history exists (caller should fall back to contracted rate).
  * Used for holiday pay calculation per ERA 1996 s.224 / Brazel-style paid-week lookback.
  */
-export async function findAverageWeeklyPay(homeId, staffId, referenceDate, client) {
+export async function findAverageWeeklyPay(homeId, staffId, referenceDate, client, maxWeeks = 52) {
   const conn = client || pool;
   const refStr = typeof referenceDate === 'string' ? referenceDate : referenceDate.toISOString().slice(0, 10);
   const { rows } = await conn.query(
@@ -582,12 +582,12 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
   let totalGross = 0;
   let usedWeeks = 0;
   for (const row of paidRows) {
-    if (usedWeeks >= 52) break;
+    if (usedWeeks >= maxWeeks) break;
     const start = new Date(`${row.period_start}T00:00:00Z`);
     const end = new Date(`${row.period_end}T00:00:00Z`);
     const runDays = Math.max(1, Math.floor((end - start) / 86400000) + 1);
     const runWeeks = runDays / 7;
-    const weeksToUse = Math.min(runWeeks, 52 - usedWeeks);
+    const weeksToUse = Math.min(runWeeks, maxWeeks - usedWeeks);
     totalGross += row.gross_pay * (weeksToUse / runWeeks);
     usedWeeks += weeksToUse;
   }

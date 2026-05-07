@@ -57,16 +57,20 @@ function ReportsInner({ data }) {
 
       let dateRange = '';
       if (type === 'roster') {
-        generateRosterPDF(data, parseDate(weekDate));
         dateRange = weekDate;
+        await logReportDownload(type, dateRange, { required: true });
+        generateRosterPDF(data, parseDate(weekDate));
       } else if (type === 'cost') {
         const [y, m] = costMonth.split('-').map(Number);
-        generateCostPDF(data, y, m - 1);
         dateRange = costMonth;
+        await logReportDownload(type, dateRange, { required: true });
+        generateCostPDF(data, y, m - 1);
       } else if (type === 'coverage') {
-        generateCoveragePDF(data, parseDate(weekDate));
         dateRange = weekDate;
+        await logReportDownload(type, dateRange, { required: true });
+        generateCoveragePDF(data, parseDate(weekDate));
       } else if (type === 'staff') {
+        await logReportDownload(type, dateRange, { required: true });
         generateStaffPDF(data);
       } else if (type === 'boardpack') {
         let snapshot = null;
@@ -78,10 +82,10 @@ function ReportsInner({ data }) {
           from: formatDate(range.from),
           to: formatDate(range.to),
         });
-        generateBoardPackPDF(reportData, boardDays, snapshot);
         dateRange = `${boardDays} days${snapshot ? ` (snapshot: ${snapshot.computed_at?.slice(0, 10)})` : ''}`;
+        await logReportDownload(type, dateRange, { required: true });
+        generateBoardPackPDF(reportData, boardDays, snapshot);
       }
-      logReportDownload(type, dateRange);
       showNotice(`${reports.find(report => report.id === type)?.title || 'Report'} PDF is ready.`);
     } catch (err) {
       console.error('PDF generation error:', err);

@@ -26,6 +26,7 @@ export function validatePassword(password) {
  */
 export async function ensureSeedUsers() {
   const hasSeedHashes = config.users.some(envUser => !!envUser.hash);
+  const allowAdminRepair = process.env.ALLOW_BOOTSTRAP_ADMIN_REPAIR === 'true';
   let seededCount = 0;
   let repairedCount = 0;
   for (const envUser of config.users) {
@@ -39,6 +40,7 @@ export async function ensureSeedUsers() {
         return;
       }
 
+      let seededThisUser = false;
       if (!existing) {
         await userRepo.create(
           envUser.username,
@@ -48,18 +50,23 @@ export async function ensureSeedUsers() {
           'system',
           client,
         );
+        seededThisUser = true;
         seededCount++;
         logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
       }
 
       if (envUser.role === 'admin') {
         const current = existing || await userRepo.findByUsername(envUser.username, client);
-        if (current && !current.is_platform_admin) {
+        if (current && !current.is_platform_admin && (seededThisUser || allowAdminRepair)) {
           await userRepo.setPlatformAdmin(envUser.username, true, client);
           repairedCount++;
           logger.info({ username: envUser.username }, 'Granted platform admin to bootstrap admin');
+        } else if (current && !current.is_platform_admin) {
+          logger.warn({ username: envUser.username }, 'Bootstrap admin exists but is not platform admin; set ALLOW_BOOTSTRAP_ADMIN_REPAIR=true for an explicit repair');
         }
-        await userHomeRepo.grantAllHomesRole(envUser.username, client);
+        if (seededThisUser || allowAdminRepair) {
+          await userHomeRepo.grantAllHomesRole(envUser.username, client);
+        }
       }
     });
   }

@@ -56,6 +56,7 @@ import { NotFoundError, ValidationError } from '../errors.js';
 
 // Zero-value YTD — used when no approved run exists yet this tax year
 const ZERO_YTD = { gross_pay: 0, taxable_pay: 0, tax_deducted: 0, employee_ni: 0, employer_ni: 0, student_loan: 0, pension_employee: 0, pension_employer: 0 };
+const EMPLOYMENT_ALLOWANCE_BY_TAX_YEAR = new Map([[2026, 10500]]);
 
 async function logPayrollAction(action, homeSlug, username, details) {
   await auditService.log(action, homeSlug, username, details);
@@ -308,8 +309,10 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
               const runWeeksKey = sickPeriod.id;
               const weeksThisRun = sspRunWeeks.get(runWeeksKey) || 0;
               const periodWithCap = { ...sickPeriod, ssp_weeks_paid: (sickPeriod.ssp_weeks_paid || 0) + weeksThisRun };
-              const averageWeeklyEarnings =
-                (parseFloat(s.contract_hours) || 0) * (parseFloat(s.hourly_rate) || 0);
+              const averageWeeklyPay = await payrollRunRepo.findAverageWeeklyPay(homeId, s.id, sickPeriod.start_date, client, 8);
+              const averageWeeklyEarnings = averageWeeklyPay
+                ? round2(averageWeeklyPay.total_gross / averageWeeklyPay.divisor_weeks)
+                : (parseFloat(s.contract_hours) || 0) * (parseFloat(s.hourly_rate) || 0);
               const r = calculateSSP(periodWithCap, date, sspConfig, averageWeeklyEarnings);
               if (r.eligible) {
                 acc.ssp_days += r.sspDays;
@@ -735,6 +738,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       emp_ni: round2(acc.emp_ni + (l.employee_ni  || 0)),
       er_ni:  round2(acc.er_ni  + (l.employer_ni  || 0)),
     }), { paye: 0, emp_ni: 0, er_ni: 0 });
+    const employmentAllowanceOffset = await calculateEmploymentAllowanceOffset(client, homeId, taxYear, totals.er_ni);
 
       await hmrcRepo.upsertLiability(homeId, taxYear, taxMonth, {
         period_start: run.period_start,
@@ -742,8 +746,8 @@ export async function approveRun(runId, homeId, homeSlug, username) {
         total_paye:         totals.paye,
         total_employee_ni:  totals.emp_ni,
         total_employer_ni:  totals.er_ni,
-        employment_allowance_offset: 0,
-        total_due: round2(totals.paye + totals.emp_ni + totals.er_ni),
+        employment_allowance_offset: employmentAllowanceOffset,
+        total_due: round2(totals.paye + totals.emp_ni + totals.er_ni - employmentAllowanceOffset),
         payment_due_date: getHMRCPaymentDueDate(taxYear, taxMonth),
         status: 'unpaid',
       }, client);
@@ -808,12 +812,24 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
         emp_ni: round2(acc.emp_ni + (l.employee_ni  || 0)),
         er_ni:  round2(acc.er_ni  + (l.employer_ni  || 0)),
       }), { paye: 0, emp_ni: 0, er_ni: 0 });
+      const { rows: [liability] } = await client.query(
+        `SELECT employment_allowance_offset
+           FROM hmrc_liabilities
+          WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3
+          FOR UPDATE`,
+        [homeId, taxYear, taxMonth],
+      );
+      const employmentAllowanceOffset = round2(Math.min(
+        totals.er_ni,
+        parseFloat(liability?.employment_allowance_offset || 0),
+      ));
 
       await hmrcRepo.subtractLiability(homeId, taxYear, taxMonth, {
         total_paye:        totals.paye,
         total_employee_ni: totals.emp_ni,
         total_employer_ni: totals.er_ni,
-        total_due:         round2(totals.paye + totals.emp_ni + totals.er_ni),
+        employment_allowance_offset: employmentAllowanceOffset,
+        total_due:         round2(totals.paye + totals.emp_ni + totals.er_ni - employmentAllowanceOffset),
       }, client);
 
       // Reverse SSP weeks that were incremented during approval — prevents
@@ -1064,6 +1080,25 @@ export function eachDayInRange(start, end) {
 function round2(n) {
   if (n < 0) return -Math.round((-n + Number.EPSILON) * 100) / 100;
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+async function calculateEmploymentAllowanceOffset(client, homeId, taxYear, employerNi) {
+  const annualAllowance = EMPLOYMENT_ALLOWANCE_BY_TAX_YEAR.get(taxYear) || 0;
+  if (annualAllowance <= 0 || employerNi <= 0) return 0;
+  const { rows: [home] } = await client.query(
+    `SELECT employment_allowance_claimed FROM homes WHERE id = $1`,
+    [homeId],
+  );
+  if (!home?.employment_allowance_claimed) return 0;
+  await client.query('SELECT pg_advisory_xact_lock(20260406, $1::int)', [homeId]);
+  const { rows: [usedRow] } = await client.query(
+    `SELECT COALESCE(SUM(employment_allowance_offset), 0)::numeric AS used
+       FROM hmrc_liabilities
+      WHERE home_id = $1 AND tax_year = $2`,
+    [homeId, taxYear],
+  );
+  const used = parseFloat(usedRow?.used) || 0;
+  return round2(Math.min(Math.max(0, annualAllowance - used), employerNi));
 }
 
 function shapePayslipStaff(staff) {

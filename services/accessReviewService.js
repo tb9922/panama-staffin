@@ -283,7 +283,7 @@ export async function updateAccessReviewAssignment({
   if (!ACCESS_REVIEW_ASSIGNMENT_STATUSES.includes(status)) throw new ValidationError('Invalid assignment status');
   const sanitizedNotes = sanitizeNotes(notes);
   return withTransaction(async (client) => {
-    const review = await accessReviewRepo.findReviewById(reviewId, client);
+    const review = await accessReviewRepo.findReviewByIdForUpdate(reviewId, client);
     if (!review) throw new NotFoundError('Access review not found');
     if (review.status === 'completed') throw new ConflictError('Completed access reviews cannot be changed');
 
@@ -324,15 +324,22 @@ export async function updateAccessReviewAssignment({
 export async function completeAccessReview({ actor, reviewId, now = new Date() } = {}) {
   assertPlatformAdmin(actor);
   return withTransaction(async (client) => {
+    const lockedReview = await accessReviewRepo.findReviewByIdForUpdate(reviewId, client);
+    if (!lockedReview) throw new NotFoundError('Access review not found');
+    if (lockedReview.status === 'completed') return lockedReview;
     const review = await accessReviewRepo.findReviewById(reviewId, client);
-    if (!review) throw new NotFoundError('Access review not found');
-    if (review.status === 'completed') return review;
     if (review.period_end > todayDate(now)) {
       throw new ConflictError('Access review period has not ended');
     }
     const pendingCount = Number(review.assignment_counts?.pending || 0);
     if (pendingCount > 0) {
       throw new ConflictError('Access review has pending assignments');
+    }
+    const unresolvedCount =
+      Number(review.assignment_counts?.needs_change || 0)
+      + Number(review.assignment_counts?.revoked_requested || 0);
+    if (unresolvedCount > 0) {
+      throw new ConflictError('Access review has unresolved access changes');
     }
     const completed = await accessReviewRepo.markReviewCompleted(reviewId, actor.username, client);
     await auditService.log('access_review_completed', null, actor.username, {

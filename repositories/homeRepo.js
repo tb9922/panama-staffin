@@ -201,6 +201,14 @@ export async function slugExistsActive(slug) {
   return rows.length > 0;
 }
 
+export async function slugExistsAny(slug) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM homes WHERE slug = $1 LIMIT 1',
+    [slug]
+  );
+  return rows.length > 0;
+}
+
 /**
  * Create a new home with explicit INSERT (never upsert).
  * @param {string} slug

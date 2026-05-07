@@ -127,6 +127,13 @@ const expenseBodySchema = z.object({
   notes: z.string().max(5000).nullable().optional(),
 });
 
+const expenseCreateSchema = expenseBodySchema.omit({
+  status: true,
+  paid_date: true,
+  payment_method: true,
+  payment_reference: true,
+});
+
 // Strip status from update — status changes only via dedicated approve/reject routes
 const expenseUpdateSchema = expenseBodySchema.partial().omit({ status: true }).extend({
   _version: z.number().int().nonnegative().optional(),
@@ -164,6 +171,10 @@ const paymentScheduleBodySchema = z.object({
 
 const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
+});
+
+const paymentScheduleProcessSchema = z.object({
+  _version: z.number().int().nonnegative(),
 });
 
 // ── Resident Routes ───────────────────────────────────────────────────────────
@@ -380,7 +391,7 @@ router.get('/expenses', readRateLimiter, requireAuth, requireHomeAccess, require
 
 router.post('/expenses', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
-    const parsed = expenseBodySchema.safeParse(req.body);
+    const parsed = expenseCreateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.createExpense(req.home.id, { ...parsed.data, created_by: req.user.username });
     await auditService.log('finance_create', req.home.slug, req.user.username, { id: result.id, entity: 'expense' });
@@ -533,7 +544,9 @@ router.post('/payment-schedules/:id/process', writeRateLimiter, requireAuth, req
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
-    const result = await financeService.processScheduledPayment(idP.data, req.home.id, req.user.username);
+    const parsed = paymentScheduleProcessSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const result = await financeService.processScheduledPayment(idP.data, req.home.id, req.user.username, parsed.data._version);
     await auditService.log('finance_create', req.home.slug, req.user.username, { id: idP.data, entity: 'payment_schedule', action: 'process' });
     res.json(result);
   } catch (err) {

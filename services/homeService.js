@@ -126,7 +126,14 @@ export async function saveData(homeSlug, body, username, clientUpdatedAt, auditD
         : new Date();
     const { from, to } = getSchedulingWindow(windowAnchor);
 
-    if (body.config) await homeRepo.updateConfig(home.id, body.config, client);
+    if (body.config) {
+      const nextConfig = { ...(home.config || {}), ...body.config };
+      if (!Object.prototype.hasOwnProperty.call(nextConfig, 'edit_lock_pin') &&
+          Object.prototype.hasOwnProperty.call(home.config || {}, 'edit_lock_pin')) {
+        nextConfig.edit_lock_pin = home.config.edit_lock_pin;
+      }
+      await homeRepo.updateConfig(home.id, nextConfig, client);
+    }
     if (body.staff) {
       const existingStaff = await staffRepo.findAllByHome(home.id, client);
       const mergedById = new Map(existingStaff.map((staff) => [staff.id, staff]));

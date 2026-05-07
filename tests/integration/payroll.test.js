@@ -170,6 +170,16 @@ beforeAll(async () => {
       [homeAId, date]
     );
   }
+
+  // Supported statutory tax-year fixtures for payroll calculation tests.
+  for (let d = 1; d <= 7; d++) {
+    const date = `2026-06-${String(d).padStart(2, '0')}`;
+    await pool.query(
+      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, source)
+       VALUES ($1, $2, 'PH01', 'E', 'manual'), ($1, $2, 'PH02', 'L', 'manual')`,
+      [homeAId, date]
+    );
+  }
 }, 30000);
 
 afterAll(async () => {
@@ -659,30 +669,30 @@ describe('Payroll Runs — /runs', () => {
 
   it('POST creates draft run', async () => {
     const res = await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-06-01',
-      period_end: '2099-06-07',
-      pay_date: '2099-06-08',
+      period_start: '2026-06-01',
+      period_end: '2026-06-07',
+      pay_date: '2026-06-08',
       pay_frequency: 'weekly',
     }).expect(201);
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.status).toBe('draft');
-    expect(res.body.pay_date).toBe('2099-06-08');
+    expect(res.body.pay_date).toBe('2026-06-08');
     runId = res.body.id;
   });
 
   it('POST rejects period_start >= period_end', async () => {
     await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-06-07',
-      period_end: '2099-06-01',
+      period_start: '2026-06-07',
+      period_end: '2026-06-01',
     }).expect(400);
   });
 
   it('POST rejects pay_date before period_end', async () => {
     await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-06-10',
-      period_end: '2099-06-17',
-      pay_date: '2099-06-09',
+      period_start: '2026-06-10',
+      period_end: '2026-06-17',
+      pay_date: '2026-06-09',
       pay_frequency: 'weekly',
     })
       .expect(400)
@@ -693,9 +703,9 @@ describe('Payroll Runs — /runs', () => {
 
   it('POST rejects pay_date before period_end even when it is inside the period', async () => {
     await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-06-10',
-      period_end: '2099-06-17',
-      pay_date: '2099-06-16',
+      period_start: '2026-06-10',
+      period_end: '2026-06-17',
+      pay_date: '2026-06-16',
       pay_frequency: 'weekly',
     })
       .expect(400)
@@ -706,24 +716,24 @@ describe('Payroll Runs — /runs', () => {
 
   it('POST rejects overlapping period', async () => {
     const res = await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-06-03',
-      period_end: '2099-06-10',
+      period_start: '2026-06-03',
+      period_end: '2026-06-10',
     }).expect(409);
     expect(res.body.error).toMatch(/overlap/i);
   });
 
   it('POST rejects invalid pay_frequency', async () => {
     await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-07-01',
-      period_end: '2099-07-07',
+      period_start: '2026-07-01',
+      period_end: '2026-07-07',
       pay_frequency: 'daily',
     }).expect(400);
   });
 
   it('POST viewer → 403', async () => {
     await viewerPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-08-01',
-      period_end: '2099-08-07',
+      period_start: '2026-08-01',
+      period_end: '2026-08-07',
     }).expect(403);
   });
 
@@ -763,8 +773,8 @@ describe('Payroll Runs — /runs', () => {
   it('POST approve rejects draft (not calculated) run', async () => {
     // Create a separate draft run to test this
     const draft = await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-07-01',
-      period_end: '2099-07-07',
+      period_start: '2026-07-01',
+      period_end: '2026-07-07',
       pay_frequency: 'weekly',
     }).expect(201);
     draftOnlyRunId = draft.body.id;
@@ -1540,7 +1550,7 @@ describe('HMRC — /hmrc', () => {
   beforeAll(async () => {
     // Seed an HMRC liability directly.
     // Use tax_year 2098 to avoid conflict with the liability created
-    // by approveRun() for the 2099 payroll run in the Payroll Runs section.
+    // by approveRun() for the 2026 payroll run in the Payroll Runs section.
     const { rows: [row] } = await pool.query(
       `INSERT INTO hmrc_liabilities
         (home_id, tax_year, tax_month, period_start, period_end,
@@ -1640,9 +1650,9 @@ describe('HMRC — /hmrc', () => {
 
   it('uses pay_date rather than period_end when assigning HMRC tax month on approval', async () => {
     const create = await adminPost(`/runs?home=${homeASlug}`, {
-      period_start: '2099-04-24',
-      period_end: '2099-04-30',
-      pay_date: '2099-05-06',
+      period_start: '2026-04-24',
+      period_end: '2026-04-30',
+      pay_date: '2026-05-06',
       pay_frequency: 'weekly',
     }).expect(201);
 
@@ -1655,7 +1665,7 @@ describe('HMRC — /hmrc', () => {
          FROM hmrc_liabilities
         WHERE home_id = $1 AND tax_year = $2 AND period_end = $3
         ORDER BY id DESC`,
-      [homeAId, 2099, '2099-04-30'],
+      [homeAId, 2026, '2026-04-30'],
     );
 
     expect(rows.length).toBeGreaterThan(0);

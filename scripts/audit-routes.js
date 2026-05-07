@@ -243,6 +243,21 @@ const REQUIRED_DISCOVERED_ROUTES = [
   'POST /api/policies',
   'GET /api/whistleblowing',
   'POST /api/whistleblowing',
+  'GET /api/finance/residents',
+  'POST /api/finance/expenses',
+  'POST /api/finance/payment-schedules/:id/process',
+  'GET /api/payroll/runs/:runId',
+  'GET /api/payroll/runs/:runId/payslips/:staffId',
+  'GET /api/payroll/runs/:runId/summary-pdf',
+  'GET /api/gdpr/requests',
+  'POST /api/gdpr/requests/:id/gather',
+  'POST /api/gdpr/requests/:id/execute',
+  'GET /api/portfolio/kpis',
+  'GET /api/home-setup',
+  'POST /api/audit/report-download',
+  'PUT /api/homes/config',
+  'POST /api/platform/homes',
+  'DELETE /api/platform/homes/:id',
 ];
 const discoveredKeys = new Set(allRoutes.map(route => route.key));
 for (const requiredRoute of REQUIRED_DISCOVERED_ROUTES) {

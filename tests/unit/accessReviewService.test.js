@@ -12,6 +12,7 @@ vi.mock('../../repositories/accessReviewRepo.js', () => ({
   insertAssignments: vi.fn(),
   listReviews: vi.fn(),
   findReviewById: vi.fn(),
+  findReviewByIdForUpdate: vi.fn(),
   listAssignments: vi.fn(),
   findAssignmentById: vi.fn(),
   findAssignmentByIdForUpdate: vi.fn(),
@@ -173,10 +174,12 @@ describe('accessReviewService', () => {
   });
 
   it('records assignment decisions with reviewer notes', async () => {
-    accessReviewRepo.findReviewById.mockResolvedValue({
+    const review = {
       id: 99,
       status: 'in_progress',
-    });
+    };
+    accessReviewRepo.findReviewByIdForUpdate.mockResolvedValue(review);
+    accessReviewRepo.findReviewById.mockResolvedValue(review);
     accessReviewRepo.findAssignmentByIdForUpdate.mockResolvedValue({
       id: 123,
       review_id: 99,
@@ -230,14 +233,36 @@ describe('accessReviewService', () => {
   });
 
   it('blocks completion while assignments are still pending', async () => {
-    accessReviewRepo.findReviewById.mockResolvedValue({
+    const review = {
       id: 99,
       cadence: 'quarterly',
       period_start: '2026-04-01',
       period_end: '2026-04-30',
       status: 'in_progress',
       assignment_counts: { pending: 1, reviewed: 2 },
-    });
+    };
+    accessReviewRepo.findReviewByIdForUpdate.mockResolvedValue(review);
+    accessReviewRepo.findReviewById.mockResolvedValue(review);
+
+    await expect(completeAccessReview({
+      actor,
+      reviewId: 99,
+      now: new Date('2026-05-04T12:00:00Z'),
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(accessReviewRepo.markReviewCompleted).not.toHaveBeenCalled();
+  });
+
+  it('blocks completion while access changes are unresolved', async () => {
+    const review = {
+      id: 99,
+      cadence: 'quarterly',
+      period_start: '2026-04-01',
+      period_end: '2026-04-30',
+      status: 'in_progress',
+      assignment_counts: { pending: 0, needs_change: 1, revoked_requested: 1 },
+    };
+    accessReviewRepo.findReviewByIdForUpdate.mockResolvedValue(review);
+    accessReviewRepo.findReviewById.mockResolvedValue(review);
 
     await expect(completeAccessReview({
       actor,
@@ -248,14 +273,16 @@ describe('accessReviewService', () => {
   });
 
   it('audits completion when every assignment has been decided', async () => {
-    accessReviewRepo.findReviewById.mockResolvedValue({
+    const review = {
       id: 99,
       cadence: 'quarterly',
       period_start: '2026-04-01',
       period_end: '2026-04-30',
       status: 'in_progress',
       assignment_counts: { reviewed: 3 },
-    });
+    };
+    accessReviewRepo.findReviewByIdForUpdate.mockResolvedValue(review);
+    accessReviewRepo.findReviewById.mockResolvedValue(review);
     accessReviewRepo.markReviewCompleted.mockResolvedValue({
       id: 99,
       cadence: 'quarterly',

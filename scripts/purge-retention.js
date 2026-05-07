@@ -26,6 +26,7 @@ import path from 'node:path';
 import { pool } from '../db.js';
 
 import * as gdprRepo from '../repositories/gdprRepo.js';
+import * as auditRepo from '../repositories/auditRepo.js';
 import * as auditService from '../services/auditService.js';
 import { config } from '../config.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
@@ -254,10 +255,12 @@ async function run() {
           const fileResult = await processQueuedRetentionFilePurges(queuedFileIds);
           console.log(`    -> Deleted ${fileResult.deleted} queued files`);
         }
-        const { rowCount } = await pool.query(
-          `DELETE FROM ${table} WHERE ${where}`,
-          params
-        );
+        const rowCount = table === 'audit_log'
+          ? await auditRepo.purgeOlderThan(rule.retention_days, null)
+          : (await pool.query(
+              `DELETE FROM ${table} WHERE ${where}`,
+              params
+            )).rowCount;
         totalDeleted += rowCount;
         console.log(`    -> Deleted ${rowCount} records`);
       } else {

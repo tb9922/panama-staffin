@@ -318,10 +318,15 @@ export default function BedManager() {
   async function handleMove(e) {
     e.preventDefault();
     if (!moveTargetId) return;
+    const targetBed = beds.find(bed => String(bed.id) === String(moveTargetId));
+    if (!targetBed) {
+      setError('Choose an available destination bed.');
+      return;
+    }
     setSubmitting(true);
     try {
       const home = getCurrentHome();
-      await moveBedResident(home, moveBed.id, moveTargetId);
+      await moveBedResident(home, moveBed.id, moveTargetId, moveBed.updated_at, targetBed.updated_at);
       setShowMoveModal(false);
       setMoveBed(null);
       await load();

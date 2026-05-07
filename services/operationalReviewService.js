@@ -326,6 +326,8 @@ async function queryAgencyOverrides(homeIds, limit, client) {
       WHERE a.home_id = ANY($1::int[])
         AND a.deleted_at IS NULL
         AND a.emergency_override = true
+        AND a.gap_date >= CURRENT_DATE - INTERVAL '35 days'
+        AND a.gap_date <= CURRENT_DATE
       ORDER BY a.gap_date DESC, a.id DESC
       LIMIT $2`,
     [homeIds, limit],

@@ -228,6 +228,9 @@ router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAc
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const request = await gdprService.findRequestById(idP.data, req.home.id);
     if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!['sar', 'portability'].includes(request.request_type)) {
+      return res.status(400).json({ error: 'Personal-data gather is only available for SAR or portability requests' });
+    }
     if (!request.identity_verified) {
       return res.status(400).json({ error: 'Identity must be verified before gathering personal data' });
     }

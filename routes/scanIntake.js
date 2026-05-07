@@ -14,7 +14,11 @@ import { SCAN_INTAKE_ACCESS_MODULES, SCAN_INTAKE_TARGET_IDS, getScanTarget } fro
 import { SCAN_INTAKE_UPLOAD_POLICY } from '../shared/uploadPolicies.js';
 import { validateDeclaredUploadType, validateDetectedUploadType } from '../lib/uploadValidation.js';
 import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
-import { RECORD_ATTACHMENT_MODULE_IDS, RECORD_ATTACHMENT_PERMISSION_BY_MODULE } from '../shared/recordAttachmentModules.js';
+import {
+  RECORD_ATTACHMENT_MODULE_IDS,
+  RECORD_ATTACHMENT_PERMISSION_BY_MODULE,
+  canWriteRecordAttachmentModule,
+} from '../shared/recordAttachmentModules.js';
 import * as documentIntakeRepo from '../repositories/documentIntakeRepo.js';
 import * as scanIntakeService from '../services/scanIntakeService.js';
 import * as auditService from '../services/auditService.js';
@@ -226,7 +230,7 @@ function requireTargetWriteAccess(req, res, target, payload) {
     }
     if (req.user?.is_platform_admin && req.homeRole != null) return true;
     const permissionModule = RECORD_ATTACHMENT_PERMISSION_BY_MODULE[moduleId];
-    if (!permissionModule || !hasModuleAccess(req.homeRole, permissionModule, 'write')) {
+    if (!permissionModule || !canWriteRecordAttachmentModule(req.homeRole, moduleId)) {
       res.status(403).json({ error: `Insufficient permissions for ${permissionModule || 'record attachments'}` });
       return false;
     }
