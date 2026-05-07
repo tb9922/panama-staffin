@@ -10,16 +10,26 @@ const REQUIRED_RETENTION_TABLES = [
   'agency_approval_attempts',
   'audit_tasks',
   'outcome_metrics',
+  'cqc_evidence',
+  'cqc_evidence_files',
+  'cqc_evidence_links',
+  'cqc_partner_feedback',
+  'cqc_observations',
+  'cqc_statement_narratives',
 ];
 const REQUIRED_TABLES = [
   'homes',
   'users',
   'user_home_roles',
   'retention_schedule',
+  'retention_purge_files',
   'audit_log',
   ...REQUIRED_RETENTION_TABLES,
   'agency_shifts',
 ];
+const STRICT = process.argv.includes('--strict')
+  || process.env.V1_OPERATIONAL_STRICT === '1'
+  || config.nodeEnv === 'production';
 
 async function requiredTableStatus() {
   const { rows } = await pool.query(
@@ -172,11 +182,26 @@ function fail(label, details) {
 }
 
 function warn(label, details) {
-  console.log(`WARN ${label}${details ? ` - ${details}` : ''}`);
+  if (STRICT) {
+    fail(label, details);
+  } else {
+    console.log(`WARN ${label}${details ? ` - ${details}` : ''}`);
+  }
+}
+
+function humanGate(label, envName, details) {
+  if (process.env[envName] === '1') {
+    pass(label, `${envName}=1`);
+  } else {
+    warn(label, details || `set ${envName}=1 after documented sign-off`);
+  }
 }
 
 async function main() {
   console.log('\nPanama V1 operational gate verification\n');
+  if (STRICT) {
+    console.log('Strict mode enabled: operational warnings fail the release gate.\n');
+  }
 
   const tables = await requiredTableStatus();
   const missingTables = tables.filter(row => row.exists !== true).map(row => row.table_name);
@@ -263,7 +288,16 @@ async function main() {
     warn('legacy action freeze flag', 'set V1_LEGACY_ACTION_FREEZE=1 only after backfill spot-check sign-off');
   }
 
-  console.log('\nManual gates that this script cannot complete: Teddy walkthrough sign-off and external CQC/quality review.\n');
+  humanGate(
+    'Teddy walkthrough sign-off',
+    'V1_TEDDY_WALKTHROUGH_SIGNOFF',
+    'complete the live feature walkthrough and set V1_TEDDY_WALKTHROUGH_SIGNOFF=1',
+  );
+  humanGate(
+    'external CQC/quality review',
+    'V1_EXTERNAL_CQC_REVIEW_SIGNOFF',
+    'record external CQC/quality consultant board-pack review and set V1_EXTERNAL_CQC_REVIEW_SIGNOFF=1',
+  );
 }
 
 main()

@@ -229,6 +229,7 @@ test.describe('Seeded destructive-flow sandbox', () => {
     const approved = await expectJson(
       await request.put(`${API_BASE}/api/finance/expenses/${approveExpense.id}/approve?${HOME_QUERY}`, {
         headers: authHeaders(admin),
+        data: { _version: approveExpense.version },
       }),
       'approve sandbox expense',
     );
@@ -239,7 +240,7 @@ test.describe('Seeded destructive-flow sandbox', () => {
     const rejected = await expectJson(
       await request.put(`${API_BASE}/api/finance/expenses/${rejectExpense.id}/reject?${HOME_QUERY}`, {
         headers: authHeaders(admin),
-        data: { reason: 'Rejected by E2E destructive sandbox.' },
+        data: { _version: rejectExpense.version, reason: 'Rejected by E2E destructive sandbox.' },
       }),
       'reject sandbox expense',
     );

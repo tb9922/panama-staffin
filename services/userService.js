@@ -141,8 +141,12 @@ export async function updateUser(id, fields, actorUsername) {
         }
       }
 
-      const nextUser = await userRepo.update(id, updateFields, client);
-      if (updateFields.active === false) {
+      let nextUser = await userRepo.update(id, updateFields, client);
+      if (isRemovingAdmin || updateFields.active === false) {
+        await userRepo.setPlatformAdmin(lockedTarget.username, false, client);
+        nextUser = await userRepo.findById(id, client);
+      }
+      if (isRemovingAdmin || updateFields.active === false) {
         await userHomeRepo.revokeAllRolesForUser(lockedTarget.username, client);
       }
       return nextUser;

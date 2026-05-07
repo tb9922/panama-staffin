@@ -257,6 +257,87 @@ describe('SickPayTracker', () => {
     ]);
   });
 
+  it('submits selected linked period ids as numbers', async () => {
+    const user = userEvent.setup();
+    setupMocks([
+      {
+        id: 101,
+        staff_id: 'S001',
+        start_date: '2026-01-20',
+        end_date: '2026-02-10',
+        qualifying_days_per_week: 5,
+        waiting_days_served: 2,
+        ssp_weeks_paid: '0.43',
+        fit_note_received: true,
+        fit_note_date: '2026-02-02',
+        notes: '',
+      },
+    ]);
+    api.createSickPeriod.mockResolvedValue({});
+
+    renderWithProviders(<SickPayTracker />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Record Sick Period' })).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Record Sick Period' }));
+
+    const staffLabel = screen.getAllByText('Staff Member').find((node) => node.tagName === 'LABEL');
+    const startDateLabel = screen.getAllByText('Start Date').find((node) => node.tagName === 'LABEL');
+    const linkedPeriodLabel = screen.getAllByText('Linked to Previous Period (optional)').find((node) => node.tagName === 'LABEL');
+    const staffSelect = staffLabel.parentElement.querySelector('select');
+    const startDateInput = startDateLabel.parentElement.querySelector('input');
+    const linkSelect = linkedPeriodLabel.parentElement.querySelector('select');
+
+    await user.selectOptions(staffSelect, 'S001');
+    await user.type(startDateInput, '2026-03-20');
+    await user.selectOptions(linkSelect, '101');
+    await user.click(screen.getByRole('button', { name: 'Record Period' }));
+
+    await waitFor(() =>
+      expect(api.createSickPeriod).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({ linked_to_period_id: 101 }),
+      ),
+    );
+  });
+
+  it('persists selected qualifying weekdays when creating a sick period', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    api.createSickPeriod.mockResolvedValue({});
+
+    renderWithProviders(<SickPayTracker />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Record Sick Period' })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Record Sick Period' }));
+    const staffLabel = screen.getAllByText('Staff Member').find((node) => node.tagName === 'LABEL');
+    const startDateLabel = screen.getAllByText('Start Date').find((node) => node.tagName === 'LABEL');
+    const staffSelect = staffLabel.parentElement.querySelector('select');
+    const startDateInput = startDateLabel.parentElement.querySelector('input');
+
+    await user.selectOptions(staffSelect, 'S001');
+    await user.type(startDateInput, '2026-04-08');
+    await user.click(screen.getByLabelText('Mon'));
+    await user.click(screen.getByLabelText('Tue'));
+    await user.click(screen.getByLabelText('Sat'));
+    await user.click(screen.getByLabelText('Sun'));
+    await user.click(screen.getByRole('button', { name: 'Record Period' }));
+
+    await waitFor(() =>
+      expect(api.createSickPeriod).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({
+          staff_id: 'S001',
+          qualifying_days_per_week: 5,
+          qualifying_weekdays: [3, 4, 5, 6, 0],
+        }),
+      ),
+    );
+  });
+
   it('shows empty state when no sick periods exist', async () => {
     setupMocks([]);
     renderWithProviders(<SickPayTracker />);

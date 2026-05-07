@@ -1844,9 +1844,9 @@ export async function updateFinanceExpense(homeSlug, id, data) {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function approveFinanceExpense(homeSlug, id) {
+export async function approveFinanceExpense(homeSlug, id, version) {
   return apiFetch(`${API_BASE}/finance/expenses/${id}/approve?home=${h(homeSlug)}`, {
-    method: 'PUT', headers: authHeaders(),
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ _version: version }),
   });
 }
 

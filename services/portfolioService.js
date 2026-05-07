@@ -7,7 +7,7 @@ import * as outcomeMetricRepo from '../repositories/outcomeMetricRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import { hasModuleAccess } from '../shared/roles.js';
-import { PORTFOLIO_RAG_THRESHOLDS, buildPortfolioRag, overallRag, ragAtLeast, ragAtMost } from '../shared/portfolioRag.js';
+import { RAG, PORTFOLIO_RAG_THRESHOLDS, buildPortfolioRag, overallRag, ragAtLeast, ragAtMost } from '../shared/portfolioRag.js';
 import {
   addDays,
   formatDate,
@@ -348,6 +348,33 @@ function buildDataQuality(rag) {
   };
 }
 
+const DASHBOARD_FAILURE_RAG_KEYS = Object.freeze({
+  incidents: ['incidents'],
+  complaints: ['complaints'],
+  maintenance: ['maintenance'],
+  training: ['training'],
+  supervisions: ['supervisions'],
+  appraisals: ['supervisions'],
+  auditTasks: ['audits'],
+  policies: ['audits'],
+  fireDrills: ['audits'],
+  ipc: ['audits'],
+  risks: ['audits'],
+  careCertificate: ['care_certificate'],
+  beds: ['occupancy'],
+});
+
+function applyDashboardFailuresToRag(rag, failedModules = []) {
+  const next = { ...(rag || {}) };
+  for (const moduleKey of failedModules || []) {
+    for (const ragKey of DASHBOARD_FAILURE_RAG_KEYS[moduleKey] || []) {
+      next[ragKey] = RAG.UNKNOWN;
+    }
+  }
+  next.overall = overallRag(Object.fromEntries(Object.entries(next).filter(([key]) => key !== 'overall')));
+  return next;
+}
+
 function calculatePeriodCoverage(staffForDay, period, config) {
   const required = config?.minimum_staffing?.[period] || { heads: 0, skill_points: 0 };
   const staff = staffForDay.filter((member) => {
@@ -535,7 +562,7 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
     },
     outcomes: outcomeKpis,
   };
-  const rag = buildPortfolioRag(kpis);
+  const rag = applyDashboardFailuresToRag(buildPortfolioRag(kpis), summary._failedModules || []);
   return {
     ...kpis,
     rag,

@@ -246,6 +246,7 @@ async function main() {
   if (anomalies.length > 0) {
     console.log('\nLegacy JSON fields skipped because they are not arrays:');
     console.table(anomalies);
+    process.exitCode = 1;
   }
 
   if (totals.missing > 0) {

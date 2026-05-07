@@ -42,7 +42,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
     // Re-verify from DB — JWT claim may be stale (admin demoted after last login)
     if (req.user.is_platform_admin) {
       const dbUser = req.authDbUser;
-      if (dbUser?.is_platform_admin && dbUser.active) {
+      if (dbUser?.role === 'admin' && dbUser?.is_platform_admin && dbUser.active) {
         const homes = await homeService.listHomes();
         return res.json(homes.map(h => ({ ...h, staffPortalEnabled: appConfig.enableStaffPortal, roleId: 'home_manager', staffId: null })));
       }

@@ -149,6 +149,44 @@ describe('payrollTax', () => {
     expect(result).toEqual({ employeeNI: 117.32, employerNI: 227.7 });
   });
 
+  it('supports pensioner, apprentice and Freeport NI categories', () => {
+    const niThresholds = [
+      { threshold_name: 'ST', weekly_amount: 96, monthly_amount: 417 },
+      { threshold_name: 'FUST', weekly_amount: 481, monthly_amount: 2083 },
+      { threshold_name: 'PT', weekly_amount: 242, monthly_amount: 1048 },
+      { threshold_name: 'UEL', weekly_amount: 967, monthly_amount: 4189 },
+      { threshold_name: 'UST', weekly_amount: 967, monthly_amount: 4189 },
+    ];
+
+    const categoryC = calculateNI(1000, 'weekly', niThresholds, [
+      { rate_type: 'employee_main', rate: 0 },
+      { rate_type: 'employee_above_uel', rate: 0 },
+      { rate_type: 'employer', rate: 0.15 },
+    ]);
+    expect(categoryC).toEqual({ employeeNI: 0, employerNI: 135.6 });
+
+    const categoryH = calculateNI(1000, 'weekly', niThresholds, [
+      { rate_type: 'employee_main', rate: 0.08 },
+      { rate_type: 'employee_above_uel', rate: 0.02 },
+      { rate_type: 'employer_above_ust', rate: 0.15 },
+    ]);
+    expect(categoryH).toEqual({ employeeNI: 58.66, employerNI: 4.95 });
+
+    const categoryF = calculateNI(1000, 'weekly', niThresholds, [
+      { rate_type: 'employee_main', rate: 0.08 },
+      { rate_type: 'employee_above_uel', rate: 0.02 },
+      { rate_type: 'employer_above_fust', rate: 0.15 },
+    ]);
+    expect(categoryF).toEqual({ employeeNI: 58.66, employerNI: 77.85 });
+
+    const categoryX = calculateNI(1000, 'weekly', niThresholds, [
+      { rate_type: 'employee_main', rate: 0 },
+      { rate_type: 'employee_above_uel', rate: 0 },
+      { rate_type: 'employer', rate: 0 },
+    ]);
+    expect(categoryX).toEqual({ employeeNI: 0, employerNI: 0 });
+  });
+
   it('calculates student loan deductions across multiple plans', () => {
     const thresholds = [
       { plan: '1', annual_threshold: 26065, rate: 0.09 },
@@ -277,6 +315,99 @@ describe('payrollTax', () => {
       waitingDaysUsed: 0,
     });
     expect(calculateSSP(sickPeriod, '2026-04-10', sspConfig, 100)).toEqual({
+      eligible: false,
+      sspAmount: 0,
+      sspDays: 0,
+      waitingDaysUsed: 0,
+    });
+  });
+
+  it('pays SSP on weekend qualifying days for six and seven day rotas', () => {
+    const sspConfig = { weekly_rate: 118.75, waiting_days: 0, max_weeks: 28, lel_weekly: null };
+    const sixDayPeriod = {
+      start_date: '2026-04-06',
+      end_date: null,
+      qualifying_days_per_week: 6,
+      waiting_days_served: 0,
+      ssp_weeks_paid: 0,
+    };
+    const sevenDayPeriod = {
+      ...sixDayPeriod,
+      qualifying_days_per_week: 7,
+    };
+
+    expect(calculateSSP(sixDayPeriod, '2026-04-11', sspConfig, 500)).toEqual({
+      eligible: true,
+      sspAmount: 19.79,
+      sspDays: 1,
+      waitingDaysUsed: 0,
+    });
+    expect(calculateSSP(sevenDayPeriod, '2026-04-12', sspConfig, 500)).toEqual({
+      eligible: true,
+      sspAmount: 16.97,
+      sspDays: 1,
+      waitingDaysUsed: 0,
+    });
+  });
+
+  it('uses cumulative SSP rounding so weekly totals reconcile', () => {
+    const sspConfig = { weekly_rate: 123.25, waiting_days: 0, max_weeks: 28, lel_weekly: null };
+    const sixDayPeriod = {
+      start_date: '2026-04-06',
+      end_date: null,
+      qualifying_days_per_week: 6,
+      waiting_days_served: 0,
+      ssp_weeks_paid: 0,
+    };
+
+    expect(calculateSSP(sixDayPeriod, '2026-04-06', sspConfig, 500)).toMatchObject({
+      eligible: true,
+      sspAmount: 20.55,
+    });
+    expect(calculateSSP(sixDayPeriod, '2026-04-11', sspConfig, 500)).toMatchObject({
+      eligible: true,
+      sspAmount: 20.54,
+    });
+  });
+
+  it('resets cumulative SSP rounding at each Sunday-to-Saturday SSP week', () => {
+    const sspConfig = { weekly_rate: 123.25, waiting_days: 0, max_weeks: 28, lel_weekly: null };
+    const sixDayPeriod = {
+      start_date: '2026-04-08',
+      end_date: null,
+      qualifying_days_per_week: 6,
+      waiting_days_served: 0,
+      ssp_weeks_paid: 0,
+    };
+
+    expect(calculateSSP(sixDayPeriod, '2026-04-13', sspConfig, 500)).toMatchObject({
+      eligible: true,
+      sspAmount: 20.55,
+    });
+    expect(calculateSSP(sixDayPeriod, '2026-04-14', sspConfig, 500)).toMatchObject({
+      eligible: true,
+      sspAmount: 20.54,
+    });
+  });
+
+  it('uses persisted SSP qualifying weekdays for non-standard rotas', () => {
+    const sspConfig = { weekly_rate: 118.75, waiting_days: 0, max_weeks: 28, lel_weekly: null };
+    const wedToSunPeriod = {
+      start_date: '2026-04-08',
+      end_date: null,
+      qualifying_days_per_week: 5,
+      qualifying_weekdays: [3, 4, 5, 6, 0],
+      waiting_days_served: 0,
+      ssp_weeks_paid: 0,
+    };
+
+    expect(calculateSSP(wedToSunPeriod, '2026-04-12', sspConfig, 500)).toEqual({
+      eligible: true,
+      sspAmount: 23.75,
+      sspDays: 1,
+      waitingDaysUsed: 0,
+    });
+    expect(calculateSSP(wedToSunPeriod, '2026-04-13', sspConfig, 500)).toEqual({
       eligible: false,
       sspAmount: 0,
       sspDays: 0,

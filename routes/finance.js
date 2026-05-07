@@ -139,6 +139,11 @@ const expenseUpdateSchema = expenseBodySchema.partial().omit({ status: true }).e
   _version: z.number().int().nonnegative().optional(),
 });
 
+const expenseDecisionSchema = z.object({
+  _version: z.number().int().nonnegative(),
+  reason: z.string().max(1000).nullable().optional(),
+});
+
 // ── Chase Log Schema ─────────────────────────────────────────────────────────
 
 const chaseBodySchema = z.object({
@@ -445,7 +450,9 @@ router.put('/expenses/:id/approve', writeRateLimiter, requireAuth, requireHomeAc
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
-    const result = await financeService.approveExpense(idP.data, req.home.id, req.user.username);
+    const parsed = expenseDecisionSchema.pick({ _version: true }).safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const result = await financeService.approveExpense(idP.data, req.home.id, req.user.username, parsed.data._version);
     await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'expense', action: 'approve' });
     res.json(result);
   } catch (err) {
@@ -458,8 +465,10 @@ router.put('/expenses/:id/reject', writeRateLimiter, requireAuth, requireHomeAcc
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : null;
-    const result = await financeService.rejectExpense(idP.data, req.home.id, req.user.username, reason);
+    const parsed = expenseDecisionSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const reason = typeof parsed.data.reason === 'string' ? parsed.data.reason.trim().slice(0, 1000) : null;
+    const result = await financeService.rejectExpense(idP.data, req.home.id, req.user.username, reason, parsed.data._version);
     await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'expense', action: 'reject' });
     res.json(result);
   } catch (err) {

@@ -37,13 +37,13 @@ const MOCK_EXPENSES = {
       id: 'exp-1', expense_date: '2026-03-01', category: 'utilities',
       description: 'Electricity bill February', supplier: 'British Gas',
       net_amount: '450.00', vat_amount: '90.00', gross_amount: '540.00',
-      status: 'pending', created_by: 'manager1', approved_by: null, approved_date: null,
+      status: 'pending', created_by: 'manager1', approved_by: null, approved_date: null, version: 3,
     },
     {
       id: 'exp-2', expense_date: '2026-02-15', category: 'maintenance',
       description: 'Boiler service', supplier: 'HeatingCo',
       net_amount: '200.00', vat_amount: '40.00', gross_amount: '240.00',
-      status: 'approved', created_by: 'admin', approved_by: 'admin', approved_date: '2026-02-16',
+      status: 'approved', created_by: 'admin', approved_by: 'admin', approved_date: '2026-02-16', version: 2,
     },
   ],
   total: 2,
@@ -155,5 +155,19 @@ describe('ExpenseTracker', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Export Excel' }));
     expect(downloadXLSX).toHaveBeenCalledOnce();
+  });
+
+  it('approves expenses with the current optimistic-lock version', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    api.approveFinanceExpense.mockResolvedValue({});
+    renderWithProviders(<ExpenseTracker />);
+    await waitFor(() =>
+      expect(screen.getByText('Electricity bill February')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+
+    expect(api.approveFinanceExpense).toHaveBeenCalledWith('test-home', 'exp-1', 3);
   });
 });

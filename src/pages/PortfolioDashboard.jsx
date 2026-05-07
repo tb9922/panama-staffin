@@ -6,6 +6,7 @@ import ErrorState from '../components/ErrorState.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { getPortfolioBoardPack, getPortfolioKpis } from '../lib/api.js';
+import { hasModuleAccess } from '../../shared/roles.js';
 
 const RAG_LABELS = {
   green: 'Green',
@@ -37,6 +38,36 @@ const METRIC_META = {
 
 const ROUTE_ALIASES = {
   '/agency': '/payroll/agency',
+};
+
+const METRIC_MODULES = {
+  staffing: 'scheduling',
+  training: 'compliance',
+  care_certificate: 'compliance',
+  manager_actions: 'governance',
+  incidents: 'compliance',
+  complaints: 'compliance',
+  cqc_evidence: 'compliance',
+  maintenance: 'compliance',
+  agency: 'payroll',
+  occupancy: 'finance',
+  outcomes: 'reports',
+};
+
+const ROUTE_MODULES = {
+  '/settings': 'config',
+  '/day': 'scheduling',
+  '/training': 'compliance',
+  '/care-cert': 'compliance',
+  '/actions': 'governance',
+  '/audit-calendar': 'governance',
+  '/incidents': 'compliance',
+  '/complaints': 'compliance',
+  '/cqc': 'compliance',
+  '/maintenance': 'compliance',
+  '/payroll/agency': 'payroll',
+  '/beds': 'finance',
+  '/outcomes': 'reports',
 };
 
 function normalizeRag(rag) {
@@ -217,9 +248,9 @@ function actionLabelForMetric(metric) {
   return metric.rag === 'unknown' ? 'Fix coverage' : metric.actionLabel;
 }
 
-function MetricTile({ metric, home, onOpenMetric }) {
+function MetricTile({ metric, home, onOpenMetric, canOpenMetric }) {
   const accent = ragAccent(metric.rag);
-  const showAction = metric.route && (metric.rag === 'red' || metric.rag === 'unknown');
+  const showAction = metric.route && canOpenMetric(home, metric) && (metric.rag === 'red' || metric.rag === 'unknown');
   return (
     <div className="flex min-h-32 flex-col border-t border-[var(--line)] py-3 sm:border-l sm:px-3 sm:[&:nth-child(-n+2)]:border-t-0 sm:[&:nth-child(2n+1)]:border-l-0 lg:[&:nth-child(-n+5)]:border-t-0 lg:[&:nth-child(5n+1)]:border-l-0">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -259,7 +290,7 @@ function ExceptionStrip({ metrics }) {
   );
 }
 
-function CoveragePanel({ unknownSignals, onOpenMetric }) {
+function CoveragePanel({ unknownSignals, onOpenMetric, canOpenMetric }) {
   const unknownCount = unknownSignals.length;
   const grouped = unknownSignals.reduce((acc, item) => {
     const key = item.home.home_id || item.home.home_slug || item.home.home_name;
@@ -302,7 +333,7 @@ function CoveragePanel({ unknownSignals, onOpenMetric }) {
                     </div>
                     <p className="mt-2 text-xs text-[var(--ink-3)]">{metric.reason}</p>
                     <p className="mt-1 text-xs font-medium text-[var(--ink-2)]">{metric.fix}</p>
-                    {metric.route && (
+                    {metric.route && canOpenMetric(group.home, metric) && (
                       <button
                         type="button"
                         className={`${BTN.secondary} ${BTN.xs} mt-3`}
@@ -323,7 +354,7 @@ function CoveragePanel({ unknownSignals, onOpenMetric }) {
   );
 }
 
-function HomePanel({ home, onOpen, onOpenMetric }) {
+function HomePanel({ home, onOpen, onOpenMetric, canOpenMetric }) {
   const metrics = buildMetricCards(home);
   const overall = normalizeRag(home.rag?.overall);
   const accent = ragAccent(overall);
@@ -355,7 +386,7 @@ function HomePanel({ home, onOpen, onOpenMetric }) {
       </div>
       <div className="grid grid-cols-1 border-t border-[var(--line)] px-4 sm:grid-cols-2 lg:grid-cols-5">
         {metrics.map(metric => (
-          <MetricTile key={metric.key} metric={metric} home={home} onOpenMetric={onOpenMetric} />
+          <MetricTile key={metric.key} metric={metric} home={home} onOpenMetric={onOpenMetric} canOpenMetric={canOpenMetric} />
         ))}
       </div>
     </section>
@@ -364,7 +395,7 @@ function HomePanel({ home, onOpen, onOpenMetric }) {
 
 export default function PortfolioDashboard() {
   const navigate = useNavigate();
-  const { switchHome } = useData();
+  const { homes: assignedHomes = [], switchHome, isPlatformAdmin } = useData();
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generatingPack, setGeneratingPack] = useState(false);
@@ -425,6 +456,14 @@ export default function PortfolioDashboard() {
     navigate(metric.route || '/');
   }
 
+  function canOpenMetric(home, metric) {
+    if (isPlatformAdmin) return true;
+    const moduleId = ROUTE_MODULES[metric.route] || metric.module || METRIC_MODULES[metric.key];
+    if (!moduleId) return false;
+    const targetHome = assignedHomes.find(item => item.id === home?.home_slug);
+    return hasModuleAccess(targetHome?.roleId, moduleId, 'read');
+  }
+
   async function generateBoardPack() {
     setGeneratingPack(true);
     setPackError(null);
@@ -482,10 +521,10 @@ export default function PortfolioDashboard() {
         <div className="space-y-5">
           <div className="space-y-4">
             {sortedHomes.map(home => (
-              <HomePanel key={home.home_id} home={home} onOpen={drillIntoHome} onOpenMetric={openMetric} />
+              <HomePanel key={home.home_id} home={home} onOpen={drillIntoHome} onOpenMetric={openMetric} canOpenMetric={canOpenMetric} />
             ))}
           </div>
-          <CoveragePanel unknownSignals={unknownSignals} onOpenMetric={openMetric} />
+          <CoveragePanel unknownSignals={unknownSignals} onOpenMetric={openMetric} canOpenMetric={canOpenMetric} />
         </div>
       )}
     </div>

@@ -51,7 +51,7 @@ async function getAuditHomeSlugs(username, isPlatformAdmin) {
   return eligibleSlugs;
 }
 
-router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

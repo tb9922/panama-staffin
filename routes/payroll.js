@@ -1082,7 +1082,7 @@ const taxCodeBodySchema = z.object({
   staff_id:          z.string().min(1).max(20),
   tax_code:          z.string().min(1).max(20).optional().default('1257L'),
   basis:             z.enum(['cumulative', 'w1m1']).optional().default('cumulative'),
-  ni_category:       z.enum(['A']).optional().default('A'),
+    ni_category:       z.enum(['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'V', 'X', 'Z']).optional().default('A'),
   effective_from:    dateSchema.optional(),
   previous_pay:      z.number().nonnegative().optional().default(0),
   previous_tax:      z.number().nonnegative().optional().default(0),
@@ -1216,16 +1216,21 @@ const sickPeriodBodySchema = z.object({
   start_date:              dateSchema,
   end_date:                dateSchema.nullable().optional(),
   qualifying_days_per_week: z.number().int().min(1).max(7).optional().default(5),
+  qualifying_weekdays:     z.array(z.number().int().min(0).max(6)).min(1).max(7).optional()
+    .refine(days => !days || new Set(days).size === days.length, 'qualifying_weekdays must not contain duplicates'),
   waiting_days_served:     z.number().int().nonnegative().optional().default(0),
   ssp_weeks_paid:          z.number().nonnegative().optional().default(0),
   fit_note_received:       z.boolean().optional().default(false),
   fit_note_date:           dateSchema.nullable().optional(),
-  linked_to_period_id:     z.number().int().positive().nullable().optional(),
+  linked_to_period_id:     z.coerce.number().int().positive().nullable().optional(),
   notes:                   z.string().max(1000).nullable().optional(),
 });
 
 const sickPeriodUpdateSchema = z.object({
   end_date:          dateSchema.nullable().optional(),
+  qualifying_days_per_week: z.number().int().min(1).max(7).optional(),
+  qualifying_weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional()
+    .refine(days => !days || new Set(days).size === days.length, 'qualifying_weekdays must not contain duplicates'),
   waiting_days_served: z.number().int().nonnegative().optional(),
   ssp_weeks_paid:    z.number().nonnegative().optional(),
   fit_note_received: z.boolean().optional(),
@@ -1233,6 +1238,49 @@ const sickPeriodUpdateSchema = z.object({
   notes:             z.string().max(1000).nullable().optional(),
   _version:          z.number().int().positive().optional(),
 });
+
+function defaultQualifyingWeekdays(count = 5) {
+  const bounded = Math.min(7, Math.max(1, Number(count) || 5));
+  if (bounded === 7) return [0, 1, 2, 3, 4, 5, 6];
+  return Array.from({ length: bounded }, (_, i) => i + 1);
+}
+
+function normalizeQualifyingWeekdays(days, count) {
+  const normalized = [...new Set((days || []).map(Number))]
+    .filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
+    .sort((a, b) => a - b);
+  if (normalized.length !== count) {
+    throw new ValidationError('qualifying_weekdays must match qualifying_days_per_week');
+  }
+  return normalized;
+}
+
+function normalizeSickPeriodCreate(data) {
+  const count = data.qualifying_days_per_week || 5;
+  return {
+    ...data,
+    qualifying_days_per_week: count,
+    qualifying_weekdays: normalizeQualifyingWeekdays(
+      data.qualifying_weekdays || defaultQualifyingWeekdays(count),
+      count,
+    ),
+  };
+}
+
+function normalizeSickPeriodChanges(changes, existing) {
+  const hasWeekdayChange = Object.prototype.hasOwnProperty.call(changes, 'qualifying_days_per_week')
+    || Object.prototype.hasOwnProperty.call(changes, 'qualifying_weekdays');
+  if (!hasWeekdayChange) return changes;
+  const count = changes.qualifying_days_per_week || existing.qualifying_days_per_week || 5;
+  return {
+    ...changes,
+    qualifying_days_per_week: count,
+    qualifying_weekdays: normalizeQualifyingWeekdays(
+      changes.qualifying_weekdays || defaultQualifyingWeekdays(count),
+      count,
+    ),
+  };
+}
 
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
 router.get('/sick-periods', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
@@ -1252,34 +1300,35 @@ router.post('/sick-periods', writeRateLimiter, requireAuth, requireHomeAccess, r
   try {
     const parsed = sickPeriodBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const periodData = normalizeSickPeriodCreate(parsed.data);
     const result = await withTransaction(async (client) => {
-      await assertPayrollStaffExists(req.home.id, parsed.data.staff_id, client);
-      if (parsed.data.end_date && parsed.data.end_date < parsed.data.start_date) {
+      await assertPayrollStaffExists(req.home.id, periodData.staff_id, client);
+      if (periodData.end_date && periodData.end_date < periodData.start_date) {
         throw new ValidationError('end_date cannot be before start_date');
       }
-      await client.query('SELECT pg_advisory_xact_lock(20260407, hashtext($1))', [`${req.home.id}:${parsed.data.staff_id}`]);
+      await client.query('SELECT pg_advisory_xact_lock(20260407, hashtext($1))', [`${req.home.id}:${periodData.staff_id}`]);
       const linked = await resolveLinkedSickPeriod(
         req.home.id,
-        parsed.data.staff_id,
-        parsed.data.start_date,
-        parsed.data.linked_to_period_id || null,
+        periodData.staff_id,
+        periodData.start_date,
+        periodData.linked_to_period_id || null,
         client,
       );
       await assertNoSickPeriodOverlap(
         req.home.id,
-        parsed.data.staff_id,
-        parsed.data.start_date,
-        parsed.data.end_date || null,
+        periodData.staff_id,
+        periodData.start_date,
+        periodData.end_date || null,
         null,
         client,
       );
       return sspRepo.createSickPeriod(req.home.id, {
-        ...parsed.data,
+        ...periodData,
         linked_to_period_id: linked?.id || null,
-        waiting_days_served: linked ? (linked.waiting_days_served || 0) : (parsed.data.waiting_days_served ?? 0),
+        waiting_days_served: linked ? (linked.waiting_days_served || 0) : (periodData.waiting_days_served ?? 0),
       }, client);
     });
-    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'sick_period', staff_id: parsed.data.staff_id });
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'sick_period', staff_id: periodData.staff_id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -1291,10 +1340,11 @@ router.put('/sick-periods/:id', writeRateLimiter, requireAuth, requireHomeAccess
     if (!idP.success) return res.status(400).json({ error: 'Invalid period ID' });
     const parsed = sickPeriodUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const { _version, ...changes } = parsed.data;
+    const { _version, ...rawChanges } = parsed.data;
     const result = await withTransaction(async (client) => {
       const existing = await sspRepo.findSickPeriodById(idP.data, req.home.id, client);
       if (!existing) return { kind: 'missing' };
+      const changes = normalizeSickPeriodChanges(rawChanges, existing);
       const nextEndDate = Object.prototype.hasOwnProperty.call(changes, 'end_date')
         ? changes.end_date
         : existing.end_date;

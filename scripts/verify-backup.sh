@@ -140,7 +140,8 @@ RESTORED_MIG=$(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
 echo "[$(date --iso-8601=seconds)] Migrations: live=${LIVE_MIG} restored=${RESTORED_MIG}"
 
 if [ "${LIVE_MIG}" != "${RESTORED_MIG}" ] && [ "${LIVE_MIG}" != "?" ]; then
-  echo "[$(date --iso-8601=seconds)] WARNING: Migration version mismatch (backup may be from before a deploy)"
+  echo "[$(date --iso-8601=seconds)] FAIL: Migration version mismatch (backup may be from before a deploy)"
+  FAILURES=$((FAILURES + 1))
 fi
 
 # ── Result ────────────────────────────────────────────────────────────────────

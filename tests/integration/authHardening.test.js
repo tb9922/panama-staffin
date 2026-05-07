@@ -21,8 +21,10 @@ import * as userRepo from '../../repositories/userRepo.js';
 
 const TEST_PREFIX = 'lockout-test';
 const ADMIN_USER = `${TEST_PREFIX}-admin`;
+const LEGACY_ADMIN_USER = `${TEST_PREFIX}-legacy-admin`;
 const LOCKOUT_USER = `${TEST_PREFIX}-target`;
 const ADMIN_PW = 'AdminPass1Test';
+const LEGACY_ADMIN_PW = 'LegacyAdminPass1Test';
 const LOCKOUT_PW = 'LockoutPass1Test';
 
 let adminToken;
@@ -52,6 +54,18 @@ beforeAll(async () => {
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
      VALUES ($1, $2, 'home_manager', 'test-setup')`,
     [ADMIN_USER, home.id]
+  );
+
+  const legacyAdminHash = await bcrypt.hash(LEGACY_ADMIN_PW, 10);
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+     VALUES ($1, $2, 'admin', true, 'Legacy Admin', 'test-setup', false)`,
+    [LEGACY_ADMIN_USER, legacyAdminHash]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'home_manager', 'test-setup')`,
+    [LEGACY_ADMIN_USER, home.id]
   );
 
   // Create lockout target user
@@ -211,6 +225,17 @@ describe('Per-home role change takes effect without token revocation', () => {
 });
 
 describe('Session and logout hardening', () => {
+  it('blocks non-platform legacy admins from global token revoke', async () => {
+    const loginRes = await request(app).post('/api/login').send({ username: LEGACY_ADMIN_USER, password: LEGACY_ADMIN_PW });
+    expect(loginRes.status).toBe(200);
+
+    await request(app)
+      .post('/api/login/revoke')
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .send({ username: LOCKOUT_USER })
+      .expect(403);
+  });
+
   it('returns 503 when auth dependency checks fail instead of forcing a 401 logout', async () => {
     vi.spyOn(authService, 'isTokenDenied').mockRejectedValueOnce(new Error('db down'));
 
@@ -235,6 +260,49 @@ describe('Session and logout hardening', () => {
       .expect(401);
 
     await pool.query('UPDATE users SET active = true WHERE username = $1', [ADMIN_USER]);
+  });
+
+  it('does not treat a platform flag as platform-admin access after role demotion', async () => {
+    const extraHomeSlug = `${TEST_PREFIX}-stale-platform-extra`;
+    try {
+      await pool.query(
+        `INSERT INTO homes (slug, name, config) VALUES ($1, 'Stale Platform Extra Home', '{}')`,
+        [extraHomeSlug],
+      );
+      await pool.query(
+        `UPDATE users
+            SET role = 'viewer',
+                is_platform_admin = true,
+                session_version = session_version + 1
+          WHERE username = $1`,
+        [ADMIN_USER],
+      );
+      const loginRes = await request(app).post('/api/login').send({ username: ADMIN_USER, password: ADMIN_PW });
+      expect(loginRes.status).toBe(200);
+
+      await request(app)
+        .get(`/api/users/${lockoutUserId}/homes`)
+        .set('Authorization', `Bearer ${loginRes.body.token}`)
+        .expect(403);
+
+      const homesRes = await request(app)
+        .get('/api/homes')
+        .set('Authorization', `Bearer ${loginRes.body.token}`)
+        .expect(200);
+      expect(homesRes.body.some(home => home.id === extraHomeSlug)).toBe(false);
+    } finally {
+      await pool.query('DELETE FROM homes WHERE slug = $1', [extraHomeSlug]).catch(() => {});
+      await pool.query(
+        `UPDATE users
+            SET role = 'admin',
+                is_platform_admin = true,
+                session_version = session_version + 1
+          WHERE username = $1`,
+        [ADMIN_USER],
+      );
+      const restored = await request(app).post('/api/login').send({ username: ADMIN_USER, password: ADMIN_PW });
+      adminToken = restored.body.token;
+    }
   });
 
   it('clears the local session even when logout deny-list persistence fails', async () => {
@@ -401,6 +469,56 @@ describe('Password updates are atomic', () => {
 });
 
 describe('Admin guardrails', () => {
+  it('role demotion from admin revokes inherited all-home roles', async () => {
+    const auxUsername = `${TEST_PREFIX}-demote-admin`;
+    const extraHomeSlug = `${TEST_PREFIX}-demote-extra`;
+    const auxHash = await bcrypt.hash('DemoteAdminPass1X', 4);
+    let auxUserId = null;
+    let extraHomeId = null;
+
+    try {
+      const { rows: [auxUser] } = await pool.query(
+        `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+         VALUES ($1, $2, 'admin', true, 'Demote Admin', 'test-setup', true)
+         RETURNING id`,
+        [auxUsername, auxHash],
+      );
+      auxUserId = auxUser.id;
+      const { rows: [extraHome] } = await pool.query(
+        `INSERT INTO homes (slug, name, config) VALUES ($1, 'Demote Extra Home', '{}') RETURNING id`,
+        [extraHomeSlug],
+      );
+      extraHomeId = extraHome.id;
+      await pool.query(
+        `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+         SELECT $1, id, 'home_manager', 'test-setup'
+           FROM homes
+          WHERE slug IN ($2, $3)`,
+        [auxUsername, `${TEST_PREFIX}-home`, extraHomeSlug],
+      );
+
+      await userService.updateUser(auxUserId, { role: 'viewer' }, ADMIN_USER);
+
+      const updated = await userRepo.findByUsername(auxUsername);
+      const { rows: roles } = await pool.query(
+        `SELECT 1 FROM user_home_roles WHERE username = $1`,
+        [auxUsername],
+      );
+      expect(updated.role).toBe('viewer');
+      expect(updated.is_platform_admin).toBe(false);
+      expect(roles).toHaveLength(0);
+    } finally {
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [auxUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [auxUsername]).catch(() => {});
+      if (auxUserId != null) {
+        await pool.query('DELETE FROM users WHERE id = $1', [auxUserId]).catch(() => {});
+      }
+      if (extraHomeId != null) {
+        await pool.query('DELETE FROM homes WHERE id = $1', [extraHomeId]).catch(() => {});
+      }
+    }
+  });
+
   it('deactivation revokes per-home roles as well as sessions', async () => {
     const extraHomeSlug = `${TEST_PREFIX}-extra-home`;
     let extraHomeId = null;

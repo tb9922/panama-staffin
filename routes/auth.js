@@ -6,7 +6,7 @@ import { config } from '../config.js';
 import * as authService from '../services/authService.js';
 import * as auditService from '../services/auditService.js';
 import * as authRepo from '../repositories/authRepo.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
 import { PostgresRateLimitStore } from '../lib/postgresRateLimitStore.js';
 import {
   tokenCookieOptions,
@@ -109,7 +109,7 @@ const revokeSchema = z.object({
   username: z.string().min(1, 'Username required'),
 });
 
-router.post('/revoke', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/revoke', requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const parsed = revokeSchema.safeParse(req.body || {});
     if (!parsed.success) {

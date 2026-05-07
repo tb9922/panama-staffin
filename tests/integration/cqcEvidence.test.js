@@ -15,6 +15,7 @@ let homeA, homeB;
 const ids = [];
 
 beforeAll(async () => {
+  await pool.query(`DELETE FROM cqc_evidence_files WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'cqc-test-%')`).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE 'cqc-test-%')`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'cqc-test-%'`);
 
@@ -30,6 +31,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const id of ids) {
+    await pool.query('DELETE FROM cqc_evidence_files WHERE evidence_id = $1', [id]).catch(() => {});
     await pool.query('DELETE FROM cqc_evidence WHERE id = $1', [id]).catch(() => {});
   }
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
@@ -170,10 +172,24 @@ describe('CQC Evidence: soft delete', () => {
   });
 
   it('soft-deletes and excludes from queries', async () => {
+    const { rows: [file] } = await pool.query(
+      `INSERT INTO cqc_evidence_files
+         (home_id, evidence_id, original_name, stored_name, mime_type, size_bytes, uploaded_by)
+       VALUES ($1, $2, 'delete-me.pdf', 'delete-me.pdf', 'application/pdf', 123, 'admin')
+       RETURNING id`,
+      [homeA, evidenceId],
+    );
+
     const deleted = await cqcEvidenceRepo.softDelete(evidenceId, homeA);
     expect(deleted).toBe(true);
 
     const byId = await cqcEvidenceRepo.findById(evidenceId, homeA);
     expect(byId).toBeNull();
+
+    const { rows: [deletedFile] } = await pool.query(
+      'SELECT deleted_at FROM cqc_evidence_files WHERE id = $1',
+      [file.id],
+    );
+    expect(deletedFile.deleted_at).not.toBeNull();
   });
 });

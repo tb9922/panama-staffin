@@ -430,7 +430,7 @@ describe('CQCEvidence', () => {
   it('exports snapshot PDFs from frozen snapshot data, not live metrics', async () => {
     const user = userEvent.setup();
     const frozenEvidencePack = { source: 'snapshot', rows: [{ file: 'frozen.pdf' }] };
-    api.getSnapshots.mockResolvedValueOnce([
+    api.getSnapshots.mockResolvedValue([
       {
         id: 'snap-100',
         computed_at: '2026-03-08T10:00:00Z',
@@ -441,7 +441,7 @@ describe('CQCEvidence', () => {
         signed_off_by: 'manager',
       },
     ]);
-    api.getSnapshot.mockResolvedValueOnce({
+    api.getSnapshot.mockResolvedValue({
       id: 'snap-100',
       computed_at: '2026-03-08T10:00:00Z',
       overall_score: 88,

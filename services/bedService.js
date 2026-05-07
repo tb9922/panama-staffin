@@ -63,7 +63,18 @@ async function assertResidentNotAlreadyOccupied(homeId, residentId, currentBedId
   }
 }
 
-function buildStatusData(oldStatus, newStatus, transitionData) {
+async function assertResidentCanOccupy(homeId, residentId, currentBedId, client) {
+  if (!residentId) throw new ValidationError('Occupied beds require a resident');
+  const resident = await financeRepo.findResidentById(residentId, homeId, client, { forUpdate: true });
+  if (!resident) throw new ValidationError('Resident not found in this home');
+  if (resident.status !== 'active') {
+    throw new ValidationError('Cannot occupy a bed with a non-active resident');
+  }
+  await assertResidentNotAlreadyOccupied(homeId, residentId, currentBedId, client);
+  return resident;
+}
+
+function buildStatusData(oldStatus, newStatus, transitionData, currentResidentId = null) {
   const {
     residentId, holdExpires, reservedUntil,
     bookedFrom, bookedUntil, username,
@@ -72,7 +83,9 @@ function buildStatusData(oldStatus, newStatus, transitionData) {
 
   const data = {
     status: newStatus,
-    resident_id: newStatus === 'occupied' ? (residentId ?? null) : null,
+    resident_id: ['occupied', 'hospital_hold'].includes(newStatus)
+      ? (residentId ?? currentResidentId ?? null)
+      : null,
     status_since: today(),
     hold_expires: holdExpires ?? null,
     reserved_until: newStatus === 'reserved'
@@ -199,6 +212,9 @@ export async function setupBeds(homeId, homeSlug, bedsArray, username) {
   const created = await withTransaction(async (client) => {
     const results = [];
     for (const bed of bedsArray) {
+      if (bed.status === 'occupied') {
+        await assertResidentCanOccupy(homeId, bed.resident_id, null, client);
+      }
       const row = await bedRepo.create(homeId, { ...bed, created_by: username }, client);
       await bedTransitionRepo.recordTransition(homeId, {
         bedId: row.id,
@@ -246,13 +262,23 @@ export async function transitionStatus(bedId, homeId, homeSlug, transitionData) 
     const emergencyErr = validateEmergencyAdmission(bed.status, newStatus, transitionData);
     if (emergencyErr) throw new ValidationError(emergencyErr);
 
-    if (residentId && newStatus === 'occupied') {
-      const resident = await financeRepo.findResidentById(residentId, homeId, client);
-      if (!resident) throw new ValidationError('Resident not found in this home');
-      await assertResidentNotAlreadyOccupied(homeId, residentId, bedId, client);
+    const effectiveResidentId = bed.status === 'hospital_hold' && newStatus === 'occupied'
+      ? bed.resident_id
+      : residentId;
+    if (bed.status === 'hospital_hold' && newStatus === 'occupied' && residentId != null && Number(residentId) !== Number(bed.resident_id)) {
+      throw new ValidationError('Hospital hold can only return to the held resident');
     }
 
-    const statusData = buildStatusData(bed.status, newStatus, transitionData);
+    if (newStatus === 'occupied') {
+      await assertResidentCanOccupy(homeId, effectiveResidentId, bedId, client);
+    }
+
+    const statusData = buildStatusData(
+      bed.status,
+      newStatus,
+      { ...transitionData, residentId: effectiveResidentId },
+      bed.resident_id,
+    );
     const transitionReason = getTransitionReason(bed.status, newStatus, transitionData);
     const transitionNotes = normalizeTransitionNotes(transitionData.notes);
     const updated = await bedRepo.updateStatus(bedId, homeId, statusData, client);
@@ -261,7 +287,7 @@ export async function transitionStatus(bedId, homeId, homeSlug, transitionData) 
       bedId,
       fromStatus: bed.status,
       toStatus: newStatus,
-      residentId: residentId ?? null,
+      residentId: newStatus === 'occupied' ? (effectiveResidentId ?? null) : (bed.resident_id ?? null),
       changedBy: username,
       reason: transitionReason,
       notes: transitionNotes,
@@ -308,6 +334,7 @@ export async function moveBed(fromBedId, toBedId, homeId, homeSlug, username, fr
     if (toBed.status !== 'available') throw new ValidationError('Destination bed must be available');
 
     const residentId = fromBed.resident_id;
+    await assertResidentCanOccupy(homeId, residentId, fromBedId, client);
     const now = today();
 
     const updatedFrom = await bedRepo.updateStatus(fromBedId, homeId, {
@@ -391,11 +418,15 @@ export async function revertTransition(bedId, homeId, homeSlug, username, reason
     if (!latest) throw new ValidationError('No transition to revert');
 
     const revertTo = latest.from_status;
+    const residentId = ['occupied', 'hospital_hold'].includes(revertTo) ? (latest.resident_id ?? null) : null;
+    if (['occupied', 'hospital_hold'].includes(revertTo)) {
+      await assertResidentCanOccupy(homeId, residentId, bedId, client);
+    }
 
     const updated = await bedRepo.updateStatus(bedId, homeId, {
       status: revertTo,
       status_since: today(),
-      resident_id: revertTo === 'occupied' ? (latest.resident_id ?? null) : null,
+      resident_id: residentId,
       notes: `Reverted: ${reason || 'No reason given'}`,
       updated_by: username,
     }, client);

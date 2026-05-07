@@ -154,6 +154,8 @@ jobs:
       - name: Seed E2E test data
         run: node scripts/seed-e2e.js
         env:
+          NODE_ENV: test
+          E2E_SEED_ALLOW: '1'
           DB_HOST: localhost
           DB_PORT: 5432
           DB_NAME: panama_test
@@ -188,6 +190,7 @@ jobs:
           ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           ALLOWED_ORIGIN: http://localhost:5173
+          UPLOAD_SCAN_COMMAND: true
 
       - name: Run V1 scale/load gate
         run: npm run test:v1-scale
@@ -262,20 +265,26 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     env:
-      DEPLOY_CONFIGURED: ${{ secrets.SERVER_HOST != '' && secrets.SERVER_USER != '' && secrets.SERVER_SSH_KEY != '' }}
+      DEPLOY_CONFIGURED: ${{ secrets.SERVER_HOST != '' && secrets.SERVER_USER != '' && secrets.SERVER_SSH_KEY != '' && secrets.SMOKE_USERNAME != '' && secrets.SMOKE_PASSWORD != '' && secrets.SMOKE_HOME_SLUG != '' }}
 
     steps:
       - name: Skip deploy when production SSH secrets are not configured
         if: env.DEPLOY_CONFIGURED != 'true'
-        run: echo "SERVER_HOST, SERVER_USER, and SERVER_SSH_KEY must be configured to enable GitHub Actions deploys."
+        run: echo "SERVER_HOST, SERVER_USER, SERVER_SSH_KEY, SMOKE_USERNAME, SMOKE_PASSWORD, and SMOKE_HOME_SLUG must be configured to enable GitHub Actions deploys."
 
       - name: Deploy to production
         if: env.DEPLOY_CONFIGURED == 'true'
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
+        env:
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL || 'http://localhost:3001' }}
+          SMOKE_HOME_SLUG: ${{ secrets.SMOKE_HOME_SLUG }}
+          SMOKE_USERNAME: ${{ secrets.SMOKE_USERNAME }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: SMOKE_BASE_URL,SMOKE_HOME_SLUG,SMOKE_USERNAME,SMOKE_PASSWORD
           script: |
             set -e
             export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
@@ -299,20 +308,55 @@ jobs:
             npm run build
             find dist -name '*.map' -delete
             bash ./scripts/backup-db.sh
-            pm2 stop panama panama-webhooks || true
-            if ! node scripts/migrate.js; then
-              echo "Migration failed — rolling back code to $PREV_COMMIT"
+            PRE_MIGRATION_BACKUP=$(ls -t backups/db/panama_*.sql.gz | head -1)
+            if [ -z "$PRE_MIGRATION_BACKUP" ]; then
+              echo "Could not locate pre-migration backup"
+              exit 1
+            fi
+            rollback_to_previous() {
+              reason="$1"
+              echo "$reason - rolling back code and database to $PREV_COMMIT"
+              set +e
+              pm2 stop panama panama-webhooks || true
+              RESTORE_USE_ENV_DB=true FORCE_RESTORE_DB=true bash ./scripts/restore-db.sh "$PRE_MIGRATION_BACKUP"
+              restore_status=$?
               git checkout "$PREV_COMMIT"
+              checkout_status=$?
               npm ci
+              ci_status=$?
               npm run build
+              build_status=$?
               find dist -name '*.map' -delete
               pm2 startOrReload ecosystem.config.cjs --env production --update-env
+              pm2_status=$?
+              set -e
+              if [ "$restore_status" -ne 0 ] || [ "$checkout_status" -ne 0 ] || [ "$ci_status" -ne 0 ] || [ "$build_status" -ne 0 ] || [ "$pm2_status" -ne 0 ]; then
+                echo "Rollback incomplete: restore=$restore_status checkout=$checkout_status npm_ci=$ci_status build=$build_status pm2=$pm2_status"
+              fi
+            }
+            pm2 stop panama panama-webhooks || true
+            if ! node scripts/migrate.js; then
+              rollback_to_previous "Migration failed"
+              exit 1
+            fi
+            if ! node scripts/verify-v1-operational-gates.js --strict; then
+              rollback_to_previous "Strict V1 operational gate failed"
               exit 1
             fi
             npm prune --omit=dev
             pm2 startOrReload ecosystem.config.cjs --env production --update-env
             sleep 5
-            curl -f http://localhost:3001/health || exit 1
-            curl -f http://localhost:3001/readiness || exit 1
+            if ! {
+              curl -f http://localhost:3001/health &&
+              curl -f http://localhost:3001/readiness &&
+              BASE_URL="${SMOKE_BASE_URL:-http://localhost:3001}" \
+              HOME_SLUG="${SMOKE_HOME_SLUG}" \
+              SMOKE_USERNAME="${SMOKE_USERNAME}" \
+              SMOKE_PASSWORD="${SMOKE_PASSWORD}" \
+                bash ./scripts/smoke-vps.sh
+            }; then
+              rollback_to_previous "Post-deploy verification failed"
+              exit 1
+            fi
             echo "VPS HEAD verified: $DEPLOYED_COMMIT"
             echo "Health check passed — deploy complete: $(date)"

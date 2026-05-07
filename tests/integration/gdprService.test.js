@@ -796,6 +796,12 @@ describe('executeErasure', () => {
     cleanup.dataRequests.push(req.id);
   });
 
+  it('fails closed when staff erasure subject is missing', async () => {
+    await expect(
+      gdprService.executeErasure('gdpr-missing-staff', homeA, null, 'test-admin', SLUG_A)
+    ).rejects.toThrow(/staff subject not found/i);
+  });
+
   it('anonymises staff record', async () => {
     await gdprService.executeErasure(targetStaff, homeA, erasureRequestId, 'test-admin', SLUG_A);
 
@@ -1389,5 +1395,38 @@ describe('resident erasure safety', () => {
         [inserted.map((row) => row.id)]
       );
     }
+  });
+
+  it('redacts resident names from audit details and erasure audit entries', async () => {
+    const residentName = 'Resident Audit Redaction';
+    const { rows: [resident] } = await pool.query(
+      `INSERT INTO finance_residents (
+         home_id, resident_name, room_number, admission_date, care_type,
+         funding_type, weekly_fee, status, created_by
+       )
+       VALUES ($1, $2, 'AR1', '2026-01-01', 'residential', 'self_funded', 1000, 'active', 'test-admin')
+       RETURNING id`,
+      [homeA, residentName],
+    );
+    await pool.query(
+      `INSERT INTO audit_log (action, home_slug, user_name, details)
+       VALUES ('resident_note_update', $1, 'test-admin', $2)`,
+      [SLUG_A, JSON.stringify({ note: `${residentName} had a note updated` })],
+    );
+
+    await gdprService.executeResidentErasure(String(resident.id), homeA, null, 'test-admin', SLUG_A, residentName);
+
+    const { rows } = await pool.query(
+      `SELECT details
+         FROM audit_log
+        WHERE home_slug = $1
+          AND (action = 'resident_note_update' OR action = 'erasure')
+        ORDER BY id DESC
+        LIMIT 5`,
+      [SLUG_A],
+    );
+    const serialized = JSON.stringify(rows.map(row => row.details));
+    expect(serialized).not.toContain(residentName);
+    expect(serialized).toContain(`[REDACTED-RES-${String(resident.id).slice(0, 4)}]`);
   });
 });

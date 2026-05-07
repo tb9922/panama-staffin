@@ -188,6 +188,19 @@ describe('TaxCodeManager', () => {
     expect(screen.getByRole('button', { name: 'Add / Update Tax Code' })).toBeInTheDocument();
   });
 
+  it('offers the full supported NI category set', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('Tax Code Manager')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add / Update Tax Code' }));
+
+    const options = [...screen.getByLabelText('NI Category').querySelectorAll('option')].map(option => option.value);
+    expect(options).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'V', 'X', 'Z']);
+  });
+
   it('hides Add / Update Tax Code button and Actions column for viewer', async () => {
     renderViewer();
     await waitFor(() =>

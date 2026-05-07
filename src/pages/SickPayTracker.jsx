@@ -15,7 +15,7 @@ import { todayLocalISO } from '../lib/localDates.js';
 
 const EMPTY_CREATE = {
   staff_id: '', start_date: '', end_date: '',
-  qualifying_days_per_week: 5, linked_to_period_id: '', notes: '',
+  qualifying_days_per_week: 5, qualifying_weekdays: [1, 2, 3, 4, 5], linked_to_period_id: '', notes: '',
 };
 
 const EMPTY_UPDATE = {
@@ -61,6 +61,28 @@ function resolveCurrentSSPConfig(configs, asOfDate = todayLocalISO()) {
     .filter((cfg) => cfg.effective_from <= asOfDate)
     .sort((a, b) => b.effective_from.localeCompare(a.effective_from));
   return applicable[0] || configs[configs.length - 1] || null;
+}
+
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 0, label: 'Sun' },
+];
+
+function defaultQualifyingWeekdays(count) {
+  const bounded = Math.min(7, Math.max(1, Number(count) || 5));
+  if (bounded === 7) return [1, 2, 3, 4, 5, 6, 0];
+  return Array.from({ length: bounded }, (_, i) => i + 1);
+}
+
+function formatQualifyingWeekdays(days) {
+  if (!Array.isArray(days) || days.length === 0) return '';
+  const labels = new Map(WEEKDAY_OPTIONS.map(day => [day.value, day.label]));
+  return days.map(Number).filter(day => labels.has(day)).map(day => labels.get(day)).join(', ');
 }
 
 export default function SickPayTracker() {
@@ -132,14 +154,41 @@ export default function SickPayTracker() {
   function cfield(k, v) { setCreateForm(f => ({ ...f, [k]: v })); }
   function ufield(k, v) { setUpdateForm(f => ({ ...f, [k]: v })); }
 
+  function setQualifyingDayCount(value) {
+    const count = parseInt(value, 10) || 5;
+    setCreateForm(form => ({
+      ...form,
+      qualifying_days_per_week: count,
+      qualifying_weekdays: defaultQualifyingWeekdays(count),
+    }));
+  }
+
+  function toggleQualifyingWeekday(day) {
+    setCreateForm((form) => {
+      const current = Array.isArray(form.qualifying_weekdays) ? form.qualifying_weekdays.map(Number) : [];
+      const next = current.includes(day)
+        ? current.filter(value => value !== day)
+        : [...current, day];
+      return {
+        ...form,
+        qualifying_weekdays: next,
+        qualifying_days_per_week: Math.max(1, next.length),
+      };
+    });
+  }
+
   async function handleCreate() {
-    if (!createForm.staff_id || !createForm.start_date) return;
+    if (!createForm.staff_id || !createForm.start_date || !createForm.qualifying_weekdays?.length) return;
     setSaving(true);
     try {
+      const linkedPeriodId = createForm.linked_to_period_id
+        ? (Number.isFinite(Number(createForm.linked_to_period_id)) ? Number(createForm.linked_to_period_id) : createForm.linked_to_period_id)
+        : null;
       await createSickPeriod(homeSlug, {
         ...createForm,
-        qualifying_days_per_week: parseInt(createForm.qualifying_days_per_week, 10) || 5,
-        linked_to_period_id: createForm.linked_to_period_id || null,
+        qualifying_days_per_week: createForm.qualifying_weekdays.length,
+        qualifying_weekdays: createForm.qualifying_weekdays.map(Number),
+        linked_to_period_id: linkedPeriodId,
         end_date: createForm.end_date || null,
       });
       showNotice('Sick period recorded.');
@@ -316,7 +365,12 @@ export default function SickPayTracker() {
                   <td className={TABLE.td}>{period.start_date}</td>
                   <td className={TABLE.td}>{period.end_date || <span className="text-amber-600 font-medium">Open</span>}</td>
                   <td className={TABLE.td}>{days} day{days !== 1 ? 's' : ''}</td>
-                  <td className={TABLE.td}>{period.qualifying_days_per_week}/wk</td>
+                  <td className={TABLE.td}>
+                    <div>{period.qualifying_days_per_week}/wk</div>
+                    {period.qualifying_weekdays?.length > 0 && (
+                      <div className="text-xs text-[var(--ink-3)]">{formatQualifyingWeekdays(period.qualifying_weekdays)}</div>
+                    )}
+                  </td>
                   <td className={TABLE.td}>{period.waiting_days_served}</td>
                   <td className={TABLE.td}>{parseFloat(period.ssp_weeks_paid || 0).toFixed(2)}</td>
                   <td className={TABLE.td}>
@@ -399,7 +453,7 @@ export default function SickPayTracker() {
               id="sick-pay-qualifying-days"
               className={INPUT.select}
               value={createForm.qualifying_days_per_week}
-              onChange={e => cfield('qualifying_days_per_week', e.target.value)}
+              onChange={e => setQualifyingDayCount(e.target.value)}
             >
               {[1, 2, 3, 4, 5, 6, 7].map(d => (
                 <option key={d} value={d}>{d} day{d !== 1 ? 's' : ''}</option>
@@ -409,6 +463,29 @@ export default function SickPayTracker() {
               The number of days this staff member is contracted to work per week. Default: 5.
             </p>
           </div>
+
+          <fieldset>
+            <legend className={INPUT.label}>Qualifying weekdays</legend>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAY_OPTIONS.map(day => {
+                const checked = createForm.qualifying_weekdays.map(Number).includes(day.value);
+                return (
+                  <label key={day.value} className={`inline-flex items-center gap-2 rounded border px-3 py-2 text-sm ${checked ? 'border-[var(--teal)] bg-[var(--teal-50)] text-[var(--ink)]' : 'border-[var(--line)] text-[var(--ink-2)]'}`}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[var(--teal)]"
+                      checked={checked}
+                      onChange={() => toggleQualifyingWeekday(day.value)}
+                    />
+                    {day.label}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Pick the actual contractual days worked, not just a count, for non-standard care rotas.
+            </p>
+          </fieldset>
 
           <div>
             <label htmlFor="sick-pay-linked-period" className={INPUT.label}>Linked to Previous Period (optional)</label>
@@ -449,7 +526,7 @@ export default function SickPayTracker() {
           <button
             className={BTN.primary}
             onClick={handleCreate}
-            disabled={saving || !createForm.staff_id || !createForm.start_date}
+            disabled={saving || !createForm.staff_id || !createForm.start_date || !createForm.qualifying_weekdays.length}
           >
             {saving ? 'Saving...' : 'Record Period'}
           </button>

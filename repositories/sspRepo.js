@@ -5,7 +5,7 @@ function f(v) { return v != null ? parseFloat(v) : null; }
 const SSP_CONFIG_COLS = 'id, effective_from, weekly_rate, waiting_days, lel_weekly, max_weeks';
 
 const SICK_PERIOD_COLS = `id, home_id, staff_id, start_date, end_date,
-  qualifying_days_per_week, waiting_days_served, ssp_weeks_paid,
+  qualifying_days_per_week, qualifying_weekdays, waiting_days_served, ssp_weeks_paid,
   fit_note_received, fit_note_date, linked_to_period_id, notes,
   created_at, updated_at, version`;
 
@@ -122,14 +122,15 @@ export async function createSickPeriod(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO sick_periods
-       (home_id, staff_id, start_date, end_date, qualifying_days_per_week,
+       (home_id, staff_id, start_date, end_date, qualifying_days_per_week, qualifying_weekdays,
         waiting_days_served, ssp_weeks_paid, fit_note_received, fit_note_date,
         linked_to_period_id, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING ${SICK_PERIOD_COLS}`,
     [
       homeId, data.staff_id, data.start_date, data.end_date || null,
       data.qualifying_days_per_week || 5,
+      data.qualifying_weekdays || null,
       data.waiting_days_served ?? 0, data.ssp_weeks_paid ?? 0,
       data.fit_note_received ?? false, data.fit_note_date || null,
       data.linked_to_period_id || null, data.notes || null,
@@ -140,7 +141,7 @@ export async function createSickPeriod(homeId, data, client) {
 
 export async function updateSickPeriod(id, homeId, data, client, version = null) {
   const conn = client || pool;
-  const ALLOWED = ['end_date', 'waiting_days_served', 'ssp_weeks_paid', 'fit_note_received', 'fit_note_date', 'notes'];
+  const ALLOWED = ['end_date', 'qualifying_days_per_week', 'qualifying_weekdays', 'waiting_days_served', 'ssp_weeks_paid', 'fit_note_received', 'fit_note_date', 'notes'];
   const fields = [];
   const values = [id, homeId];
   let idx = 3;
@@ -205,6 +206,7 @@ function shapePeriod(row) {
     start_date: toDateStr(row.start_date),
     end_date: toDateStr(row.end_date),
     qualifying_days_per_week: row.qualifying_days_per_week,
+    qualifying_weekdays: row.qualifying_weekdays || null,
     waiting_days_served: row.waiting_days_served,
     ssp_weeks_paid: f(row.ssp_weeks_paid),
     fit_note_received: row.fit_note_received,

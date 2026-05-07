@@ -399,6 +399,34 @@ describe('Finance service hotfixes', () => {
     expect(updated.lines).toHaveLength(1);
   });
 
+  it('blocks moving invoices onto non-active residents', async () => {
+    const active = await financeRepo.createResident(homeA, {
+      resident_name: 'Invoice Active Resident',
+      weekly_fee: 1000,
+      status: 'active',
+      created_by: 'admin',
+    });
+    const discharged = await financeRepo.createResident(homeA, {
+      resident_name: 'Invoice Discharged Resident',
+      weekly_fee: 1000,
+      status: 'discharged',
+      created_by: 'admin',
+    });
+    const created = await financeService.createInvoiceWithLines(homeA, {
+      resident_id: active.id,
+      payer_type: 'resident',
+      payer_name: active.resident_name,
+      status: 'sent',
+      lines: [{ description: 'Care fees', quantity: 1, unit_price: 1000, amount: 1000, line_type: 'fee' }],
+    }, 'admin');
+
+    await expect(financeService.updateInvoiceWithLines(created.id, homeA, {
+      resident_id: discharged.id,
+      payer_type: 'resident',
+      payer_name: discharged.resident_name,
+    }, 'admin', created.version)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
   it('blocks resident deletion while a bed is still occupied', async () => {
     const resident = await financeRepo.createResident(homeA, {
       resident_name: 'Occupied Resident',
@@ -465,6 +493,46 @@ describe('Finance: expenses', () => {
     const result = await financeRepo.updateExpense(expenseId, homeA,
       { status: 'paid' }, null, 1);
     expect(result).toBeNull();
+  });
+
+  it('requires the current expense version for approval', async () => {
+    const pending = await financeRepo.createExpense(homeA, {
+      expense_date: '2026-02-12',
+      category: 'training',
+      description: 'First aid course',
+      net_amount: 100,
+      vat_amount: 20,
+      gross_amount: 120,
+      status: 'pending',
+      created_by: 'admin',
+    });
+
+    await expect(financeService.approveExpense(pending.id, homeA, 'manager', pending.version - 1))
+      .rejects.toMatchObject({ statusCode: 409 });
+
+    const approved = await financeService.approveExpense(pending.id, homeA, 'manager', pending.version);
+    expect(approved.status).toBe('approved');
+    expect(approved.version).toBe(pending.version + 1);
+  });
+
+  it('requires the current expense version for rejection', async () => {
+    const pending = await financeRepo.createExpense(homeA, {
+      expense_date: '2026-02-13',
+      category: 'training',
+      description: 'Manual handling course',
+      net_amount: 80,
+      vat_amount: 16,
+      gross_amount: 96,
+      status: 'pending',
+      created_by: 'admin',
+    });
+
+    await expect(financeService.rejectExpense(pending.id, homeA, 'manager', 'Duplicate', pending.version - 1))
+      .rejects.toMatchObject({ statusCode: 409 });
+
+    const rejected = await financeService.rejectExpense(pending.id, homeA, 'manager', 'Duplicate', pending.version);
+    expect(rejected.status).toBe('rejected');
+    expect(rejected.version).toBe(pending.version + 1);
   });
 
   it('findExpenses returns { rows, total }', async () => {

@@ -781,6 +781,9 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     const { rows: [staffRow] } = await client.query(
       `SELECT name, start_date FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
     );
+    if (!staffRow) {
+      throw new ValidationError('Staff subject not found');
+    }
     const originalName = staffRow?.name;
     if (originalName?.startsWith('[REDACTED-')) {
       throw new ConflictError('Staff has already been anonymised');
@@ -800,7 +803,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     const linkedUsernames = linkedUsers.map((row) => row.username);
 
     // Anonymise staff record (keep id, role, team, skill for operational data)
-    await client.query(
+    const staffUpdate = await client.query(
       `UPDATE staff SET
          name = $2, date_of_birth = NULL, ni_number = NULL,
          hourly_rate = 0, contract_hours = NULL, leaving_date = CURRENT_DATE,
@@ -814,6 +817,9 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
        WHERE home_id = $1 AND id = $3`,
       [homeId, anon, staffId]
     );
+    if (staffUpdate.rowCount !== 1) {
+      throw new ValidationError('Staff subject not found');
+    }
 
     // Anonymise supervisions
     await client.query(
@@ -1578,6 +1584,15 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
       );
     }
     await redactWebhookDeliveriesByPayload(client, homeId, [subjectId, matchName]);
+    const auditNamesToRedact = [...new Set([matchName, subjectName].filter(Boolean))];
+    for (const name of auditNamesToRedact) {
+      await auditRepo.replaceInDetails({
+        homeSlug: homeSlug || null,
+        findText: name,
+        replacement: anon,
+        client,
+      });
+    }
 
     // Mark the request as completed
     if (requestId) {
@@ -1588,7 +1603,7 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
       }, client);
     }
 
-    await auditRepo.log('erasure', homeSlug || null, username, `Erased resident "${subjectName || subjectId}" from home ${homeId}`, client);
+    await auditRepo.log('erasure', homeSlug || null, username, `Erased resident subject ${subjectId} from home ${homeId}`, client);
 
     return { anonymised: true, subject_type: 'resident', subject_id: subjectId };
   });

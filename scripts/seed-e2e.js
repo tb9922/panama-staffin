@@ -11,6 +11,27 @@ import { fileURLToPath } from 'url';
 
 const { Pool } = pg;
 
+function isLocalDbHost(host) {
+  return ['localhost', '127.0.0.1', '::1'].includes(String(host || '').toLowerCase());
+}
+
+function assertSafeSeedTarget(dbConfig) {
+  const dbName = String(dbConfig.database || '');
+  const allowedDb = /^panama_(test|e2e|ci)(_|$)/i.test(dbName) || dbName === 'panama_test';
+  if (process.env.E2E_SEED_ALLOW !== '1') {
+    throw new Error('Refusing to seed E2E users unless E2E_SEED_ALLOW=1 is set.');
+  }
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('Refusing to seed E2E users unless NODE_ENV=test.');
+  }
+  if (!isLocalDbHost(dbConfig.host)) {
+    throw new Error(`Refusing to seed E2E users against non-local DB host: ${dbConfig.host}`);
+  }
+  if (!allowedDb) {
+    throw new Error(`Refusing to seed E2E users against non-test database: ${dbName}`);
+  }
+}
+
 // Load .env so DB credentials are available.
 try {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,14 +50,18 @@ try {
   // .env is optional.
 }
 
-const pool = new Pool({
+const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
   database: process.env.DB_NAME || 'panama_test',
   user: process.env.DB_USER || 'panama',
   password: process.env.DB_PASSWORD || 'test_password',
   ssl: process.env.DB_SSL === 'false' ? false : undefined,
-});
+};
+
+assertSafeSeedTarget(dbConfig);
+
+const pool = new Pool(dbConfig);
 
 const CONFIG = {
   home_name: 'E2E Test Home',

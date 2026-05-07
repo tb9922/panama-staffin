@@ -147,7 +147,7 @@ export default function ExpenseTracker() {
     setSaving(true);
     setError(null);
     try {
-      await approveFinanceExpense(home, expense.id);
+      await approveFinanceExpense(home, expense.id, expense.version);
       showNotice(`Expense approved: ${expense.description}.`, { variant: 'success' });
       showToast({ title: 'Expense approved', message: expense.description });
       await load();

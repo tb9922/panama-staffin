@@ -133,7 +133,7 @@ export async function requirePlatformAdmin(req, res, next) {
   // Without this, a terminated platform admin retains full access for the JWT's remaining TTL.
   const dbUser = await getActiveAuthDbUser(req, res);
   if (dbUser === undefined) return;
-  if (!dbUser?.is_platform_admin) {
+  if (dbUser?.role !== 'admin' || !dbUser?.is_platform_admin) {
     return res.status(403).json({ error: 'Platform admin access required' });
   }
   next();
@@ -156,10 +156,10 @@ export async function requireHomeAccess(req, res, next) {
 
   // Platform admins bypass per-home role check - they have implicit home_manager access.
   // Re-verify from DB - JWT claim may be stale (admin demoted after last login).
-  if (req.user.is_platform_admin) {
+  if (req.user.role === 'admin' && req.user.is_platform_admin) {
     const dbUser = await getActiveAuthDbUser(req, res);
     if (dbUser === undefined) return;
-    if (dbUser?.is_platform_admin) {
+    if (dbUser?.role === 'admin' && dbUser?.is_platform_admin) {
       req.home = home;
       req.homeRole = 'home_manager';
       req.staffId = null;
@@ -208,7 +208,7 @@ export function requireModule(moduleId, level = 'read', options = {}) {
     // Platform admins bypass module checks - only if requireHomeAccess already ran and
     // re-verified the DB claim (indicated by req.homeRole being set).
     // This prevents a stale JWT claim from bypassing checks on routes that skip requireHomeAccess.
-    if (req.user.is_platform_admin && req.homeRole != null) return next();
+  if (req.user.role === 'admin' && req.user.is_platform_admin && req.homeRole != null) return next();
 
     if (allowOwn && level === 'read' && isOwnDataOnly(req.homeRole, moduleId)) {
       return next();
@@ -228,7 +228,7 @@ export function requireModule(moduleId, level = 'read', options = {}) {
 export function denyHomeRoles(roleIds, message = 'Insufficient permissions') {
   const blocked = new Set(roleIds);
   return (req, res, next) => {
-    if (req.user.is_platform_admin && req.homeRole != null) return next();
+    if (req.user.role === 'admin' && req.user.is_platform_admin && req.homeRole != null) return next();
     if (blocked.has(req.homeRole)) return res.status(403).json({ error: message });
     next();
   };
@@ -240,7 +240,7 @@ export function denyHomeRoles(roleIds, message = 'Insufficient permissions') {
  */
 export function requireHomeManager(req, res, next) {
   // Same guard as requireModule - only bypass if requireHomeAccess already re-verified the claim.
-  if (req.user.is_platform_admin && req.homeRole != null) return next();
+    if (req.user.role === 'admin' && req.user.is_platform_admin && req.homeRole != null) return next();
   const role = ROLES[req.homeRole];
   if (!role?.canManageUsers) {
     return res.status(403).json({ error: 'Home Manager role required' });

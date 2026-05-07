@@ -624,12 +624,20 @@ export default function Config() {
                 <div className="font-medium text-xs">{bh.name}</div>
                 <div className="text-[10px] text-[var(--ink-3)]">{bh.date}</div>
               </div>
-              <button type="button" onClick={() => {
-                if (!canEdit) return;
-                const newBH = [...config.bank_holidays];
-                newBH.splice(i, 1);
-                handleChange('bank_holidays', newBH);
-              }} disabled={!canEdit} className={`ml-2 text-xs text-[var(--alert)] transition-colors duration-150 hover:brightness-90 ${DISABLED_CHECK_CLASS}`}>X</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!canEdit) return;
+                  const newBH = [...config.bank_holidays];
+                  newBH.splice(i, 1);
+                  handleChange('bank_holidays', newBH);
+                }}
+                disabled={!canEdit}
+                aria-label={`Remove bank holiday ${bh.name || 'holiday'} on ${bh.date || 'unknown date'}`}
+                className={`ml-2 text-xs text-[var(--alert)] transition-colors duration-150 hover:brightness-90 ${DISABLED_CHECK_CLASS}`}
+              >
+                X
+              </button>
             </div>
           ))}
         </div>

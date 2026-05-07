@@ -21,7 +21,7 @@ const SOURCE_LABEL  = {
   hmrc_notice: 'HMRC Notice',
   starter: 'Starter Checklist',
 };
-const NI_CATEGORIES = ['A'];
+const NI_CATEGORIES = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'V', 'X', 'Z'];
 
 function emptyForm() {
   return {

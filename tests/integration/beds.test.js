@@ -371,6 +371,24 @@ describe('bedService: setupBeds', () => {
       { room_number: 'DUP01' },
     ], 'admin')).rejects.toThrow(/duplicate room number/i);
   });
+
+  it('rejects bulk occupied beds for non-active or cross-home residents', async () => {
+    const { rows: [discharged] } = await pool.query(
+      `INSERT INTO finance_residents (home_id, resident_name, room_number, admission_date, care_type, funding_type, weekly_fee, status, created_by)
+       VALUES ($1, 'Bulk Discharged Resident', 'B9', '2025-01-01', 'residential', 'self_funded', 1000, 'discharged', 'test')
+       RETURNING id`,
+      [homeA],
+    );
+    const crossHomeResidentId = await createResident(homeB, 'Cross Home Bed Resident');
+
+    await expect(bedService.setupBeds(homeA, 'bed-test-a', [
+      { room_number: 'BULK-NONACTIVE', status: 'occupied', resident_id: discharged.id },
+    ], 'admin')).rejects.toThrow(/non-active resident/i);
+
+    await expect(bedService.setupBeds(homeA, 'bed-test-a', [
+      { room_number: 'BULK-CROSSHOME', status: 'occupied', resident_id: crossHomeResidentId },
+    ], 'admin')).rejects.toThrow(/resident not found in this home/i);
+  });
 });
 
 // ── bedService: transitionStatus ─────────────────────────────────────────────
@@ -423,8 +441,20 @@ describe('bedService: transitionStatus', () => {
     });
 
     expect(bed.status).toBe('hospital_hold');
+    expect(bed.resident_id).toBe(residentId);
     expect(bed.hold_expires).toBe('2026-04-15');
     updatedAt = bed.updated_at;
+  });
+
+  it('rejects returning a hospital-hold bed to a different resident', async () => {
+    const otherResidentId = await createResident(homeA, 'Wrong Hospital Return Resident');
+
+    await expect(bedService.transitionStatus(bedId, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: otherResidentId,
+      username: 'admin',
+      clientUpdatedAt: updatedAt,
+    })).rejects.toThrow(/held resident/i);
   });
 
   it('transitions hospital_hold -> occupied (return from hospital)', async () => {
@@ -552,6 +582,29 @@ describe('bedService: validation errors', () => {
       username: 'admin',
       clientUpdatedAt: updatedAt,
     })).rejects.toThrow(/resident/i);
+  });
+
+  it('rejects occupying a bed with a non-active resident', async () => {
+    const { rows: [resident] } = await pool.query(
+      `INSERT INTO finance_residents (home_id, resident_name, room_number, admission_date, care_type, funding_type, weekly_fee, status, created_by)
+       VALUES ($1, 'Discharged Bed Resident', '9Z', '2025-01-01', 'residential', 'self_funded', 1000, 'discharged', 'test')
+       RETURNING id`,
+      [homeA]
+    );
+    const bed = await bedService.createBed(homeA, 'bed-test-a', { room_number: `NACT-${resident.id}` }, 'admin');
+    bedIds.push(bed.id);
+    const reserved = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: bed.updated_at,
+    });
+
+    await expect(bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: resident.id,
+      username: 'admin',
+      clientUpdatedAt: reserved.updated_at,
+    })).rejects.toThrow(/non-active resident/i);
   });
 
   it('rejects assigning a resident who already occupies another bed', async () => {
@@ -712,6 +765,29 @@ describe('bedService: moveBed', () => {
       bedService.moveBed(src.id, toBedId, homeA, 'bed-test-a', 'admin')
     ).rejects.toThrow(/destination bed must be available/i);
   });
+
+  it('rejects moving a resident who became non-active', async () => {
+    const inactiveMoveResidentId = await createResident(homeA, 'Inactive Move Resident');
+    const src = await bedService.createBed(homeA, 'bed-test-a', { room_number: 'M005' }, 'admin');
+    const dest = await bedService.createBed(homeA, 'bed-test-a', { room_number: 'M006' }, 'admin');
+    bedIds.push(src.id, dest.id);
+    const reserved = await bedService.transitionStatus(src.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: src.updated_at,
+    });
+    const occupied = await bedService.transitionStatus(src.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: inactiveMoveResidentId,
+      username: 'admin',
+      clientUpdatedAt: reserved.updated_at,
+    });
+    await pool.query(`UPDATE finance_residents SET status = 'discharged' WHERE id = $1`, [inactiveMoveResidentId]);
+
+    await expect(
+      bedService.moveBed(src.id, dest.id, homeA, 'bed-test-a', 'admin', occupied.updated_at, dest.updated_at),
+    ).rejects.toThrow(/non-active resident/i);
+  });
 });
 
 // ── bedService: revertTransition ─────────────────────────────────────────────
@@ -749,6 +825,34 @@ describe('bedService: revertTransition', () => {
     await expect(bedService.revertTransition(
       bed.id, homeA, 'bed-test-a', 'admin', 'Testing revert'
     )).rejects.toThrow(/check constraint|beds_status_check/i);
+  });
+
+  it('rejects reverting to occupied when the resident became non-active', async () => {
+    const revertResidentId = await createResident(homeA, 'Inactive Revert Resident');
+    const bed = await bedService.createBed(homeA, 'bed-test-a', { room_number: 'REV003' }, 'admin');
+    bedIds.push(bed.id);
+    const reserved = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: bed.updated_at,
+    });
+    const occupied = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: revertResidentId,
+      username: 'admin',
+      clientUpdatedAt: reserved.updated_at,
+    });
+    await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'hospital_hold',
+      holdExpires: '2026-04-15',
+      username: 'admin',
+      clientUpdatedAt: occupied.updated_at,
+    });
+    await pool.query(`UPDATE finance_residents SET status = 'deceased' WHERE id = $1`, [revertResidentId]);
+
+    await expect(bedService.revertTransition(
+      bed.id, homeA, 'bed-test-a', 'admin', 'Bad revert',
+    )).rejects.toThrow(/non-active resident/i);
   });
 });
 

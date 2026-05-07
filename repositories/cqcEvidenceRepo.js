@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 import { paginateResult } from '../lib/pagination.js';
 import { normalizeEvidenceCategory } from '../src/lib/cqcEvidenceCategories.js';
 
@@ -103,6 +103,15 @@ export async function sync(homeId, arr, client) {
       [homeId, ...values]
     );
   }
+
+  await conn.query(
+    `UPDATE cqc_evidence_files
+        SET deleted_at = NOW()
+      WHERE home_id = $1
+        AND evidence_id != ALL($2::text[])
+        AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 
   await conn.query(
     `UPDATE cqc_evidence
@@ -210,11 +219,21 @@ export async function update(id, homeId, data, version) {
 }
 
 export async function softDelete(id, homeId) {
-  const { rowCount } = await pool.query(
-    `UPDATE cqc_evidence
-        SET deleted_at = NOW()
-      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
-    [id, homeId]
-  );
-  return rowCount > 0;
+  return withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE cqc_evidence
+          SET deleted_at = NOW()
+        WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+      [id, homeId]
+    );
+    if (rowCount === 0) return false;
+
+    await client.query(
+      `UPDATE cqc_evidence_files
+          SET deleted_at = NOW()
+        WHERE evidence_id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+      [id, homeId]
+    );
+    return true;
+  });
 }

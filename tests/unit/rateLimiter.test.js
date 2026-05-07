@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { perUserKey, writeRateLimiter, readRateLimiter } from '../../lib/rateLimiter.js';
+import { issueToken } from '../../services/authService.js';
 
 describe('rateLimiter', () => {
   it('exports writeRateLimiter middleware', () => {
@@ -27,6 +28,13 @@ describe('rateLimiter', () => {
       const req = { ip: '172.16.0.1', user: null };
       const key = perUserKey(req);
       expect(key).toBe('172.16.0.1');
+    });
+
+    it('uses a verified bearer token when auth has not populated req.user yet', () => {
+      const { token } = issueToken({ username: 'token-user', role: 'viewer' });
+      const req = { ip: '10.0.0.7', headers: { authorization: `Bearer ${token}` } };
+      const key = perUserKey(req);
+      expect(key).toBe('10.0.0.7:token-user');
     });
 
     it('differentiates users on the same IP', () => {

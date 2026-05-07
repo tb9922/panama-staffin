@@ -68,6 +68,8 @@ describe('PortfolioDashboard', () => {
       canWrite: () => true,
       homeRole: 'platform_admin',
       staffId: null,
+      homes: [{ id: 'amberwood', name: 'Amberwood', roleId: 'platform_admin' }],
+      isPlatformAdmin: true,
       switchHome,
     });
     api.getPortfolioKpis.mockResolvedValue(portfolioPayload());
@@ -164,5 +166,25 @@ describe('PortfolioDashboard', () => {
     await user.click(screen.getByRole('button', { name: 'Open evidence for Amberwood CQC' }));
 
     expect(switchHome).toHaveBeenCalledWith('amberwood');
+  });
+
+  it('hides metric fix actions when the assigned role lacks module access', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'viewer',
+      staffId: null,
+      homes: [{ id: 'amberwood', name: 'Amberwood', roleId: 'viewer' }],
+      isPlatformAdmin: false,
+      switchHome,
+    });
+
+    renderWithProviders(<PortfolioDashboard />, {
+      route: '/portfolio',
+      user: { username: 'viewer', role: 'viewer', isPlatformAdmin: false },
+    });
+
+    await waitFor(() => expect(screen.getByText('Portfolio Dashboard')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Open evidence for Amberwood CQC' })).not.toBeInTheDocument();
   });
 });

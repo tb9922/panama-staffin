@@ -100,7 +100,7 @@ export async function createInvoiceWithLines(homeId, data, username) {
   return withTransaction(async (client) => {
     // Validate resident inside transaction to prevent TOCTOU race
     if (data.resident_id) {
-      const resident = await financeRepo.findResidentById(data.resident_id, homeId, client);
+      const resident = await financeRepo.findResidentById(data.resident_id, homeId, client, { forUpdate: true });
       if (!resident) throw Object.assign(new Error('Resident not found'), { statusCode: 400 });
       if (resident.status !== 'active') throw Object.assign(new Error('Cannot create invoice for non-active resident'), { statusCode: 400 });
     }
@@ -259,8 +259,11 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
     // Validate resident belongs to this home if resident_id is being changed
     const residentChanged = 'resident_id' in data && data.resident_id != null && data.resident_id !== existing.resident_id;
     if (residentChanged) {
-      const newResident = await financeRepo.findResidentById(data.resident_id, homeId, client);
+      const newResident = await financeRepo.findResidentById(data.resident_id, homeId, client, { forUpdate: true });
       if (!newResident) throw Object.assign(new Error('Resident not found in this home'), { statusCode: 400 });
+      if (newResident.status !== 'active') {
+        throw Object.assign(new Error('Cannot move invoice to non-active resident'), { statusCode: 400 });
+      }
     }
 
     const hasLineUpdates = hasOwn(data, 'lines');
@@ -381,10 +384,13 @@ export async function updateExpense(id, homeId, data, version) {
   return result;
 }
 
-export async function approveExpense(id, homeId, approver) {
+export async function approveExpense(id, homeId, approver, version) {
   return withTransaction(async (client) => {
     const expense = await financeRepo.findExpenseById(id, homeId, client, { forUpdate: true });
     if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
+    if (version == null || Number(version) !== Number(expense.version)) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
     if (expense.status !== 'pending') {
       throw Object.assign(new Error(`Cannot approve expense with status '${expense.status}'`), { statusCode: 400 });
     }
@@ -396,7 +402,10 @@ export async function approveExpense(id, homeId, approver) {
       status: 'approved',
       approved_by: approver,
       approved_date: todayLocalISO(),
-    }, client);
+    }, client, version);
+    if (updated === null) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
     logger.info({ homeId, expenseId: id, approver, gross: expense.gross_amount }, 'Expense approved');
     return updated;
   });
@@ -644,10 +653,13 @@ function advanceDate(dateStr, frequency, anchorDay = getDayOfMonth(dateStr)) {
 
 // ── Reject Expense ──────────────────────────────────────────────────────────
 
-export async function rejectExpense(id, homeId, rejector, reason) {
+export async function rejectExpense(id, homeId, rejector, reason, version) {
   return withTransaction(async (client) => {
     const expense = await financeRepo.findExpenseById(id, homeId, client, { forUpdate: true });
     if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
+    if (version == null || Number(version) !== Number(expense.version)) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
     if (expense.status !== 'pending') {
       throw Object.assign(new Error(`Cannot reject expense with status '${expense.status}'`), { statusCode: 400 });
     }
@@ -656,7 +668,10 @@ export async function rejectExpense(id, homeId, rejector, reason) {
       rejected_by: rejector,
       rejected_date: todayLocalISO(),
       rejection_reason: reason || null,
-    }, client);
+    }, client, version);
+    if (updated === null) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
     logger.info({ homeId, expenseId: id, rejector }, 'Expense rejected');
     return updated;
   });

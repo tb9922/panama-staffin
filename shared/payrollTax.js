@@ -18,6 +18,11 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+function roundUp2(n) {
+  if (n < 0) return -Math.ceil((-n - Number.EPSILON) * 100) / 100;
+  return Math.ceil((n - Number.EPSILON) * 100) / 100;
+}
+
 // ─── Tax Year Helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -320,10 +325,23 @@ export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
     return row.weekly_amount;
   }
 
+  function optionalThreshold(name) {
+    const row = niThresholds.find(t => t.threshold_name === name);
+    if (!row) return null;
+    if (payFrequency === 'monthly') return row.monthly_amount;
+    if (payFrequency === 'fortnightly') return row.weekly_amount * 2;
+    return row.weekly_amount;
+  }
+
   function rate(type) {
     const row = niRates.find(r => r.rate_type === type);
     if (!row) throw new Error(`Missing National Insurance rate ${type}`);
     return row.rate;
+  }
+
+  function optionalRate(type) {
+    const row = niRates.find(r => r.rate_type === type);
+    return row ? Number(row.rate || 0) : null;
   }
 
   const pt  = threshold('PT');  // employee primary threshold
@@ -340,9 +358,22 @@ export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
     employeeNI += (grossPay - uel) * rate('employee_above_uel');
   }
 
-  // Employer NI: 15% on everything above ST (no upper limit from April 2025)
+  // Employer NI: standard categories use ST; relief categories start charging
+  // above Freeport/Investment-Zone UST or under-21/apprentice/veteran UST.
   let employerNI = 0;
-  if (grossPay > st) {
+  const upperSecondaryRate = optionalRate('employer_above_ust');
+  const freeportRate = optionalRate('employer_above_fust');
+  if (upperSecondaryRate !== null) {
+    const ust = optionalThreshold('UST') ?? optionalThreshold('AUST') ?? optionalThreshold('VUST') ?? uel;
+    if (grossPay > ust) {
+      employerNI = (grossPay - ust) * upperSecondaryRate;
+    }
+  } else if (freeportRate !== null) {
+    const fust = optionalThreshold('FUST') ?? optionalThreshold('IZUST') ?? st;
+    if (grossPay > fust) {
+      employerNI = (grossPay - fust) * freeportRate;
+    }
+  } else if (grossPay > st) {
     employerNI = (grossPay - st) * rate('employer');
   }
 
@@ -484,7 +515,9 @@ export function getSSPConfig(payDate, sspConfigs) {
 /**
  * Calculate SSP for a single sick day within a sick period.
  *
- * SSP is paid per qualifying day (Mon-Fri by default).
+ * SSP is paid per qualifying day. Without explicit weekdays stored, this
+ * honours qualifying_days_per_week as rota breadth: 5 = Mon-Fri, 6 = Mon-Sat,
+ * 7 = all days.
  * Waiting days: first 3 qualifying days are not paid (before April 2026: 0 from April 2026).
  * Linked periods (gap <= 56 days): waiting days already served — no new waiting period.
  *
@@ -505,7 +538,7 @@ export function calculateSSP(sickPeriod, payDate, sspConfig, averageWeeklyEarnin
   if (payD < startDate) return ZERO;
   if (sickPeriod.end_date && payD > new Date(sickPeriod.end_date + 'T00:00:00Z')) return ZERO;
 
-  // 28-week cap: each week = 5 qualifying days; daily rate = weekly / qualifying_days_per_week
+  // 28-week cap: daily rate is divided across the staff member's normal qualifying days.
   const maxWeeks = sspConfig.max_weeks || 28;
   if ((sickPeriod.ssp_weeks_paid || 0) >= maxWeeks) return ZERO;
 
@@ -524,10 +557,14 @@ export function calculateSSP(sickPeriod, payDate, sspConfig, averageWeeklyEarnin
   const waitingDaysRequired = sspConfig.waiting_days || 0;
   const waitingDaysAlreadyServed = sickPeriod.waiting_days_served || 0;
 
+  const qualDaysPerWeek = Math.min(7, Math.max(1, Number(sickPeriod.qualifying_days_per_week) || 5));
+  const qualifyingWeekdays = Array.isArray(sickPeriod.qualifying_weekdays) && sickPeriod.qualifying_weekdays.length > 0
+    ? new Set(sickPeriod.qualifying_weekdays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6))
+    : new Set(Array.from({ length: qualDaysPerWeek }, (_, i) => (i + 1) % 7));
+
   // Calculate which qualifying day of the period this date falls on
-  // Qualifying days are typically Monday-Friday (qualifying_days_per_week)
   const dayOfWeek = payD.getUTCDay(); // 0=Sun, 6=Sat
-  const isQualifyingDay = dayOfWeek >= 1 && dayOfWeek <= 5; // Mon-Fri default
+  const isQualifyingDay = qualifyingWeekdays.has(dayOfWeek);
 
   if (!isQualifyingDay) return ZERO;
 
@@ -536,10 +573,10 @@ export function calculateSSP(sickPeriod, payDate, sspConfig, averageWeeklyEarnin
   const fullWeeks = Math.floor(totalDays / 7);
   const remainderDays = totalDays % 7;
   const startDow = startDate.getUTCDay();
-  let qualDayCount = fullWeeks * 5;
+  let qualDayCount = fullWeeks * qualifyingWeekdays.size;
   for (let i = 0; i < remainderDays; i++) {
     const dow = (startDow + i) % 7;
-    if (dow >= 1 && dow <= 5) qualDayCount++;
+    if (qualifyingWeekdays.has(dow)) qualDayCount++;
   }
 
   // If still within waiting period
@@ -554,9 +591,31 @@ export function calculateSSP(sickPeriod, payDate, sspConfig, averageWeeklyEarnin
     ? Math.min(rawWeeklyRate, round2(awe * 0.8))
     : rawWeeklyRate;
 
-  // SSP daily rate = weekly_rate / qualifying_days_per_week
-  const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
-  const dailyRate = round2(weeklyRate / qualDaysPerWeek);
+  let qualifyingDaysInSspWeek = 0;
+  for (let i = 0; i < 7; i++) {
+    if (qualifyingWeekdays.has(i)) qualifyingDaysInSspWeek++;
+  }
+  const weekStart = new Date(Date.UTC(payD.getUTCFullYear(), payD.getUTCMonth(), payD.getUTCDate()));
+  weekStart.setUTCDate(weekStart.getUTCDate() - dayOfWeek);
+
+  let qualifyingBeforeWeek = 0;
+  for (let d = new Date(startDate); d < weekStart; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (qualifyingWeekdays.has(d.getUTCDay())) qualifyingBeforeWeek++;
+  }
+
+  let qualifyingThroughPayInWeek = 0;
+  for (let d = new Date(weekStart); d <= payD; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (d >= startDate && qualifyingWeekdays.has(d.getUTCDay())) qualifyingThroughPayInWeek++;
+  }
+
+  const waitingDaysRemainingAtStart = Math.max(0, waitingDaysRequired - waitingDaysAlreadyServed);
+  const waitingLeftAtWeekStart = Math.max(0, waitingDaysRemainingAtStart - qualifyingBeforeWeek);
+  const paidDayInWeek = qualifyingThroughPayInWeek - Math.min(waitingLeftAtWeekStart, qualifyingThroughPayInWeek);
+  qualifyingDaysInSspWeek = qualifyingDaysInSspWeek || qualDaysPerWeek;
+  const dailyRate = round2(
+    roundUp2((weeklyRate * paidDayInWeek) / qualifyingDaysInSspWeek)
+    - roundUp2((weeklyRate * (paidDayInWeek - 1)) / qualifyingDaysInSspWeek),
+  );
 
   return {
     eligible: true,

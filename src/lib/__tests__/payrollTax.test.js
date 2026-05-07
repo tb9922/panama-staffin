@@ -388,6 +388,27 @@ describe('calculateNI', () => {
     // PT weekly = 242; employee: (500-242)*0.08 = 20.64
     expect(r.employeeNI).toBeCloseTo(20.64, 1);
   });
+
+  it('supports relief category employer thresholds', () => {
+    const thresholds = [
+      ...niThresholds2025,
+      { threshold_name: 'FUST', weekly_amount: 481, monthly_amount: 2083, annual_amount: 25000 },
+      { threshold_name: 'UST', weekly_amount: 967, monthly_amount: 4189, annual_amount: 50270 },
+    ];
+    const apprenticeRates = [
+      { rate_type: 'employee_main', rate: 0.08 },
+      { rate_type: 'employee_above_uel', rate: 0.02 },
+      { rate_type: 'employer_above_ust', rate: 0.15 },
+    ];
+    const freeportRates = [
+      { rate_type: 'employee_main', rate: 0.08 },
+      { rate_type: 'employee_above_uel', rate: 0.02 },
+      { rate_type: 'employer_above_fust', rate: 0.15 },
+    ];
+
+    expect(calculateNI(1000, 'weekly', thresholds, apprenticeRates).employerNI).toBe(4.95);
+    expect(calculateNI(1000, 'weekly', thresholds, freeportRates).employerNI).toBe(77.85);
+  });
 });
 
 // ─── calculateStudentLoan ─────────────────────────────────────────────────────
@@ -590,6 +611,35 @@ describe('calculateSSP', () => {
     const period = makeSickPeriod('2025-06-07'); // Saturday
     const r = calculateSSP(period, '2025-06-07', sspConf2025);
     expect(r.eligible).toBe(false);
+  });
+
+  it('pays weekend SSP for six and seven qualifying day rotas', () => {
+    const sixDay = makeSickPeriod('2026-04-06', { qualifying_days_per_week: 6 });
+    const sevenDay = makeSickPeriod('2026-04-06', { qualifying_days_per_week: 7 });
+
+    const saturday = calculateSSP(sixDay, '2026-04-11', sspConf2026, 500);
+    const sunday = calculateSSP(sevenDay, '2026-04-12', sspConf2026, 500);
+
+    expect(saturday).toMatchObject({ eligible: true, sspAmount: 20.54 });
+    expect(sunday).toMatchObject({ eligible: true, sspAmount: 17.61 });
+  });
+
+  it('uses HMRC cumulative SSP table rounding for six qualifying days', () => {
+    const sixDay = makeSickPeriod('2026-04-06', { qualifying_days_per_week: 6 });
+
+    expect(calculateSSP(sixDay, '2026-04-06', sspConf2026, 500))
+      .toMatchObject({ eligible: true, sspAmount: 20.55 });
+    expect(calculateSSP(sixDay, '2026-04-11', sspConf2026, 500))
+      .toMatchObject({ eligible: true, sspAmount: 20.54 });
+  });
+
+  it('resets HMRC cumulative SSP rounding at the Sunday-to-Saturday SSP week', () => {
+    const sixDay = makeSickPeriod('2026-04-08', { qualifying_days_per_week: 6 });
+
+    expect(calculateSSP(sixDay, '2026-04-13', sspConf2026, 500))
+      .toMatchObject({ eligible: true, sspAmount: 20.55 });
+    expect(calculateSSP(sixDay, '2026-04-14', sspConf2026, 500))
+      .toMatchObject({ eligible: true, sspAmount: 20.54 });
   });
 
   it('first 3 qualifying days are waiting days (not paid)', () => {
