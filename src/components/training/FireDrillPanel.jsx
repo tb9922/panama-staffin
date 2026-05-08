@@ -19,7 +19,7 @@ import { todayLocalISO } from '../../lib/localDates.js';
 import { clickableRowProps } from '../../lib/a11y.js';
 import { useConfirm } from '../../hooks/useConfirm.jsx';
 
-export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, readOnly = false }) {
+export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, readOnly = false, legacyActionFreeze = false }) {
   const { confirm, ConfirmDialog } = useConfirm();
   const [showModal, setShowModal] = useState(false);
   const [modalData, setModalData] = useState({ id: '', date: '', time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', updated_at: '', existing: false });
@@ -78,11 +78,11 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
       staff_present: modalData.staff_present,
       residents_evacuated: parseInt(modalData.residents_evacuated) || 0,
       issues: modalData.issues,
-      corrective_actions: modalData.corrective_actions,
       conducted_by: modalData.conducted_by,
       notes: modalData.notes,
       ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
+    if (!legacyActionFreeze) record.corrective_actions = modalData.corrective_actions;
     try {
       if (modalData.existing) {
         await updateFireDrill(homeSlug, modalData.id, record);
@@ -270,8 +270,11 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
           <div>
             <label htmlFor={correctiveActionsId} className={INPUT.label}>Corrective Actions</label>
             <textarea id={correctiveActionsId} value={modalData.corrective_actions} onChange={e => setModalData({ ...modalData, corrective_actions: e.target.value })}
-              disabled={readOnly}
-              className={`${INPUT.base} h-16 resize-none`} placeholder="Actions taken to address issues..." />
+              disabled={readOnly || legacyActionFreeze}
+              className={`${INPUT.base} h-16 resize-none`} placeholder={legacyActionFreeze ? 'Use Manager Actions for new accountable actions' : 'Actions taken to address issues...'} />
+            {legacyActionFreeze && (
+              <p className="mt-1 text-xs text-amber-700">Legacy action fields are read-only. Create new accountable actions in Manager Actions.</p>
+            )}
           </div>
           <div>
             <label htmlFor={notesId} className={INPUT.label}>Notes</label>

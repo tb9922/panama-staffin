@@ -22,7 +22,7 @@ import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
-import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
+import { isLegacyActionFreezeEnabled, rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
@@ -212,6 +212,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       trainingTypes,
       staff,
       supervisionConfig,
+      legacyActionFreeze: isLegacyActionFreezeEnabled(),
       configUpdatedAt: req.home.updated_at ? req.home.updated_at.toISOString() : null,
     });
   } catch (err) { next(err); }
@@ -259,7 +260,7 @@ router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAccess
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['actions'], 'supervisions')) return;
     if (!await requireActiveStaff(req, res, parsed.data.staffId)) return;
-    const record = { ...parsed.data, id: idParsed.data };
+    const record = { ...parsed.data, id: idParsed.data, _preserveLegacyActions: isLegacyActionFreezeEnabled() };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
     res.json(session);
@@ -301,7 +302,7 @@ router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['training_needs', 'development_plan'], 'appraisals')) return;
     if (!await requireActiveStaff(req, res, parsed.data.staffId)) return;
-    const record = { ...parsed.data, id: idParsed.data };
+    const record = { ...parsed.data, id: idParsed.data, _preserveLegacyActions: isLegacyActionFreezeEnabled() };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
     res.json(appraisal);
@@ -343,7 +344,7 @@ router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAccess,
     if (!parsed.success) return zodError(res, parsed);
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'fire_drills')) return;
     if (!await validateActiveStaffIds(req, res, parsed.data.staff_present)) return;
-    const record = { ...parsed.data, id: idParsed.data };
+    const record = { ...parsed.data, id: idParsed.data, _preserveLegacyActions: isLegacyActionFreezeEnabled() };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_update', req.home.slug, req.user.username, { id: idParsed.data });
     res.json(drill);

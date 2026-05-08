@@ -113,7 +113,7 @@ export async function upsertSession(homeId, staffId, record) {
            date = $4,
            supervisor = $5,
            topics = $6,
-           actions = $7,
+           actions = CASE WHEN $11::boolean THEN actions ELSE $7 END,
            next_due = $8,
            notes = $9,
            updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
@@ -125,7 +125,7 @@ export async function upsertSession(homeId, staffId, record) {
        RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at`,
       [homeId, record.id, staffId, record.date, record.supervisor || null,
         record.topics || null, record.actions || null, record.next_due || null,
-        record.notes || null, record._clientUpdatedAt]
+        record.notes || null, record._clientUpdatedAt, record._preserveLegacyActions === true]
     );
     if (rowCount === 0) {
       throw new ConflictError('Record was modified by another user. Please refresh and try again.');

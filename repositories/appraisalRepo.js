@@ -113,8 +113,8 @@ export async function upsertAppraisal(homeId, staffId, record) {
            date = $4,
            appraiser = $5,
            objectives = $6,
-           training_needs = $7,
-           development_plan = $8,
+           training_needs = CASE WHEN $12::boolean THEN training_needs ELSE $7 END,
+           development_plan = CASE WHEN $12::boolean THEN development_plan ELSE $8 END,
            next_due = $9,
            notes = $10,
            updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
@@ -127,7 +127,7 @@ export async function upsertAppraisal(homeId, staffId, record) {
       [homeId, record.id, staffId, record.date, record.appraiser || null,
         record.objectives || null, record.training_needs || null,
         record.development_plan || null, record.next_due || null,
-        record.notes || null, record._clientUpdatedAt]
+        record.notes || null, record._clientUpdatedAt, record._preserveLegacyActions === true]
     );
     if (rowCount === 0) {
       throw new ConflictError('Record was modified by another user. Please refresh and try again.');

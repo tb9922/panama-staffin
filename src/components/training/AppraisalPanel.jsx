@@ -29,7 +29,7 @@ const APR_STATUS_BADGE = {
   not_started:{ badge: BADGE.gray, label: 'No Records' },
 };
 
-export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, readOnly = false }) {
+export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, readOnly = false, legacyActionFreeze = false }) {
   const { confirm, ConfirmDialog } = useConfirm();
   const [filterTeam, setFilterTeam] = useState('All');
   const [search, setSearch] = useState('');
@@ -111,12 +111,14 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
       date: modalData.date,
       appraiser: modalData.appraiser,
       objectives: modalData.objectives,
-      training_needs: modalData.training_needs,
-      development_plan: modalData.development_plan,
       next_due: effectiveNextDue,
       notes: modalData.notes,
       ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
+    if (!legacyActionFreeze) {
+      record.training_needs = modalData.training_needs;
+      record.development_plan = modalData.development_plan;
+    }
     try {
       if (modalData.existing) {
         await updateAppraisal(homeSlug, modalData.id, record);
@@ -296,14 +298,17 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
           <div>
             <label htmlFor={trainingNeedsId} className={INPUT.label}>Training Needs Identified</label>
             <textarea id={trainingNeedsId} value={modalData.training_needs} onChange={e => setModalData({ ...modalData, training_needs: e.target.value })}
-              disabled={readOnly}
-              className={`${INPUT.base} h-16 resize-none`} placeholder="Training and development needs..." />
+              disabled={readOnly || legacyActionFreeze}
+              className={`${INPUT.base} h-16 resize-none`} placeholder={legacyActionFreeze ? 'Use Manager Actions for new accountable actions' : 'Training and development needs...'} />
           </div>
           <div>
             <label htmlFor={developmentPlanId} className={INPUT.label}>Development Plan</label>
             <textarea id={developmentPlanId} value={modalData.development_plan} onChange={e => setModalData({ ...modalData, development_plan: e.target.value })}
-              disabled={readOnly}
-              className={`${INPUT.base} h-16 resize-none`} placeholder="Personal development plan..." />
+              disabled={readOnly || legacyActionFreeze}
+              className={`${INPUT.base} h-16 resize-none`} placeholder={legacyActionFreeze ? 'Use Manager Actions for new accountable actions' : 'Personal development plan...'} />
+            {legacyActionFreeze && (
+              <p className="mt-1 text-xs text-amber-700">Legacy action fields are read-only. Create new accountable actions in Manager Actions.</p>
+            )}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>

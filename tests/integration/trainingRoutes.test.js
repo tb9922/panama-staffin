@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { pool } from '../../db.js';
@@ -74,6 +74,10 @@ afterAll(async () => {
   await pool.query('DELETE FROM homes WHERE id = $1', [homeId]).catch(() => {});
 });
 
+afterEach(() => {
+  delete process.env.V1_LEGACY_ACTION_FREEZE;
+});
+
 function authRequest(method, path) {
   return request(app)[method](path).set('Authorization', `Bearer ${token}`);
 }
@@ -84,6 +88,94 @@ describe('training routes optimistic concurrency', () => {
 
     expect(typeof res.body.configUpdatedAt).toBe('string');
     expect(Array.isArray(res.body.trainingTypes)).toBe(true);
+    expect(res.body.legacyActionFreeze).toBe(false);
+  });
+
+  it('reports and enforces the V1 legacy action freeze', async () => {
+    process.env.V1_LEGACY_ACTION_FREEZE = '1';
+
+    const loadRes = await authRequest('get', `/api/training?home=${homeSlug}`).expect(200);
+    expect(loadRes.body.legacyActionFreeze).toBe(true);
+
+    const res = await authRequest('post', `/api/training/supervisions?home=${homeSlug}`)
+      .send({
+        staffId: STAFF_ID,
+        date: '2026-04-03',
+        supervisor: 'Route Manager',
+        topics: 'Frozen action supervision',
+        actions: 'This must move to Manager Actions',
+      })
+      .expect(409);
+
+    expect(res.body.error).toMatch(/legacy action fields are read-only/i);
+    expect(res.body.fields).toContain('actions');
+  });
+
+  it('preserves legacy action fields on frozen metadata-only updates', async () => {
+    const createSupervision = await authRequest('post', `/api/training/supervisions?home=${homeSlug}`)
+      .send({
+        staffId: STAFF_ID,
+        date: '2026-04-04',
+        supervisor: 'Route Manager',
+        topics: 'Initial supervision',
+        actions: 'Existing supervision action',
+      })
+      .expect(201);
+
+    const createAppraisal = await authRequest('post', `/api/training/appraisals?home=${homeSlug}`)
+      .send({
+        staffId: STAFF_ID,
+        date: '2026-05-04',
+        appraiser: 'Route Manager',
+        objectives: 'Initial objectives',
+        training_needs: 'Existing training need',
+        development_plan: 'Existing development plan',
+      })
+      .expect(201);
+
+    const createDrill = await authRequest('post', `/api/training/fire-drills?home=${homeSlug}`)
+      .send({
+        date: '2026-06-04',
+        time: '10:00',
+        scenario: 'Initial drill',
+        corrective_actions: 'Existing drill action',
+      })
+      .expect(201);
+
+    process.env.V1_LEGACY_ACTION_FREEZE = '1';
+
+    const updateSupervision = await authRequest('put', `/api/training/supervisions/${createSupervision.body.id}?home=${homeSlug}`)
+      .send({
+        staffId: STAFF_ID,
+        date: '2026-04-04',
+        supervisor: 'Route Manager',
+        topics: 'Updated frozen supervision',
+        _clientUpdatedAt: createSupervision.body.updated_at,
+      })
+      .expect(200);
+    expect(updateSupervision.body.actions).toBe('Existing supervision action');
+
+    const updateAppraisal = await authRequest('put', `/api/training/appraisals/${createAppraisal.body.id}?home=${homeSlug}`)
+      .send({
+        staffId: STAFF_ID,
+        date: '2026-05-04',
+        appraiser: 'Route Manager',
+        objectives: 'Updated frozen objectives',
+        _clientUpdatedAt: createAppraisal.body.updated_at,
+      })
+      .expect(200);
+    expect(updateAppraisal.body.training_needs).toBe('Existing training need');
+    expect(updateAppraisal.body.development_plan).toBe('Existing development plan');
+
+    const updateDrill = await authRequest('put', `/api/training/fire-drills/${createDrill.body.id}?home=${homeSlug}`)
+      .send({
+        date: '2026-06-04',
+        time: '10:30',
+        scenario: 'Updated frozen drill',
+        _clientUpdatedAt: createDrill.body.updated_at,
+      })
+      .expect(200);
+    expect(updateDrill.body.corrective_actions).toBe('Existing drill action');
   });
 
   it('updates training types without clobbering unrelated config keys', async () => {

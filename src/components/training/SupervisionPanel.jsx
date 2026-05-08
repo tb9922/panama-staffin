@@ -31,7 +31,7 @@ const SUP_STATUS_BADGE = {
   not_started:{ badge: BADGE.gray, label: 'No Records' },
 };
 
-export default function SupervisionPanel({ supervisions, staff, homeSlug, config, onReload, readOnly = false }) {
+export default function SupervisionPanel({ supervisions, staff, homeSlug, config, onReload, readOnly = false, legacyActionFreeze = false }) {
   const { confirm, ConfirmDialog } = useConfirm();
   const [filterTeam, setFilterTeam] = useState('All');
   const [search, setSearch] = useState('');
@@ -117,11 +117,11 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       date: modalData.date,
       supervisor: modalData.supervisor,
       topics: modalData.topics,
-      actions: modalData.actions,
       next_due: effectiveNextDue,
       notes: modalData.notes,
       ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
+    if (!legacyActionFreeze) record.actions = modalData.actions;
     try {
       if (modalData.existing) {
         await updateSupervision(homeSlug, modalData.id, record);
@@ -304,8 +304,11 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
           <div>
             <label htmlFor={actionsId} className={INPUT.label}>Actions Agreed</label>
             <textarea id={actionsId} value={modalData.actions} onChange={e => setModalData({ ...modalData, actions: e.target.value })}
-              disabled={readOnly}
-              className={`${INPUT.base} h-20 resize-none`} placeholder="Action items agreed upon..." />
+              disabled={readOnly || legacyActionFreeze}
+              className={`${INPUT.base} h-20 resize-none`} placeholder={legacyActionFreeze ? 'Use Manager Actions for new accountable actions' : 'Action items agreed upon...'} />
+            {legacyActionFreeze && (
+              <p className="mt-1 text-xs text-amber-700">Legacy action fields are read-only. Create new accountable actions in Manager Actions.</p>
+            )}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>

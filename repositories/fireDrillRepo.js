@@ -101,7 +101,7 @@ export async function upsertDrill(homeId, record) {
            staff_present = $7,
            residents_evacuated = $8,
            issues = $9,
-           corrective_actions = $10,
+           corrective_actions = CASE WHEN $14::boolean THEN corrective_actions ELSE $10 END,
            conducted_by = $11,
            notes = $12,
            updated_at = NOW(),
@@ -115,7 +115,7 @@ export async function upsertDrill(homeId, record) {
         record.evacuation_time_seconds ?? null, JSON.stringify(record.staff_present || []),
         record.residents_evacuated ?? null, record.issues || null,
         record.corrective_actions || null, record.conducted_by || null,
-        record.notes || null, record._clientUpdatedAt]
+        record.notes || null, record._clientUpdatedAt, record._preserveLegacyActions === true]
     );
     if (rowCount === 0) {
       throw new ConflictError('Record was modified by another user. Please refresh and try again.');

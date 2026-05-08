@@ -81,9 +81,10 @@ export default function TrainingMatrix() {
           supervisions={state.supervisions}
           staff={state.staff}
           homeSlug={homeSlug}
-          config={state.config || {}}
+          config={state.supervisionConfig || {}}
           onReload={() => setRefreshKey(k => k + 1)}
           readOnly={!canEdit}
+          legacyActionFreeze={Boolean(state.legacyActionFreeze)}
         />
       )}
       {tab === 'appraisals' && (
@@ -93,6 +94,7 @@ export default function TrainingMatrix() {
           homeSlug={homeSlug}
           onReload={() => setRefreshKey(k => k + 1)}
           readOnly={!canEdit}
+          legacyActionFreeze={Boolean(state.legacyActionFreeze)}
         />
       )}
       {tab === 'fire_drills' && (
@@ -102,6 +104,7 @@ export default function TrainingMatrix() {
           homeSlug={homeSlug}
           onReload={() => setRefreshKey(k => k + 1)}
           readOnly={!canEdit}
+          legacyActionFreeze={Boolean(state.legacyActionFreeze)}
         />
       )}
     </div>
