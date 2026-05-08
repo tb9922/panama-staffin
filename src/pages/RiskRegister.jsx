@@ -47,7 +47,7 @@ const HEATMAP_COLORS = {
 };
 
 export default function RiskRegister() {
-  const { canWrite } = useData();
+  const { canWrite, activeHome } = useData();
   const canEdit = canWrite('governance');
   const legacyActionsReadOnly = true;
   const { notice, showNotice, clearNotice } = useTransientNotice();
@@ -56,18 +56,26 @@ export default function RiskRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  useDirtyGuard(showModal);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterBand, setFilterBand] = useState('');
   const [saveError, setSaveError] = useState(null);
 
-  const home = getCurrentHome();
+  const isDirty = showModal && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
+
+  const storedHome = getCurrentHome();
+  const home = activeHome || storedHome;
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setRisks([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const result = await getRisks(home);
@@ -121,7 +129,9 @@ export default function RiskRegister() {
 
   function openAdd() {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM, last_reviewed: today, next_review: '' });
+    const nextForm = { ...EMPTY_FORM, last_reviewed: today, next_review: '' };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -134,7 +144,7 @@ export default function RiskRegister() {
     if (typeof controls === 'string') {
       controls = controls.trim() ? [{ description: controls, effectiveness: '' }] : [];
     }
-    setForm({
+    const nextForm = {
       title: risk.title || '', description: risk.description || '',
       category: risk.category || '', owner: risk.owner || '',
       likelihood: risk.likelihood || 1, impact: risk.impact || 1,
@@ -144,14 +154,40 @@ export default function RiskRegister() {
       last_reviewed: risk.last_reviewed || '', next_review: risk.next_review || '',
       status: risk.status || 'open',
       _version: risk.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
   }
 
+  function closeModal() {
+    setShowModal(false);
+    setFormBaseline(null);
+  }
+
   async function handleSave() {
-    if (!form.title || !form.category) return;
+    if (!home) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (!form.title) {
+      setSaveError('Title is required.');
+      return;
+    }
+    if (!form.category) {
+      setSaveError('Category is required.');
+      return;
+    }
+    if (form.status !== 'closed' && !form.owner) {
+      setSaveError('Open risks need an owner.');
+      return;
+    }
+    if (form.status !== 'closed' && !form.next_review) {
+      setSaveError('Open risks need a next review date.');
+      return;
+    }
     const record = {
       ...form,
       risk_score: getRiskScore(form.likelihood, form.impact),
@@ -169,6 +205,7 @@ export default function RiskRegister() {
         showNotice('Risk created.');
       }
       setShowModal(false);
+      setFormBaseline(null);
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to save');
@@ -181,6 +218,7 @@ export default function RiskRegister() {
     try {
       await deleteRisk(home, editingId);
       setShowModal(false);
+      setFormBaseline(null);
       showNotice('Risk deleted.', { variant: 'warning' });
       await load();
     } catch (e) {
@@ -244,6 +282,17 @@ export default function RiskRegister() {
     );
   }
 
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening the risk register."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={PAGE.container}>
       {notice && (
@@ -260,9 +309,9 @@ export default function RiskRegister() {
           <h1 className={PAGE.title}>Risk Register</h1>
           <p className={PAGE.subtitle}>CQC Regulation 17 — Governance & Management</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Risk</button>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={openAdd} className={BTN.primary}>+ New Risk</button>}
         </div>
       </div>
 
@@ -361,11 +410,11 @@ export default function RiskRegister() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <select className={`${INPUT.select} w-auto`} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+        <select aria-label="Filter risks by category" className={`${INPUT.select} w-auto`} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
           <option value="">All Categories</option>
           {RISK_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterBand} onChange={e => setFilterBand(e.target.value)}>
+        <select aria-label="Filter risks by band" className={`${INPUT.select} w-auto`} value={filterBand} onChange={e => setFilterBand(e.target.value)}>
           <option value="">All Risk Bands</option>
           {RISK_SCORE_BANDS.map(b => <option key={b.id} value={b.id}>{b.name} ({b.min}-{b.max})</option>)}
         </select>
@@ -441,7 +490,7 @@ export default function RiskRegister() {
       </div>
 
       {/* Add/Edit Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Risk' : 'New Risk'} size="lg">
+      <Modal isOpen={showModal} onClose={closeModal} title={editingId ? 'Edit Risk' : 'New Risk'} size="lg">
           <div className="max-h-[75vh] overflow-y-auto">
             {/* Tabs */}
             <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
@@ -450,28 +499,28 @@ export default function RiskRegister() {
             {activeTab === 'details' && (
               <div className="space-y-3">
                 <div>
-                  <label className={INPUT.label}>Title *</label>
-                  <input type="text" className={INPUT.base} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+                  <label htmlFor="risk-title" className={INPUT.label}>Title *</label>
+                  <input id="risk-title" type="text" className={INPUT.base} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Description</label>
-                  <textarea className={`${INPUT.base} h-16`} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+                  <label htmlFor="risk-description" className={INPUT.label}>Description</label>
+                  <textarea id="risk-description" className={`${INPUT.base} h-16`} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div>
-                    <label className={INPUT.label}>Category *</label>
-                    <select className={INPUT.select} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                    <label htmlFor="risk-category" className={INPUT.label}>Category *</label>
+                    <select id="risk-category" className={INPUT.select} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
                       <option value="">Select...</option>
                       {RISK_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Owner *</label>
-                    <input type="text" className={INPUT.base} value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })} />
+                    <label htmlFor="risk-owner" className={INPUT.label}>Owner *</label>
+                    <input id="risk-owner" type="text" className={INPUT.base} value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Status</label>
-                    <select className={INPUT.select} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                    <label htmlFor="risk-status" className={INPUT.label}>Status</label>
+                    <select id="risk-status" className={INPUT.select} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
                       {RISK_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
@@ -480,16 +529,16 @@ export default function RiskRegister() {
                 {/* Inherent Risk */}
                 <div className="border-t border-gray-100 pt-3">
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Inherent Risk (before controls)</div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
-                      <label className={INPUT.label}>Likelihood (1-5)</label>
-                      <select className={INPUT.select} value={form.likelihood} onChange={e => setForm({ ...form, likelihood: Number(e.target.value) })}>
+                      <label htmlFor="risk-likelihood" className={INPUT.label}>Likelihood (1-5)</label>
+                      <select id="risk-likelihood" className={INPUT.select} value={form.likelihood} onChange={e => setForm({ ...form, likelihood: Number(e.target.value) })}>
                         {LIKELIHOOD_LABELS.map(l => <option key={l.value} value={l.value}>{l.value} — {l.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className={INPUT.label}>Impact (1-5)</label>
-                      <select className={INPUT.select} value={form.impact} onChange={e => setForm({ ...form, impact: Number(e.target.value) })}>
+                      <label htmlFor="risk-impact" className={INPUT.label}>Impact (1-5)</label>
+                      <select id="risk-impact" className={INPUT.select} value={form.impact} onChange={e => setForm({ ...form, impact: Number(e.target.value) })}>
                         {IMPACT_LABELS.map(i => <option key={i.value} value={i.value}>{i.value} — {i.name}</option>)}
                       </select>
                     </div>
@@ -507,7 +556,7 @@ export default function RiskRegister() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className={INPUT.label}>Controls / Mitigations</label>
+                    <span className={INPUT.label}>Controls / Mitigations</span>
                     <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
                       onClick={() => setForm({ ...form, controls: [...form.controls, { description: '', effectiveness: '' }] })}>
                       + Add Control
@@ -516,13 +565,14 @@ export default function RiskRegister() {
                   {form.controls.length === 0 && <p className="text-xs text-gray-400">No controls recorded</p>}
                   {form.controls.map((ctrl, i) => (
                     <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
-                      <div className="flex gap-2">
-                        <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Control description" value={ctrl.description}
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input type="text" aria-label={`Control description ${i + 1}`} className={`${INPUT.sm} flex-1`} placeholder="Control description" value={ctrl.description}
                           onChange={e => { const c = [...form.controls]; c[i] = { ...c[i], description: e.target.value }; setForm({ ...form, controls: c }); }} />
                         <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                          aria-label={`Remove control ${i + 1}`}
                           onClick={() => setForm({ ...form, controls: form.controls.filter((_, j) => j !== i) })}>Remove</button>
                       </div>
-                      <select className={INPUT.sm} value={ctrl.effectiveness || ''}
+                      <select aria-label={`Control effectiveness ${i + 1}`} className={INPUT.sm} value={ctrl.effectiveness || ''}
                         onChange={e => { const c = [...form.controls]; c[i] = { ...c[i], effectiveness: e.target.value }; setForm({ ...form, controls: c }); }}>
                         <option value="">Effectiveness...</option>
                         <option value="effective">Effective</option>
@@ -536,16 +586,16 @@ export default function RiskRegister() {
                 {/* Residual Risk */}
                 <div className="border-t border-gray-100 pt-3">
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Residual Risk (after controls)</div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
-                      <label className={INPUT.label}>Residual Likelihood (1-5)</label>
-                      <select className={INPUT.select} value={form.residual_likelihood} onChange={e => setForm({ ...form, residual_likelihood: Number(e.target.value) })}>
+                      <label htmlFor="risk-residual-likelihood" className={INPUT.label}>Residual Likelihood (1-5)</label>
+                      <select id="risk-residual-likelihood" className={INPUT.select} value={form.residual_likelihood} onChange={e => setForm({ ...form, residual_likelihood: Number(e.target.value) })}>
                         {LIKELIHOOD_LABELS.map(l => <option key={l.value} value={l.value}>{l.value} — {l.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className={INPUT.label}>Residual Impact (1-5)</label>
-                      <select className={INPUT.select} value={form.residual_impact} onChange={e => setForm({ ...form, residual_impact: Number(e.target.value) })}>
+                      <label htmlFor="risk-residual-impact" className={INPUT.label}>Residual Impact (1-5)</label>
+                      <select id="risk-residual-impact" className={INPUT.select} value={form.residual_impact} onChange={e => setForm({ ...form, residual_impact: Number(e.target.value) })}>
                         {IMPACT_LABELS.map(i => <option key={i.value} value={i.value}>{i.value} — {i.name}</option>)}
                       </select>
                     </div>
@@ -563,14 +613,14 @@ export default function RiskRegister() {
 
                 {/* Review Dates */}
                 <div className="border-t border-gray-100 pt-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Last Reviewed</label>
-                      <input type="date" className={INPUT.base} value={form.last_reviewed} onChange={e => setForm({ ...form, last_reviewed: e.target.value })} />
+                      <label htmlFor="risk-last-reviewed" className={INPUT.label}>Last Reviewed</label>
+                      <input id="risk-last-reviewed" type="date" className={INPUT.base} value={form.last_reviewed} onChange={e => setForm({ ...form, last_reviewed: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Next Review *</label>
-                      <input type="date" className={INPUT.base} value={form.next_review} onChange={e => setForm({ ...form, next_review: e.target.value })} />
+                      <label htmlFor="risk-next-review" className={INPUT.label}>Next Review *</label>
+                      <input id="risk-next-review" type="date" className={INPUT.base} value={form.next_review} onChange={e => setForm({ ...form, next_review: e.target.value })} />
                     </div>
                   </div>
                 </div>
@@ -581,7 +631,7 @@ export default function RiskRegister() {
             {activeTab === 'actions' && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between mb-1">
-                  <label className={INPUT.label}>Risk Actions</label>
+                  <span className={INPUT.label}>Risk Actions</span>
                   {canEdit && !legacyActionsReadOnly && (
                     <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
                       onClick={() => setForm({ ...form, actions: [...form.actions, { id: 'act-' + Date.now(), description: '', owner: '', due_date: '', status: 'open', completed_date: '' }] })}>
@@ -595,22 +645,23 @@ export default function RiskRegister() {
                 {form.actions.length === 0 && <p className="text-xs text-gray-400">No actions recorded</p>}
                 {form.actions.map((action, i) => (
                   <div key={action.id || i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
-                    <div className="flex gap-2">
-                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description} disabled={!canEdit || legacyActionsReadOnly}
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input type="text" aria-label={`Risk action description ${i + 1}`} className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], description: e.target.value }; setForm({ ...form, actions: a }); }} />
                       {canEdit && !legacyActionsReadOnly && (
                         <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                          aria-label={`Remove risk action ${i + 1}`}
                           onClick={() => setForm({ ...form, actions: form.actions.filter((_, j) => j !== i) })}>Remove</button>
                       )}
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <input type="text" className={INPUT.sm} placeholder="Owner" value={action.owner} disabled={!canEdit || legacyActionsReadOnly}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                      <input type="text" aria-label={`Risk action owner ${i + 1}`} className={INPUT.sm} placeholder="Owner" value={action.owner} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], owner: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <input type="date" className={INPUT.sm} title="Due date" value={action.due_date} disabled={!canEdit || legacyActionsReadOnly}
+                      <input type="date" aria-label={`Risk action due date ${i + 1}`} className={INPUT.sm} title="Due date" value={action.due_date} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], due_date: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <input type="date" className={INPUT.sm} title="Completed date" value={action.completed_date} disabled={!canEdit || legacyActionsReadOnly}
+                      <input type="date" aria-label={`Risk action completed date ${i + 1}`} className={INPUT.sm} title="Completed date" value={action.completed_date} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], completed_date: e.target.value }; setForm({ ...form, actions: a }); }} />
-                      <select className={INPUT.sm} value={action.status} disabled={!canEdit || legacyActionsReadOnly}
+                      <select aria-label={`Risk action status ${i + 1}`} className={INPUT.sm} value={action.status} disabled={!canEdit || legacyActionsReadOnly}
                         onChange={e => { const a = [...form.actions]; a[i] = { ...a[i], status: e.target.value }; setForm({ ...form, actions: a }); }}>
                         <option value="open">Open</option>
                         <option value="in_progress">In Progress</option>
@@ -641,7 +692,7 @@ export default function RiskRegister() {
             {/* Footer */}
             <div className={MODAL.footer}>
               {editingId && canEdit && (
-                <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                <button type="button" onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               {saveError && (
                 <div className="mr-auto flex-1 max-w-md">
@@ -650,8 +701,8 @@ export default function RiskRegister() {
                   </InlineNotice>
                 </div>
               )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {canEdit && <button onClick={handleSave} disabled={!form.title || !form.category || (form.status !== 'closed' && (!form.owner || !form.next_review))} className={BTN.primary}>
+              <button type="button" onClick={closeModal} className={BTN.ghost}>Cancel</button>
+              {canEdit && <button type="button" onClick={handleSave} disabled={!form.title || !form.category || (form.status !== 'closed' && (!form.owner || !form.next_review))} className={BTN.primary}>
                 {editingId ? 'Update' : 'Save'}
               </button>}
             </div>

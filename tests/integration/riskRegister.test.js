@@ -144,6 +144,29 @@ describe('Risk Register: optimistic locking', () => {
     );
     expect(result).toBeNull();
   });
+
+  it('bumps version when upsert touches an existing risk', async () => {
+    const created = await riskRepo.upsert(homeA, {
+      title: 'Upsert version risk',
+      category: 'operational',
+      owner: 'Registered Manager',
+      next_review: '2026-07-01',
+      status: 'open',
+    });
+    ids.push(created.id);
+
+    const updated = await riskRepo.upsert(homeA, {
+      id: created.id,
+      title: 'Upsert version risk updated',
+      category: 'operational',
+      owner: 'Registered Manager',
+      next_review: '2026-07-01',
+      status: 'open',
+    });
+
+    expect(updated.version).toBe(created.version + 1);
+    expect(updated.title).toBe('Upsert version risk updated');
+  });
 });
 
 // ── Pagination ───────────────────────────────────────────────────────────────
@@ -225,5 +248,31 @@ describe('Risk Register: sync safety', () => {
     const updated = await riskRepo.findById(created.id, homeA);
     expect(updated.title).toBe('Sync version risk updated');
     expect(updated.version).toBe(created.version + 1);
+  });
+
+  it('does not soft-delete risks omitted from a partial sync payload', async () => {
+    const kept = await riskRepo.upsert(homeA, {
+      title: 'Partial sync included risk',
+      category: 'compliance',
+      owner: 'Registered Manager',
+      next_review: '2026-07-01',
+      status: 'open',
+    });
+    const omitted = await riskRepo.upsert(homeA, {
+      title: 'Partial sync omitted risk',
+      category: 'clinical',
+      owner: 'Registered Manager',
+      next_review: '2026-07-01',
+      status: 'open',
+    });
+    ids.push(kept.id, omitted.id);
+
+    await riskRepo.sync(homeA, [{
+      ...kept,
+      title: 'Partial sync included risk updated',
+    }]);
+
+    expect(await riskRepo.findById(kept.id, homeA)).not.toBeNull();
+    expect(await riskRepo.findById(omitted.id, homeA)).not.toBeNull();
   });
 });

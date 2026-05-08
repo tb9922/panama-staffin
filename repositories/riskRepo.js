@@ -21,7 +21,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM risk_register
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY residual_risk DESC NULLS LAST LIMIT $2 OFFSET $3`,
+     ORDER BY residual_risk DESC NULLS LAST, id DESC LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
@@ -33,7 +33,6 @@ export async function sync(homeId, arr, client) {
   // An empty array often means the frontend has not loaded records yet.
   // Treating that as "delete everything" is too destructive.
   if (!arr || arr.length === 0) return;
-  const incomingIds = arr.map(r => r.id);
 
   // Batch upsert — 16 per-row params (id + 14 fields + status; homeId=$1, updated_at=NOW())
   const COLS_PER_ROW = 16;
@@ -87,10 +86,7 @@ export async function sync(homeId, arr, client) {
     );
   }
 
-  await conn.query(
-    `UPDATE risk_register SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-    [homeId, incomingIds]
-  );
+  // Legacy sync payloads can be partial/capped. Deletions go through softDelete().
 }
 
 // ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
@@ -117,7 +113,7 @@ export async function upsert(homeId, data) {
      ON CONFLICT (home_id, id) DO UPDATE SET
        title=$3,description=$4,category=$5,owner=$6,likelihood=$7,impact=$8,inherent_risk=$9,
        controls=$10,residual_likelihood=$11,residual_impact=$12,residual_risk=$13,actions=$14,
-       last_reviewed=$15,next_review=$16,status=$17,updated_at=$18,deleted_at=NULL
+       last_reviewed=$15,next_review=$16,status=$17,updated_at=$18,version=risk_register.version + 1,deleted_at=NULL
      RETURNING ${COLS}`,
     [
       id, homeId, data.title || null, data.description || null, data.category || null,

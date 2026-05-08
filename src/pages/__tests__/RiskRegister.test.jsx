@@ -80,10 +80,11 @@ const MOCK_RISKS_RESPONSE = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function renderAdmin() {
+function renderAdmin(options = {}) {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<RiskRegister />, {
     user: { username: 'admin', role: 'admin' },
+    ...options,
   });
 }
 
@@ -97,7 +98,9 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getRisks.mockResolvedValue(MOCK_RISKS_RESPONSE);
   api.getRecordAttachments.mockResolvedValue([]);
 });
@@ -135,6 +138,23 @@ describe('RiskRegister', () => {
       expect(screen.getByText('Risk Register')).toBeInTheDocument();
     });
     expect(screen.getByText('CQC Regulation 17 — Governance & Management')).toBeInTheDocument();
+  });
+
+  it('loads the active home instead of a stale stored home', async () => {
+    api.getCurrentHome.mockReturnValue('old-home');
+    renderAdmin({ activeHome: 'new-home' });
+    await waitFor(() => {
+      expect(api.getRisks).toHaveBeenCalledWith('new-home');
+    });
+  });
+
+  it('shows a no-home state instead of hanging on the loading screen', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderAdmin({ activeHome: '' });
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+    });
+    expect(api.getRisks).not.toHaveBeenCalled();
   });
 
   it('shows stat card labels for open risks, critical, reviews overdue, actions overdue', async () => {
@@ -223,5 +243,25 @@ describe('RiskRegister', () => {
       expect(screen.getByText('Risk Evidence')).toBeInTheDocument();
     });
     expect(screen.getByText('No risk evidence uploaded yet.')).toBeInTheDocument();
+  });
+
+  it('opens a labelled required form and keeps save disabled until owner and review are set', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await user.click(await screen.findByRole('button', { name: /\+ New Risk/i }));
+
+    expect(screen.getByLabelText('Title *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Category *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Owner *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Next Review *')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Save$/i })).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Title *'), 'Medication audit drift');
+    await user.selectOptions(screen.getByLabelText('Category *'), 'clinical');
+    await user.type(screen.getByLabelText('Owner *'), 'Registered Manager');
+    await user.type(screen.getByLabelText('Next Review *'), '2026-04-10');
+
+    expect(screen.getByRole('button', { name: /^Save$/i })).toBeEnabled();
   });
 });
