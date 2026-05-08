@@ -95,6 +95,7 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getIncidents.mockResolvedValue(MOCK_INCIDENTS_RESPONSE);
   api.getIncidentAddenda.mockResolvedValue([]);
@@ -117,6 +118,18 @@ describe('IncidentTracker', () => {
     api.getIncidents.mockReturnValue(new Promise(() => {}));
     renderAdmin();
     expect(screen.getByText('Loading incidents...')).toBeInTheDocument();
+  });
+
+  it('shows a no-home state instead of hanging on loading', () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<IncidentTracker />, {
+      user: { username: 'admin', role: 'admin' },
+      activeHome: '',
+    });
+
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.getByText('Select a home before opening incident reporting.')).toBeInTheDocument();
+    expect(api.getIncidents).not.toHaveBeenCalled();
   });
 
   it('displays the page heading after load', async () => {

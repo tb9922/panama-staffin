@@ -47,8 +47,16 @@ const EMPTY_FORM = {
   lessons_learned: '', investigation_closed_date: '',
 };
 
+function cloneIncidentForm(value) {
+  return JSON.parse(JSON.stringify(value || EMPTY_FORM));
+}
+
+function sameIncidentForm(a, b) {
+  return JSON.stringify(a || {}) === JSON.stringify(b || {});
+}
+
 export default function IncidentTracker() {
-  const { canWrite } = useData();
+  const { activeHome, canWrite } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const [loading, setLoading] = useState(true);
@@ -61,6 +69,7 @@ export default function IncidentTracker() {
   const [editingId, setEditingId] = useState(null);
   const editingIdRef = useRef(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
   const [isFrozen, setIsFrozen] = useState(false);
   const [addenda, setAddenda] = useState([]);
@@ -68,15 +77,24 @@ export default function IncidentTracker() {
   const [freezing, setFreezing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
-  useDirtyGuard(showModal && !isFrozen);
+  const formDirty = showModal && !isFrozen && !sameIncidentForm(form, formBaseline);
+  useDirtyGuard(formDirty);
   const [filterType, setFilterType] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
 
-  const home = getCurrentHome();
+  const storedHome = getCurrentHome();
+  const home = activeHome || storedHome;
   async function load() {
-    if (!home) return;
+    if (!home) {
+      setIncidents([]);
+      setIncidentTypes(DEFAULT_INCIDENT_TYPES);
+      setStaff([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -137,11 +155,14 @@ export default function IncidentTracker() {
   }, [incidents, filterType, filterSeverity, filterStatus, search]);
 
   function openAdd() {
+    editingIdRef.current = null;
     setEditingId(null);
     setIsFrozen(false);
     setAddenda([]);
     setAddendumText('');
-    setForm({ ...EMPTY_FORM, date: today });
+    const nextForm = cloneIncidentForm({ ...EMPTY_FORM, date: today });
+    setForm(nextForm);
+    setFormBaseline(cloneIncidentForm(nextForm));
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -153,7 +174,7 @@ export default function IncidentTracker() {
     setIsFrozen(!!inc.frozen_at);
     setAddenda([]);
     setAddendumText('');
-    setForm({
+    const nextForm = cloneIncidentForm({
       date: inc.date || '', time: inc.time || '', location: inc.location || '',
       type: inc.type || '', severity: inc.severity || 'minor',
       description: inc.description || '', person_affected: inc.person_affected || 'resident',
@@ -189,11 +210,12 @@ export default function IncidentTracker() {
       resident_id: inc.resident_id || null,
       _version: inc.version,
     });
+    setForm(nextForm);
+    setFormBaseline(cloneIncidentForm(nextForm));
     setActiveTab(inc.frozen_at ? 'addenda' : 'details');
     setSaveError(null);
     setShowModal(true);
     // Load addenda in background — guard against stale response if user switches incidents rapidly
-    const home = getCurrentHome();
     const loadedForId = inc.id;
     if (home) getIncidentAddenda(home, loadedForId)
       .then(a => { if (editingIdRef.current === loadedForId) setAddenda(a); })
@@ -205,7 +227,6 @@ export default function IncidentTracker() {
     if (!await confirm('Freeze this incident record? Once frozen, the incident details cannot be edited. You can still add notes.')) return;
     setFreezing(true);
     try {
-      const home = getCurrentHome();
       await freezeIncident(home, editingId);
       setIsFrozen(true);
       await load();
@@ -220,7 +241,6 @@ export default function IncidentTracker() {
     if (saving || !editingId || !addendumText.trim()) return;
     setSaving(true);
     try {
-      const home = getCurrentHome();
       const result = await addIncidentAddendum(home, editingId, addendumText.trim());
       setAddenda(prev => [...prev, result]);
       setAddendumText('');
@@ -239,7 +259,6 @@ export default function IncidentTracker() {
       focusField(validationError.fieldId);
       return;
     }
-    const home = getCurrentHome();
     const username = getLoggedInUser()?.username || 'admin';
     setSaving(true);
     setSaveError(null);
@@ -249,6 +268,7 @@ export default function IncidentTracker() {
       } else {
         await createIncident(home, { ...form, reported_by: username });
       }
+      setFormBaseline(cloneIncidentForm(form));
       await load();
       setShowModal(false);
     } catch (err) {
@@ -263,7 +283,6 @@ export default function IncidentTracker() {
     if (isFrozen) return;
     if (!editingId) return;
     if (!await confirm('Delete this incident record?')) return;
-    const home = getCurrentHome();
     setSaving(true);
     try {
       await deleteIncident(home, editingId);
@@ -373,6 +392,7 @@ export default function IncidentTracker() {
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
 
+  if (!home) return <div className={PAGE.container}><ErrorState title="No home selected" message="Select a home before opening incident reporting." /></div>;
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading incidents..." card /></div>;
 
   return (
@@ -384,9 +404,9 @@ export default function IncidentTracker() {
           <h1 className={PAGE.title}>Incident & Safety Reporting</h1>
           <p className={PAGE.subtitle}>CQC Regulation 16/18, RIDDOR 2013</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Incident</button>}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} w-full sm:w-auto`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={openAdd} className={`${BTN.primary} w-full sm:w-auto`}>+ New Incident</button>}
         </div>
       </div>
 
