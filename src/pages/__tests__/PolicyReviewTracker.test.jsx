@@ -76,10 +76,11 @@ const MOCK_POLICIES_RESPONSE = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function renderAdmin() {
+function renderAdmin(options = {}) {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<PolicyReviewTracker />, {
     user: { username: 'admin', role: 'admin' },
+    ...options,
   });
 }
 
@@ -93,10 +94,11 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getPolicies.mockResolvedValue(MOCK_POLICIES_RESPONSE);
   api.getRecordAttachments.mockResolvedValue([]);
-  excel.downloadXLSX.mockClear();
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -133,6 +135,23 @@ describe('PolicyReviewTracker', () => {
       expect(screen.getByText('Policy Review Tracker')).toBeInTheDocument();
     });
     expect(screen.getByText('CQC Regulation 17 — Governance & Management')).toBeInTheDocument();
+  });
+
+  it('loads the active home instead of a stale stored home', async () => {
+    api.getCurrentHome.mockReturnValue('old-home');
+    renderAdmin({ activeHome: 'new-home' });
+    await waitFor(() => {
+      expect(api.getPolicies).toHaveBeenCalledWith('new-home');
+    });
+  });
+
+  it('shows a no-home state instead of hanging on the loading screen', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderAdmin({ activeHome: '' });
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+    });
+    expect(api.getPolicies).not.toHaveBeenCalled();
   });
 
   it('shows KPI card labels for current, due, overdue, compliance', async () => {
@@ -223,6 +242,33 @@ describe('PolicyReviewTracker', () => {
     await waitFor(() => {
       expect(screen.getByText(/\d+ policies/)).toBeInTheDocument();
     });
+  });
+
+  it('labels the status filter for keyboard and screen reader users', async () => {
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Policy Review Tracker')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('combobox', { name: /Filter policies by status/i })).toBeInTheDocument();
+  });
+
+  it('uses labelled form controls and enables save only after policy name is entered', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ New Policy/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /\+ New Policy/i }));
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Policy Name/i), 'Medication Policy');
+    expect(screen.getByLabelText(/Reference/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Review Frequency/i)).toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
   });
 
   it('shows policy documents uploader for existing policies', async () => {

@@ -133,6 +133,26 @@ describe('Policy Review: optimistic locking', () => {
     );
     expect(result).toBeNull();
   });
+
+  it('increments version on upsert conflict', async () => {
+    const id = 'pol-upsert-version';
+    const first = await policyRepo.upsert(homeA, {
+      id,
+      policy_name: 'Policy upsert version A',
+      status: 'current',
+    });
+    ids.push(id);
+
+    const second = await policyRepo.upsert(homeA, {
+      id,
+      policy_name: 'Policy upsert version B',
+      status: 'current',
+    });
+
+    expect(first.version).toBe(1);
+    expect(second.version).toBe(2);
+    expect(second.policy_name).toBe('Policy upsert version B');
+  });
 });
 
 // ── Pagination ───────────────────────────────────────────────────────────────
@@ -188,6 +208,29 @@ describe('Policy Review: sync safety', () => {
     ids.push(first.id, second.id);
 
     await policyRepo.sync(homeA, []);
+
+    expect(await policyRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await policyRepo.findById(second.id, homeA)).not.toBeNull();
+  });
+
+  it('does not soft-delete omitted policies when legacy sync receives a partial payload', async () => {
+    const first = await policyRepo.upsert(homeA, {
+      id: 'pol-partial-sync-a',
+      policy_name: 'Partial sync policy A',
+      status: 'current',
+    });
+    const second = await policyRepo.upsert(homeA, {
+      id: 'pol-partial-sync-b',
+      policy_name: 'Partial sync policy B',
+      status: 'current',
+    });
+    ids.push(first.id, second.id);
+
+    await policyRepo.sync(homeA, [{
+      id: first.id,
+      policy_name: 'Partial sync policy A updated',
+      status: 'current',
+    }]);
 
     expect(await policyRepo.findById(first.id, homeA)).not.toBeNull();
     expect(await policyRepo.findById(second.id, homeA)).not.toBeNull();

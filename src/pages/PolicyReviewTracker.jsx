@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, parseDate } from '../lib/rotation.js';
@@ -41,7 +41,7 @@ const EMPTY_FORM = {
 };
 
 export default function PolicyReviewTracker() {
-  const { canWrite } = useData();
+  const { canWrite, activeHome } = useData();
   const canEdit = canWrite('governance');
   const { confirm, ConfirmDialog } = useConfirm();
   const [policies, setPolicies] = useState([]);
@@ -50,16 +50,26 @@ export default function PolicyReviewTracker() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  const fieldPrefix = useId();
 
-  useDirtyGuard(showModal);
+  const isDirty = showModal && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
-  const home = getCurrentHome();
+  const storedHome = getCurrentHome();
+  const home = activeHome || storedHome;
+  const fieldId = (name) => `${fieldPrefix}-${name}`;
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setPolicies([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const result = await getPolicies(home);
@@ -108,14 +118,16 @@ export default function PolicyReviewTracker() {
 
   function openAdd() {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM });
+    const nextForm = { ...EMPTY_FORM };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
 
   function openEdit(policy) {
     setEditingId(policy.id);
-    setForm({
+    const nextForm = {
       policy_name: policy.policy_name || '',
       policy_ref: policy.policy_ref || '',
       category: policy.category || '',
@@ -128,13 +140,27 @@ export default function PolicyReviewTracker() {
       changes: policy.changes || [],
       notes: policy.notes || '',
       _version: policy.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
 
+  function closeModal() {
+    setShowModal(false);
+    setFormBaseline(null);
+  }
+
   async function handleSave() {
-    if (!form.policy_name) return;
+    if (!home) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (!form.policy_name.trim()) {
+      setSaveError('Policy name is required.');
+      return;
+    }
     setSaveError(null);
 
     // Auto-calculate next_review_due from last_reviewed + frequency
@@ -160,7 +186,7 @@ export default function PolicyReviewTracker() {
         });
         showNotice('Policy added.');
       }
-      setShowModal(false);
+      closeModal();
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to save');
@@ -169,6 +195,10 @@ export default function PolicyReviewTracker() {
 
   async function handleMarkReviewed() {
     if (!editingId) return;
+    if (!home) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
     const policy = policies.find(p => p.id === editingId);
     if (!policy) return;
     setSaveError(null);
@@ -199,7 +229,7 @@ export default function PolicyReviewTracker() {
 
     try {
       await updatePolicy(home, editingId, record);
-      setShowModal(false);
+      closeModal();
       showNotice('Policy marked as reviewed.');
       await load();
     } catch (e) {
@@ -213,7 +243,7 @@ export default function PolicyReviewTracker() {
     setSaveError(null);
     try {
       await deletePolicy(home, editingId);
-      setShowModal(false);
+      closeModal();
       showNotice('Policy deleted.');
       await load();
     } catch (e) {
@@ -276,10 +306,21 @@ export default function PolicyReviewTracker() {
     );
   }
 
-  if (error) {
+  if (error && policies.length === 0) {
     return (
       <div className={PAGE.container}>
         <ErrorState title="Unable to load policy reviews" message={error} onRetry={load} />
+      </div>
+    );
+  }
+
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening the policy review tracker."
+        />
       </div>
     );
   }
@@ -292,15 +333,17 @@ export default function PolicyReviewTracker() {
         </InlineNotice>
       )}
 
+      {error && <ErrorState title="Policy reviews need attention" message={error} onRetry={() => void load()} className="mb-4" />}
+
       {/* Header */}
       <div className={PAGE.header}>
         <div>
           <h1 className={PAGE.title}>Policy Review Tracker</h1>
           <p className={PAGE.subtitle}>CQC Regulation 17 — Governance & Management</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Policy</button>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={openAdd} className={BTN.primary}>+ New Policy</button>}
         </div>
       </div>
 
@@ -332,7 +375,12 @@ export default function PolicyReviewTracker() {
 
       {/* Filter */}
       <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select
+          aria-label="Filter policies by status"
+          className={`${INPUT.select} w-auto`}
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+        >
           <option value="">All Statuses</option>
           {POLICY_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -390,26 +438,26 @@ export default function PolicyReviewTracker() {
       </div>
 
       {/* Add/Edit Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Policy' : 'New Policy'} size="lg">
+      <Modal isOpen={showModal} onClose={closeModal} title={editingId ? 'Edit Policy' : 'New Policy'} size="lg">
 
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Policy Name *</label>
-                  <input type="text" className={INPUT.base} value={form.policy_name}
+                  <label htmlFor={fieldId('policy-name')} className={INPUT.label}>Policy Name *</label>
+                  <input id={fieldId('policy-name')} type="text" className={INPUT.base} value={form.policy_name}
                     onChange={e => setForm({ ...form, policy_name: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Reference</label>
-                  <input type="text" className={INPUT.base} placeholder="e.g. POL-001" value={form.policy_ref}
+                  <label htmlFor={fieldId('policy-ref')} className={INPUT.label}>Reference</label>
+                  <input id={fieldId('policy-ref')} type="text" className={INPUT.base} placeholder="e.g. POL-001" value={form.policy_ref}
                     onChange={e => setForm({ ...form, policy_ref: e.target.value })} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className={INPUT.label}>Category</label>
-                  <select className={INPUT.select} value={form.category}
+                  <label htmlFor={fieldId('policy-category')} className={INPUT.label}>Category</label>
+                  <select id={fieldId('policy-category')} className={INPUT.select} value={form.category}
                     onChange={e => setForm({ ...form, category: e.target.value })}>
                     <option value="">Select...</option>
                     <option value="safeguarding">Safeguarding</option>
@@ -421,46 +469,46 @@ export default function PolicyReviewTracker() {
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Version</label>
-                  <input type="text" className={INPUT.base} value={form.version}
+                  <label htmlFor={fieldId('policy-version')} className={INPUT.label}>Version</label>
+                  <input id={fieldId('policy-version')} type="text" className={INPUT.base} value={form.version}
                     onChange={e => setForm({ ...form, version: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Review Frequency (months)</label>
-                  <input type="number" className={INPUT.base} min="1" max="60" value={form.review_frequency_months}
+                  <label htmlFor={fieldId('policy-frequency')} className={INPUT.label}>Review Frequency (months)</label>
+                  <input id={fieldId('policy-frequency')} type="number" className={INPUT.base} min="1" max="60" value={form.review_frequency_months}
                     onChange={e => updateFormField('review_frequency_months', parseInt(e.target.value) || 12)} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Last Reviewed</label>
-                  <input type="date" className={INPUT.base} value={form.last_reviewed}
+                  <label htmlFor={fieldId('policy-last-reviewed')} className={INPUT.label}>Last Reviewed</label>
+                  <input id={fieldId('policy-last-reviewed')} type="date" className={INPUT.base} value={form.last_reviewed}
                     onChange={e => updateFormField('last_reviewed', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Next Review Due</label>
-                  <input type="date" className={`${INPUT.base} bg-gray-50`} value={form.next_review_due} readOnly />
+                  <label htmlFor={fieldId('policy-next-review-due')} className={INPUT.label}>Next Review Due</label>
+                  <input id={fieldId('policy-next-review-due')} type="date" className={`${INPUT.base} bg-gray-50`} value={form.next_review_due} readOnly />
                   <p className="text-[10px] text-gray-400 mt-0.5">Auto-calculated from last reviewed + frequency</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Reviewed By</label>
-                  <input type="text" className={INPUT.base} placeholder="Name" value={form.reviewed_by}
+                  <label htmlFor={fieldId('policy-reviewed-by')} className={INPUT.label}>Reviewed By</label>
+                  <input id={fieldId('policy-reviewed-by')} type="text" className={INPUT.base} placeholder="Name" value={form.reviewed_by}
                     onChange={e => setForm({ ...form, reviewed_by: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Approved By</label>
-                  <input type="text" className={INPUT.base} placeholder="Name" value={form.approved_by}
+                  <label htmlFor={fieldId('policy-approved-by')} className={INPUT.label}>Approved By</label>
+                  <input id={fieldId('policy-approved-by')} type="text" className={INPUT.base} placeholder="Name" value={form.approved_by}
                     onChange={e => setForm({ ...form, approved_by: e.target.value })} />
                 </div>
               </div>
 
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={`${INPUT.base} h-16`} value={form.notes}
+                <label htmlFor={fieldId('policy-notes')} className={INPUT.label}>Notes</label>
+                <textarea id={fieldId('policy-notes')} className={`${INPUT.base} h-16`} value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
 
@@ -495,17 +543,17 @@ export default function PolicyReviewTracker() {
             </div>
 
             {/* Footer */}
-            <div className={MODAL.footer}>
+            <div className={`${MODAL.footer} flex-wrap`}>
               {canEdit && editingId && (
-                <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                <button type="button" onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               {canEdit && editingId && (
-                <button onClick={handleMarkReviewed} className={BTN.success}>Mark as Reviewed</button>
+                <button type="button" onClick={handleMarkReviewed} className={BTN.success}>Mark as Reviewed</button>
               )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+              <button type="button" onClick={closeModal} className={BTN.ghost}>Cancel</button>
               {canEdit && (
-                <button onClick={handleSave} disabled={!form.policy_name} className={BTN.primary}>
+                <button type="button" onClick={handleSave} disabled={!form.policy_name.trim()} className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>
               )}

@@ -22,7 +22,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM policy_reviews
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY next_review_due ASC NULLS LAST LIMIT $2 OFFSET $3`,
+     ORDER BY next_review_due ASC NULLS LAST, id DESC LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
@@ -34,7 +34,6 @@ export async function sync(homeId, arr, client) {
   // Partial imports may omit policy_reviews. Never treat an empty array as a
   // command to wipe regulated policy evidence.
   if (!arr || arr.length === 0) return;
-  const incomingIds = arr.map(p => p.id);
 
   // Batch upsert — 13 per-row params (id + 11 fields + notes; homeId=$1, updated_at=NOW())
   const COLS_PER_ROW = 13;
@@ -85,12 +84,7 @@ export async function sync(homeId, arr, client) {
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE policy_reviews SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  }
+  // Legacy sync payloads can be partial/capped. Deletions go through softDelete().
 }
 
 // ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
@@ -118,7 +112,7 @@ export async function upsert(homeId, data) {
        policy_name=$3,policy_ref=$4,category=$5,doc_version=$6,
        last_reviewed=$7,next_review_due=$8,review_frequency_months=$9,
        status=$10,reviewed_by=$11,approved_by=$12,changes=$13,notes=$14,
-       updated_at=$15,deleted_at=NULL
+       updated_at=$15,version=policy_reviews.version + 1,deleted_at=NULL
      RETURNING ${COLS}`,
     [
       id, homeId, data.policy_name || null, data.policy_ref || null,
