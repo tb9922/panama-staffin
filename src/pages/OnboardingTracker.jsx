@@ -880,17 +880,17 @@ export default function OnboardingTracker() {
           const isExpanded = expanded === s.id;
           return (
             <div key={s.id} className={CARD.padded}>
-              <button type="button" className="flex w-full items-center justify-between text-left cursor-pointer" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
-                <div className="flex items-center gap-3">
-                  <div>
-                    <span className="font-medium text-gray-900">{s.name}</span>
-                    <span className="ml-2 text-xs text-gray-500">{s.team} · {s.role}</span>
+              <button type="button" className="flex w-full flex-col gap-3 text-left cursor-pointer sm:flex-row sm:items-center sm:justify-between" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
+                <div className="min-w-0">
+                  <div className="min-w-0">
+                    <span className="block font-medium text-gray-900 sm:inline">{s.name}</span>
+                    <span className="text-xs text-gray-500 sm:ml-2">{s.team} · {s.role}</span>
                     {s.start_date && <span className="ml-2 text-xs text-gray-500">Started: {s.start_date}</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-24 h-2 rounded-full bg-gray-200 overflow-hidden">
+                    <div className="h-2 w-20 rounded-full bg-gray-200 overflow-hidden sm:w-24">
                       <div className={`h-full rounded-full transition-all ${progress.pct === 100 ? 'bg-emerald-500' : progress.pct >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
                         style={{ width: `${progress.pct}%` }} />
                     </div>
@@ -902,7 +902,7 @@ export default function OnboardingTracker() {
                     ? <span className={BADGE.green}>Complete</span>
                     : <span className={BADGE.amber}>In Progress</span>
                   }
-                  <span className="text-xs text-gray-500" aria-hidden="true">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                  <span className="shrink-0 text-xs text-gray-500" aria-hidden="true">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                 </div>
               </button>
 
