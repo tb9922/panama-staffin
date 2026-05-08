@@ -41,6 +41,8 @@ const standardDataSchema = z.object({
   })).optional(),
   completion_date: dateSchema.optional(),
   status: z.string().max(50).nullable().optional(),
+  assessor: z.string().max(200).nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
 });
 
 const careCertUpdateSchema = z.object({
