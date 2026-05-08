@@ -178,7 +178,18 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
        (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
          certificate_ref, evidence_ref, level, notes, updated_at, deleted_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,clock_timestamp(),NULL)
-       ON CONFLICT (home_id, staff_id, training_type_id) DO NOTHING
+       ON CONFLICT (home_id, staff_id, training_type_id) DO UPDATE SET
+         completed = EXCLUDED.completed,
+         expiry = EXCLUDED.expiry,
+         trainer = EXCLUDED.trainer,
+         method = EXCLUDED.method,
+         certificate_ref = EXCLUDED.certificate_ref,
+         evidence_ref = EXCLUDED.evidence_ref,
+         level = EXCLUDED.level,
+         notes = EXCLUDED.notes,
+         updated_at = clock_timestamp(),
+         deleted_at = NULL
+       WHERE training_records.deleted_at IS NOT NULL
        RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes, updated_at`,
     [homeId, staffId, typeId,
       record.completed ?? null, record.expiry ?? null,

@@ -245,6 +245,39 @@ describe('training routes optimistic concurrency', () => {
     expect(res.body.error).toBeTruthy();
   });
 
+  it('reimports a training record after soft delete without stale version data', async () => {
+    await pool.query(
+      `DELETE FROM training_records
+        WHERE home_id = $1 AND staff_id = $2 AND training_type_id = $3`,
+      [homeId, STAFF_ID, 'fire-safety'],
+    );
+
+    await authRequest('put', `/api/training/${STAFF_ID}/fire-safety?home=${homeSlug}`)
+      .send({
+        completed: '2026-05-01',
+        expiry: '2027-05-01',
+        trainer: 'CSV Import',
+        method: 'classroom',
+        certificate_ref: 'CSV-FIRST',
+      })
+      .expect(200);
+
+    await authRequest('delete', `/api/training/${STAFF_ID}/fire-safety?home=${homeSlug}`).expect(200);
+
+    const res = await authRequest('put', `/api/training/${STAFF_ID}/fire-safety?home=${homeSlug}`)
+      .send({
+        completed: '2026-05-02',
+        expiry: '2027-05-02',
+        trainer: 'CSV Import',
+        method: 'classroom',
+        certificate_ref: 'CSV-SECOND',
+      })
+      .expect(200);
+
+    expect(res.body.completed).toBe('2026-05-02');
+    expect(res.body.certificate_ref).toBe('CSV-SECOND');
+  });
+
   it('returns 404 instead of auditing missing training-record deletes', async () => {
     await authRequest('delete', `/api/training/${STAFF_ID}/missing-training?home=${homeSlug}`)
       .expect(404);
