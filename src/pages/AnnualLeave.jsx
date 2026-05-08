@@ -38,6 +38,7 @@ const BOOKING_FIELD_IDS = {
   staff: 'annual-leave-book-staff',
   start: 'annual-leave-book-start',
   end: 'annual-leave-book-end',
+  lockPin: 'annual-leave-edit-lock-pin',
 };
 
 function getCenteredSchedulingRange(date, radiusDays = 200) {
@@ -132,19 +133,24 @@ export default function AnnualLeave() {
   // Book AL — only on scheduled working days, enforces accrued entitlement in hours
   async function bookAL() {
     if (saving) return;
-    if (!bookingStaff || !bookingStart || !bookingEnd || !schedData) return;
+    setBookingError(null);
+    setBookingMsg(null);
+    if (!bookingStaff || !bookingStart || !bookingEnd || !schedData) {
+      setBookingError('Select a staff member, start date and end date before booking annual leave.');
+      return;
+    }
     const start = parseDate(bookingStart);
     const end = parseDate(bookingEnd);
-    if (end < start) return;
+    if (end < start) {
+      setBookingError('End date must be on or after the start date.');
+      return;
+    }
 
     const staff = schedData.staff.find(s => s.id === bookingStaff);
     if (!staff) return;
 
     const accrual = accruals.get(bookingStaff);
     if (!accrual) return;
-
-    setBookingError(null);
-    setBookingMsg(null);
 
     if (accrual.missingContractHours) {
       setBookingError(`${staff.name} has no contract hours set. Set contract hours in Staff Database before booking AL.`);
@@ -202,7 +208,7 @@ export default function AnnualLeave() {
       setSaving(true);
       let bookingSucceeded = false;
       try {
-        await bulkUpsertOverrides(getCurrentHome(), toBook, getEditLockOptions(targetDates));
+        await bulkUpsertOverrides(homeSlug, toBook, getEditLockOptions(targetDates));
         await loadData();
         bookingSucceeded = true;
       } catch (e) {
@@ -222,7 +228,7 @@ export default function AnnualLeave() {
       // point. We pass the refreshed overrides/staff snapshot via the ref in loadData.
       if (bookingSucceeded) {
         try {
-          const planData = await getSchedulingData(getCurrentHome(), {
+          const planData = await getSchedulingData(homeSlug, {
             from: targetDates[0],
             to: targetDates[targetDates.length - 1],
           });
@@ -260,7 +266,7 @@ export default function AnnualLeave() {
       }));
       if (rows.length > 0) {
         const lockDates = [...new Set(rows.map(r => r.date))];
-        await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+        await bulkUpsertOverrides(homeSlug, rows, getEditLockOptions(lockDates));
       }
       await loadData();
       setCoverPlan(null);
@@ -295,7 +301,7 @@ export default function AnnualLeave() {
     if (!await confirm(`Cancel annual leave for ${dateKey}?`)) return;
     setSaving(true);
     try {
-      await deleteOverride(getCurrentHome(), dateKey, staffId, getEditLockOptions(dateKey));
+      await deleteOverride(homeSlug, dateKey, staffId, getEditLockOptions(dateKey));
       await loadData();
     } catch (e) {
       if (e.status === 423) {
@@ -381,19 +387,21 @@ export default function AnnualLeave() {
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-2 print:hidden">
-        <div className="flex items-center gap-3">
+      <div className="mb-2 flex flex-col gap-3 print:hidden sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">Annual Leave</h1>
           {saving && <span className="text-xs text-blue-500">Saving...</span>}
         </div>
-        <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
+        <button onClick={() => window.print()} className={`${BTN.secondary} w-full sm:w-auto`}>Print</button>
       </div>
 
       {showLockPrompt && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-amber-800">Past dates are locked — enter the edit PIN to continue.</span>
+            <label htmlFor={BOOKING_FIELD_IDS.lockPin} className="sr-only">Edit lock PIN</label>
             <input
+              id={BOOKING_FIELD_IDS.lockPin}
               type="password"
               inputMode="numeric"
               maxLength={6}

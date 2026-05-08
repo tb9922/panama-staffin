@@ -233,6 +233,20 @@ describe('AnnualLeave', () => {
     expect(bookBtn).toBeDisabled();
   });
 
+  it('shows inline validation when the leave end date is before the start date', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(screen.getByText('Book Leave')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Staff'), 'S001');
+    await user.type(screen.getByLabelText('From'), '2026-03-12');
+    await user.type(screen.getByLabelText('To'), '2026-03-10');
+    await user.click(screen.getByRole('button', { name: /Book Annual Leave/i }));
+
+    expect(screen.getByText('End date must be on or after the start date.')).toBeInTheDocument();
+    expect(bulkUpsertOverrides).not.toHaveBeenCalled();
+  });
+
   it('shows upcoming AL bookings section', async () => {
     renderWithProviders(<AnnualLeave />);
     await waitFor(() => expect(screen.getByText('Annual Leave')).toBeInTheDocument());
