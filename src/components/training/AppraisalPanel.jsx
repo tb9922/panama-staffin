@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { formatDate, parseDate } from '../../lib/rotation.js';
 import { getAppraisalStatus, getAppraisalStats } from '../../lib/training.js';
 import FileAttachments from '../FileAttachments.jsx';
@@ -40,6 +40,16 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
   const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', appraiser: '', objectives: '', training_needs: '', development_plan: '', next_due: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const searchId = useId();
+  const teamFilterId = useId();
+  const statusFilterId = useId();
+  const dateId = useId();
+  const appraiserId = useId();
+  const objectivesId = useId();
+  const trainingNeedsId = useId();
+  const developmentPlanId = useId();
+  const nextDueId = useId();
+  const notesId = useId();
 
   useDirtyGuard(showModal);
 
@@ -175,12 +185,15 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
 
       {/* Filters & export */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <label htmlFor={searchId} className="sr-only">Search staff</label>
+        <input id={searchId} type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
+        <label htmlFor={teamFilterId} className="sr-only">Filter by team</label>
+        <select id={teamFilterId} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
           <option value="All">All Teams</option>
           {TEAMS.map(t => <option key={t}>{t}</option>)}
         </select>
-        <select value={aprFilter} onChange={e => setAprFilter(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <label htmlFor={statusFilterId} className="sr-only">Filter by appraisal status</label>
+        <select id={statusFilterId} value={aprFilter} onChange={e => setAprFilter(e.target.value)} className={`${INPUT.select} w-auto`}>
           <option value="all">All Status</option>
           <option value="overdue">Overdue</option>
           <option value="due_soon">Due Soon</option>
@@ -199,13 +212,13 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
           const staffAprs = [...(appraisalsData[s.id] || [])].sort((a, b) => b.date.localeCompare(a.date));
           return (
             <div key={s.id} className={CARD.padded}>
-              <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
-                <div>
+              <button type="button" className="flex w-full flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
+                <div className="min-w-0">
                   <span className="font-medium text-gray-900">{s.name}</span>
-                  <span className="ml-2 text-xs text-gray-500">{s.team} · {s.role}</span>
+                  <span className="ml-0 block text-xs text-gray-500 sm:ml-2 sm:inline">{s.team} · {s.role}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+                <div className="flex w-full items-start justify-between gap-3 sm:w-auto sm:items-center sm:justify-end">
+                  <div className="text-left sm:text-right">
                     <span className={sb.badge}>{sb.label}</span>
                     <div className="mt-0.5 text-xs text-gray-500">
                       {result.nextDue ? `Due: ${result.nextDue}` : 'No appraisals'} · Annual
@@ -222,6 +235,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
                   {staffAprs.length === 0 ? (
                     <div className="text-sm text-gray-400 text-center py-4">No appraisal records</div>
                   ) : (
+                    <div className={TABLE.wrapper}>
                     <table className={TABLE.table}>
                       <thead className={TABLE.thead}>
                         <tr>
@@ -248,6 +262,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               )}
@@ -260,45 +275,45 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
       {/* Appraisal Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={readOnly ? 'View Appraisal' : modalData.existing ? 'Edit Appraisal' : 'Record Appraisal'} size="lg">
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Date</label>
-              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
+              <label htmlFor={dateId} className={INPUT.label}>Date</label>
+              <input id={dateId} type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Appraiser</label>
-              <input type="text" value={modalData.appraiser} onChange={e => setModalData({ ...modalData, appraiser: e.target.value })}
+              <label htmlFor={appraiserId} className={INPUT.label}>Appraiser</label>
+              <input id={appraiserId} type="text" value={modalData.appraiser} onChange={e => setModalData({ ...modalData, appraiser: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Appraiser name" />
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Objectives</label>
-            <textarea value={modalData.objectives} onChange={e => setModalData({ ...modalData, objectives: e.target.value })}
+            <label htmlFor={objectivesId} className={INPUT.label}>Objectives</label>
+            <textarea id={objectivesId} value={modalData.objectives} onChange={e => setModalData({ ...modalData, objectives: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-20 resize-none`} placeholder="Performance objectives set..." />
           </div>
           <div>
-            <label className={INPUT.label}>Training Needs Identified</label>
-            <textarea value={modalData.training_needs} onChange={e => setModalData({ ...modalData, training_needs: e.target.value })}
+            <label htmlFor={trainingNeedsId} className={INPUT.label}>Training Needs Identified</label>
+            <textarea id={trainingNeedsId} value={modalData.training_needs} onChange={e => setModalData({ ...modalData, training_needs: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-16 resize-none`} placeholder="Training and development needs..." />
           </div>
           <div>
-            <label className={INPUT.label}>Development Plan</label>
-            <textarea value={modalData.development_plan} onChange={e => setModalData({ ...modalData, development_plan: e.target.value })}
+            <label htmlFor={developmentPlanId} className={INPUT.label}>Development Plan</label>
+            <textarea id={developmentPlanId} value={modalData.development_plan} onChange={e => setModalData({ ...modalData, development_plan: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-16 resize-none`} placeholder="Personal development plan..." />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Next Due (auto +12 months)</label>
-              <input type="date" value={modalData.existing ? modalData.next_due : aprNextDue}
+              <label htmlFor={nextDueId} className={INPUT.label}>Next Due (auto +12 months)</label>
+              <input id={nextDueId} type="date" value={modalData.existing ? modalData.next_due : aprNextDue}
                 onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Notes</label>
-              <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+              <label htmlFor={notesId} className={INPUT.label}>Notes</label>
+              <input id={notesId} type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Optional notes" />
             </div>

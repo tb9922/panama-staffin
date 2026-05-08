@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useId } from 'react';
 import { parseDate } from '../../lib/rotation.js';
 import {
   buildComplianceMatrix, getComplianceStats,
@@ -101,6 +101,12 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [allTypes, setAllTypes] = useState(() => trainingTypes);
   const [typesSaving, setTypesSaving] = useState(false);
   const [typeError, setTypeError] = useState(null);
+  const searchId = useId();
+  const teamFilterId = useId();
+  const categoryFilterId = useId();
+  const complianceFilterId = useId();
+  const csvFileId = useId();
+  const csvDifferentFileId = useId();
 
   // Keep allTypes in sync if parent reloads (after save)
   useEffect(() => { setAllTypes(trainingTypes); }, [trainingTypes]);
@@ -317,17 +323,21 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap gap-3 print:hidden">
-        <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} min-w-[12rem] flex-1 sm:flex-none`} />
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
+        <label htmlFor={searchId} className="sr-only">Search staff</label>
+        <input id={searchId} type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} min-w-[12rem] flex-1 sm:flex-none`} />
+        <label htmlFor={teamFilterId} className="sr-only">Filter by team</label>
+        <select id={teamFilterId} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
           <option value="All">All Teams</option>
           {TEAMS.map(t => <option key={t}>{t}</option>)}
         </select>
-        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
+        <label htmlFor={categoryFilterId} className="sr-only">Filter by training category</label>
+        <select id={categoryFilterId} value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
           <option value="all">All Categories</option>
           <option value="statutory">Statutory</option>
           <option value="mandatory">Mandatory</option>
         </select>
-        <select value={filterCompliance} onChange={e => setFilterCompliance(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
+        <label htmlFor={complianceFilterId} className="sr-only">Filter by compliance status</label>
+        <select id={complianceFilterId} value={filterCompliance} onChange={e => setFilterCompliance(e.target.value)} className={`${INPUT.select} w-auto flex-1 sm:flex-none`}>
           <option value="all">All Staff</option>
           <option value="non-compliant">Non-Compliant Only</option>
         </select>
@@ -414,15 +424,15 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               <div key={s.id} className={CARD.padded}>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between text-left"
+                  className="flex w-full flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between"
                   onClick={() => setExpanded(isExpanded ? null : s.id)}
                   aria-expanded={isExpanded}
                 >
-                  <div>
+                  <div className="min-w-0">
                     <span className="font-medium text-gray-900">{s.name}</span>
-                    <span className="text-xs text-gray-400 ml-2">{s.team} · {s.role}</span>
+                    <span className="ml-0 block text-xs text-gray-400 sm:ml-2 sm:inline">{s.team} · {s.role}</span>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
                     <span className={`text-sm font-bold ${pct >= 90 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span>
                     <span className="text-gray-400 text-xs">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                   </div>
@@ -440,17 +450,17 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                             type="button"
                             key={t.id}
                             disabled={!canOpen}
-                            className={`flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-left text-xs transition-colors ${canOpen ? 'hover:bg-gray-100' : 'cursor-default opacity-80'}`}
+                            className={`flex w-full flex-col gap-2 rounded-lg bg-gray-50 px-3 py-2 text-left text-xs transition-colors sm:flex-row sm:items-center sm:justify-between ${canOpen ? 'hover:bg-gray-100' : 'cursor-default opacity-80'}`}
                             onClick={() => canOpen && openRecordModal(s.id, t.id)}
                           >
-                            <div>
+                            <div className="min-w-0">
                               <div className="font-medium text-gray-800">{t.name}</div>
                               {r.record && <div className="text-gray-400 mt-0.5">Completed: {r.record.completed} · Expires: {r.record.expiry}{r.record.level ? ` · ${r.record.level}` : ''}</div>}
                               {r.requiredLevel && r.status === TRAINING_STATUS.WRONG_LEVEL && (
                                 <div className="text-orange-500 mt-0.5">Needs: {r.requiredLevel.name}</div>
                               )}
                             </div>
-                            <span className={BADGE[display.badgeKey]}>{display.label}</span>
+                            <span className={`${BADGE[display.badgeKey]} shrink-0 self-start sm:self-center`}>{display.label}</span>
                           </button>
                         );
                       })}
@@ -471,6 +481,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
           </button>
           {showManageTypes && (
           <div className={`mt-3 ${CARD.flush}`}>
+            <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
@@ -489,11 +500,13 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                   <tr key={t.id} className={`${TABLE.tr} ${!t.active ? 'opacity-50' : ''}`}>
                     <td className={`${TABLE.td} font-medium`}>
                       <input type="text" value={t.name} onChange={e => updateTypeField(t.id, 'name', e.target.value)}
-                        className="border border-gray-200 rounded px-1.5 py-0.5 text-xs w-full" />
+                        aria-label={`Training type name for ${t.name}`}
+                        className={INPUT.inline + ' w-full'} />
                     </td>
                     <td className={TABLE.td}>
                       <select value={t.category} onChange={e => updateTypeField(t.id, 'category', e.target.value)}
-                        className="border border-gray-200 rounded px-1 py-0.5 text-xs">
+                        aria-label={`Category for ${t.name}`}
+                        className={INPUT.inlineSelect}>
                         <option value="statutory">Statutory</option>
                         <option value="mandatory">Mandatory</option>
                       </select>
@@ -502,7 +515,8 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                       <div className="flex items-center gap-1">
                         <input type="number" min="1" max="60" value={t.refresher_months}
                           onChange={e => updateTypeField(t.id, 'refresher_months', parseInt(e.target.value) || 12)}
-                          className="border border-gray-200 rounded px-1 py-0.5 text-xs w-12" />
+                          aria-label={`Refresher months for ${t.name}`}
+                          className={INPUT.inline + ' w-14'} />
                         <span className="text-xs text-gray-400">mo</span>
                       </div>
                     </td>
@@ -512,7 +526,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                     </td>
                     <td className={`${TABLE.td} text-xs text-gray-400`}>{t.legislation || '-'}</td>
                     <td className={`${TABLE.td} text-center`}>
-                      <input type="checkbox" checked={t.active} onChange={e => updateTypeField(t.id, 'active', e.target.checked)} />
+                      <input type="checkbox" checked={t.active} onChange={e => updateTypeField(t.id, 'active', e.target.checked)} aria-label={`Active status for ${t.name}`} />
                     </td>
                     <td className={TABLE.td}>
                       {t.id.startsWith('custom-') && (
@@ -523,6 +537,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                 ))}
               </tbody>
             </table>
+            </div>
             <div className="p-3 flex flex-col gap-2">
               {typeError && <p className="text-xs text-red-600">{typeError}</p>}
               <div className="flex gap-2">
@@ -584,8 +599,8 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               Dates can be DD/MM/YYYY or YYYY-MM-DD. Staff and training types are matched by name (case-insensitive).
             </p>
             <div>
-              <label className={INPUT.label}>Select CSV File</label>
-              <input type="file" accept=".csv,.txt" onChange={handleCSVFile}
+              <label htmlFor={csvFileId} className={INPUT.label}>Select CSV File</label>
+              <input id={csvFileId} type="file" accept=".csv,.txt" onChange={handleCSVFile}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
             </div>
           </div>
@@ -639,9 +654,9 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               </table>
             </div>
             <div>
-              <label className="text-xs text-gray-500 cursor-pointer hover:text-blue-600">
+              <label htmlFor={csvDifferentFileId} className="text-xs text-gray-500 cursor-pointer hover:text-blue-600">
                 Choose a different file
-                <input type="file" accept=".csv,.txt" onChange={handleCSVFile} className="hidden" />
+                <input id={csvDifferentFileId} type="file" accept=".csv,.txt" onChange={handleCSVFile} className="hidden" />
               </label>
             </div>
           </div>

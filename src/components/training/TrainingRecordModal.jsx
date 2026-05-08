@@ -1,8 +1,16 @@
 import { useState, useMemo, useEffect, useId } from 'react';
 import { calculateExpiry, TRAINING_METHODS, getRequiredLevel } from '../../lib/training.js';
 import { MODAL, INPUT, BTN } from '../../lib/design.js';
-import { upsertTrainingRecord, deleteTrainingRecord } from '../../lib/api.js';
+import {
+  upsertTrainingRecord,
+  deleteTrainingRecord,
+  getTrainingRecordFiles,
+  uploadTrainingRecordFile,
+  deleteTrainingRecordFile,
+  downloadTrainingRecordFile,
+} from '../../lib/api.js';
 import Modal from '../Modal.jsx';
+import FileAttachments from '../FileAttachments.jsx';
 import { todayLocalISO } from '../../lib/localDates.js';
 import { useConfirm } from '../../hooks/useConfirm.jsx';
 
@@ -44,6 +52,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
 
   const staffMember = staff?.find(s => s.id === staffId);
   const requiredLevel = type && staffMember ? getRequiredLevel(type, staffMember.role) : null;
+  const attachmentCaseId = existing ? `${staffId}::${typeId}` : null;
 
   async function handleSave() {
     if (readOnly || !form.completed) return;
@@ -91,7 +100,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
     <>
     <Modal isOpen={isOpen} onClose={onClose} title={readOnly ? 'View Training Record' : existing ? 'Edit Training' : 'Record Training'} size="lg">
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <p className={INPUT.label}>Staff Member</p>
             <p className="text-sm text-gray-800 font-medium">{staffName}</p>
@@ -101,7 +110,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
             <p className="text-sm text-gray-800 font-medium">{typeName}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor={completedId} className={INPUT.label}>Completion Date</label>
             <input id={completedId} type="date" value={form.completed} onChange={e => setForm({ ...form, completed: e.target.value })} className={INPUT.base} disabled={readOnly} />
@@ -112,7 +121,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
             {type && <p className="text-[10px] text-gray-400 mt-0.5">{type.refresher_months} months from completion</p>}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor={trainerId} className={INPUT.label}>Trainer / Provider</label>
               <input id={trainerId} type="text" value={form.trainer} onChange={e => setForm({ ...form, trainer: e.target.value })}
@@ -156,6 +165,20 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
           <input id={notesId} type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
             disabled={readOnly}
             className={INPUT.base} placeholder="Optional notes" />
+        </div>
+        <div className="border-t pt-3">
+          <FileAttachments
+            caseType="training"
+            caseId={attachmentCaseId}
+            readOnly={readOnly}
+            title="Training Certificate Evidence"
+            emptyText="No training evidence uploaded yet."
+            saveFirstMessage="Save this training record first, then reopen it here to upload certificates or evidence."
+            getFiles={getTrainingRecordFiles}
+            uploadFile={uploadTrainingRecordFile}
+            deleteFile={deleteTrainingRecordFile}
+            downloadFile={downloadTrainingRecordFile}
+          />
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>

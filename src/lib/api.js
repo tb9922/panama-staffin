@@ -1918,6 +1918,36 @@ export async function deleteTrainingRecord(homeSlug, staffId, typeId) {
   });
 }
 
+export async function getTrainingRecordFiles(_caseType, staffIdAndTypeId) {
+  const [staffId, typeId] = String(staffIdAndTypeId).split('::');
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${h(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadTrainingRecordFile(_caseType, staffIdAndTypeId, file, description) {
+  const [staffId, typeId] = String(staffIdAndTypeId).split('::');
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  return uploadFormData(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${h(home)}`, formData, 'Training evidence upload failed');
+}
+
+export async function deleteTrainingRecordFile(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/training/files/${encodeURIComponent(id)}?home=${h(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadTrainingRecordFile(id, originalName) {
+  const home = getCurrentHome();
+  return triggerBrowserDownload(`${API_BASE}/training/files/${encodeURIComponent(id)}/download?home=${h(home)}`, originalName);
+}
+
 export async function updateTrainingTypes(homeSlug, trainingTypes, clientUpdatedAt) {
   return apiFetch(`${API_BASE}/training/config/types?home=${h(homeSlug)}`, {
     method: 'PUT',

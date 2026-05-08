@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { formatDate, parseDate } from '../../lib/rotation.js';
 import {
   getSupervisionStatus, getSupervisionStats, getSupervisionFrequency, isInProbation,
@@ -42,6 +42,15 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
   const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', supervisor: '', topics: '', actions: '', next_due: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const searchId = useId();
+  const teamFilterId = useId();
+  const statusFilterId = useId();
+  const dateId = useId();
+  const supervisorId = useId();
+  const topicsId = useId();
+  const actionsId = useId();
+  const nextDueId = useId();
+  const notesId = useId();
 
   useDirtyGuard(showModal);
 
@@ -181,12 +190,15 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
 
       {/* Filters & export */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <label htmlFor={searchId} className="sr-only">Search staff</label>
+        <input id={searchId} type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
+        <label htmlFor={teamFilterId} className="sr-only">Filter by team</label>
+        <select id={teamFilterId} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
           <option value="All">All Teams</option>
           {TEAMS.map(t => <option key={t}>{t}</option>)}
         </select>
-        <select value={supFilter} onChange={e => setSupFilter(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <label htmlFor={statusFilterId} className="sr-only">Filter by supervision status</label>
+        <select id={statusFilterId} value={supFilter} onChange={e => setSupFilter(e.target.value)} className={`${INPUT.select} w-auto`}>
           <option value="all">All Status</option>
           <option value="overdue">Overdue</option>
           <option value="due_soon">Due Soon</option>
@@ -207,14 +219,14 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
           const freq = getSupervisionFrequency(s, config, today);
           return (
             <div key={s.id} className={CARD.padded}>
-              <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
-                <div>
+              <button type="button" className="flex w-full flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
+                <div className="min-w-0">
                   <span className="font-medium text-gray-900">{s.name}</span>
-                  <span className="ml-2 text-xs text-gray-500">{s.team} · {s.role}</span>
+                  <span className="ml-0 block text-xs text-gray-500 sm:ml-2 sm:inline">{s.team} · {s.role}</span>
                   {probation && <span className={`${BADGE.purple} ml-2`}>Probation</span>}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+                <div className="flex w-full items-start justify-between gap-3 sm:w-auto sm:items-center sm:justify-end">
+                  <div className="text-left sm:text-right">
                     <span className={sb.badge}>{sb.label}</span>
                     <div className="mt-0.5 text-xs text-gray-500">
                       {result.nextDue ? `Due: ${result.nextDue}` : 'No sessions'} · Every {freq}d
@@ -231,6 +243,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
                   {staffSups.length === 0 ? (
                     <div className="text-sm text-gray-400 text-center py-4">No supervision records</div>
                   ) : (
+                    <div className={TABLE.wrapper}>
                     <table className={TABLE.table}>
                       <thead className={TABLE.thead}>
                         <tr>
@@ -257,6 +270,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               )}
@@ -269,34 +283,34 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       {/* Supervision Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={readOnly ? 'View Supervision' : modalData.existing ? 'Edit Supervision' : 'Record Supervision'} size="lg">
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Date</label>
-              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
+              <label htmlFor={dateId} className={INPUT.label}>Date</label>
+              <input id={dateId} type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Supervisor</label>
-              <input type="text" value={modalData.supervisor} onChange={e => setModalData({ ...modalData, supervisor: e.target.value })}
+              <label htmlFor={supervisorId} className={INPUT.label}>Supervisor</label>
+              <input id={supervisorId} type="text" value={modalData.supervisor} onChange={e => setModalData({ ...modalData, supervisor: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Supervisor name" />
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Topics Discussed</label>
-            <textarea value={modalData.topics} onChange={e => setModalData({ ...modalData, topics: e.target.value })}
+            <label htmlFor={topicsId} className={INPUT.label}>Topics Discussed</label>
+            <textarea id={topicsId} value={modalData.topics} onChange={e => setModalData({ ...modalData, topics: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-20 resize-none`} placeholder="Key topics covered in the session..." />
           </div>
           <div>
-            <label className={INPUT.label}>Actions Agreed</label>
-            <textarea value={modalData.actions} onChange={e => setModalData({ ...modalData, actions: e.target.value })}
+            <label htmlFor={actionsId} className={INPUT.label}>Actions Agreed</label>
+            <textarea id={actionsId} value={modalData.actions} onChange={e => setModalData({ ...modalData, actions: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-20 resize-none`} placeholder="Action items agreed upon..." />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Next Due (auto)</label>
-              <input type="date" value={modalData.existing ? modalData.next_due : supNextDue}
+              <label htmlFor={nextDueId} className={INPUT.label}>Next Due (auto)</label>
+              <input id={nextDueId} type="date" value={modalData.existing ? modalData.next_due : supNextDue}
                 onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} disabled={readOnly} />
               {!modalData.existing && modalData.staffId && (() => {
                 const s = activeStaff.find(x => x.id === modalData.staffId);
@@ -307,8 +321,8 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
               })()}
             </div>
             <div>
-              <label className={INPUT.label}>Notes</label>
-              <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+              <label htmlFor={notesId} className={INPUT.label}>Notes</label>
+              <input id={notesId} type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Optional notes" />
             </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { parseDate } from '../../lib/rotation.js';
 import { getFireDrillStatus } from '../../lib/training.js';
 import FileAttachments from '../FileAttachments.jsx';
@@ -25,6 +25,16 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
   const [modalData, setModalData] = useState({ id: '', date: '', time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const dateId = useId();
+  const timeId = useId();
+  const evacuationTimeId = useId();
+  const scenarioId = useId();
+  const residentsEvacuatedId = useId();
+  const conductedById = useId();
+  const staffPresentId = useId();
+  const issuesId = useId();
+  const correctiveActionsId = useId();
+  const notesId = useId();
 
   useDirtyGuard(showModal);
 
@@ -142,9 +152,9 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
       </div>
 
       {/* Action Bar */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs text-gray-400">{drillsList.length} drill{drillsList.length !== 1 ? 's' : ''} recorded</span>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
           {!readOnly && <button onClick={() => openModal(null)} className={BTN.primary}>Record Fire Drill</button>}
         </div>
@@ -157,6 +167,7 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
         </div>
       ) : (
         <div className={CARD.flush}>
+          <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
@@ -193,53 +204,54 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {/* Fire Drill Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={readOnly ? 'View Fire Drill' : modalData.existing ? 'Edit Fire Drill' : 'Record Fire Drill'} size="lg">
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className={INPUT.label}>Date</label>
-              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
+              <label htmlFor={dateId} className={INPUT.label}>Date</label>
+              <input id={dateId} type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Time</label>
-              <input type="time" value={modalData.time} onChange={e => setModalData({ ...modalData, time: e.target.value })} className={INPUT.base} disabled={readOnly} />
+              <label htmlFor={timeId} className={INPUT.label}>Time</label>
+              <input id={timeId} type="time" value={modalData.time} onChange={e => setModalData({ ...modalData, time: e.target.value })} className={INPUT.base} disabled={readOnly} />
             </div>
             <div>
-              <label className={INPUT.label}>Evacuation Time (seconds)</label>
-              <input type="number" min="0" value={modalData.evacuation_time_seconds}
+              <label htmlFor={evacuationTimeId} className={INPUT.label}>Evacuation Time (seconds)</label>
+              <input id={evacuationTimeId} type="number" min="0" value={modalData.evacuation_time_seconds}
                 onChange={e => setModalData({ ...modalData, evacuation_time_seconds: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="e.g. 240" />
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Scenario</label>
-            <textarea value={modalData.scenario} onChange={e => setModalData({ ...modalData, scenario: e.target.value })}
+            <label htmlFor={scenarioId} className={INPUT.label}>Scenario</label>
+            <textarea id={scenarioId} value={modalData.scenario} onChange={e => setModalData({ ...modalData, scenario: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-16 resize-none`} placeholder="e.g. Kitchen fire — full evacuation" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Residents Evacuated</label>
-              <input type="number" min="0" value={modalData.residents_evacuated}
+              <label htmlFor={residentsEvacuatedId} className={INPUT.label}>Residents Evacuated</label>
+              <input id={residentsEvacuatedId} type="number" min="0" value={modalData.residents_evacuated}
                 onChange={e => setModalData({ ...modalData, residents_evacuated: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Number" />
             </div>
             <div>
-              <label className={INPUT.label}>Conducted By</label>
-              <input type="text" value={modalData.conducted_by} onChange={e => setModalData({ ...modalData, conducted_by: e.target.value })}
+              <label htmlFor={conductedById} className={INPUT.label}>Conducted By</label>
+              <input id={conductedById} type="text" value={modalData.conducted_by} onChange={e => setModalData({ ...modalData, conducted_by: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Fire Marshal name" />
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Staff Present ({modalData.staff_present.length} selected)</label>
-            <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+            <span id={staffPresentId} className={INPUT.label}>Staff Present ({modalData.staff_present.length} selected)</span>
+            <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1" role="group" aria-labelledby={staffPresentId}>
               {activeStaff.map(s => (
                 <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 px-1.5 py-0.5 rounded">
                   <input type="checkbox" checked={modalData.staff_present.includes(s.id)} onChange={() => toggleDrillStaff(s.id)} disabled={readOnly} />
@@ -250,20 +262,20 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Issues Identified</label>
-            <textarea value={modalData.issues} onChange={e => setModalData({ ...modalData, issues: e.target.value })}
+            <label htmlFor={issuesId} className={INPUT.label}>Issues Identified</label>
+            <textarea id={issuesId} value={modalData.issues} onChange={e => setModalData({ ...modalData, issues: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-16 resize-none`} placeholder="Any issues observed during the drill..." />
           </div>
           <div>
-            <label className={INPUT.label}>Corrective Actions</label>
-            <textarea value={modalData.corrective_actions} onChange={e => setModalData({ ...modalData, corrective_actions: e.target.value })}
+            <label htmlFor={correctiveActionsId} className={INPUT.label}>Corrective Actions</label>
+            <textarea id={correctiveActionsId} value={modalData.corrective_actions} onChange={e => setModalData({ ...modalData, corrective_actions: e.target.value })}
               disabled={readOnly}
               className={`${INPUT.base} h-16 resize-none`} placeholder="Actions taken to address issues..." />
           </div>
           <div>
-            <label className={INPUT.label}>Notes</label>
-            <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+            <label htmlFor={notesId} className={INPUT.label}>Notes</label>
+            <input id={notesId} type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
               disabled={readOnly}
               className={INPUT.base} placeholder="Optional notes" />
           </div>
