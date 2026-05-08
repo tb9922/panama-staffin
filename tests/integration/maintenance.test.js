@@ -135,6 +135,26 @@ describe('Maintenance: optimistic locking', () => {
     );
     expect(result).toBeNull();
   });
+
+  it('increments version on upsert conflict', async () => {
+    const id = 'mnt-upsert-version';
+    const first = await maintenanceRepo.upsert(homeA, {
+      id,
+      category: 'PAT',
+      description: 'Versioned maintenance check A',
+    });
+    ids.push(id);
+
+    const second = await maintenanceRepo.upsert(homeA, {
+      id,
+      category: 'PAT',
+      description: 'Versioned maintenance check B',
+    });
+
+    expect(first.version).toBe(1);
+    expect(second.version).toBe(2);
+    expect(second.description).toBe('Versioned maintenance check B');
+  });
 });
 
 // ── Pagination ───────────────────────────────────────────────────────────────
@@ -190,5 +210,49 @@ describe('Maintenance: soft delete', () => {
   it('returns false for non-existent record', async () => {
     const deleted = await maintenanceRepo.softDelete('nonexistent-id', homeA);
     expect(deleted).toBe(false);
+  });
+});
+
+describe('Maintenance: sync safety', () => {
+  it('does not soft-delete every maintenance check when sync receives an empty array', async () => {
+    const first = await maintenanceRepo.upsert(homeA, {
+      id: 'mnt-empty-sync-a',
+      category: 'PAT',
+      description: 'Empty sync maintenance A',
+    });
+    const second = await maintenanceRepo.upsert(homeA, {
+      id: 'mnt-empty-sync-b',
+      category: 'Gas Safety',
+      description: 'Empty sync maintenance B',
+    });
+    ids.push(first.id, second.id);
+
+    await maintenanceRepo.sync(homeA, []);
+
+    expect(await maintenanceRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await maintenanceRepo.findById(second.id, homeA)).not.toBeNull();
+  });
+
+  it('does not soft-delete omitted maintenance checks from partial legacy sync payloads', async () => {
+    const first = await maintenanceRepo.upsert(homeA, {
+      id: 'mnt-partial-sync-a',
+      category: 'PAT',
+      description: 'Partial sync maintenance A',
+    });
+    const second = await maintenanceRepo.upsert(homeA, {
+      id: 'mnt-partial-sync-b',
+      category: 'Gas Safety',
+      description: 'Partial sync maintenance B',
+    });
+    ids.push(first.id, second.id);
+
+    await maintenanceRepo.sync(homeA, [{
+      id: first.id,
+      category: 'PAT',
+      description: 'Partial sync maintenance A updated',
+    }]);
+
+    expect(await maintenanceRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await maintenanceRepo.findById(second.id, homeA)).not.toBeNull();
   });
 });

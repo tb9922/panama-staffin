@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import MaintenanceTracker from '../MaintenanceTracker.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
@@ -80,10 +81,11 @@ const MOCK_MAINTENANCE_RESPONSE = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function renderAdmin() {
+function renderAdmin(options = {}) {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<MaintenanceTracker />, {
     user: { username: 'admin', role: 'admin' },
+    ...options,
   });
 }
 
@@ -97,7 +99,9 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getMaintenance.mockResolvedValue(MOCK_MAINTENANCE_RESPONSE);
 });
 
@@ -133,6 +137,23 @@ describe('MaintenanceTracker', () => {
     await waitFor(() => {
       expect(screen.getByText('Maintenance & Environment')).toBeInTheDocument();
     });
+  });
+
+  it('loads the active home instead of a stale stored home', async () => {
+    api.getCurrentHome.mockReturnValue('old-home');
+    renderAdmin({ activeHome: 'new-home' });
+    await waitFor(() => {
+      expect(api.getMaintenance).toHaveBeenCalledWith('new-home');
+    });
+  });
+
+  it('shows a no-home state instead of hanging on the loading screen', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderAdmin({ activeHome: '' });
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+    });
+    expect(api.getMaintenance).not.toHaveBeenCalled();
   });
 
   it('shows stat cards with correct labels', async () => {
@@ -201,6 +222,41 @@ describe('MaintenanceTracker', () => {
     await waitFor(() => {
       expect(screen.getByText('No maintenance checks recorded')).toBeInTheDocument();
     });
+  });
+
+  it('falls back to default maintenance categories when home config is empty', async () => {
+    const user = userEvent.setup();
+    api.getMaintenance.mockResolvedValue({ checks: [], maintenanceCategories: [] });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Add Check/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Add Check/i }));
+    const dialog = within(screen.getByRole('dialog', { name: /Add Maintenance Check/i }));
+    expect(dialog.getByRole('option', { name: 'PAT Testing' })).toBeInTheDocument();
+  });
+
+  it('labels filters and required form fields', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Filter maintenance by category/i)).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/Filter maintenance by status/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Add Check/i }));
+
+    const dialog = within(screen.getByRole('dialog', { name: /Add Maintenance Check/i }));
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toBeDisabled();
+
+    await user.selectOptions(dialog.getByLabelText(/Category/i), 'pat');
+    await user.type(dialog.getByLabelText(/Description/i), 'PAT safety check');
+    expect(dialog.getByLabelText(/Last Completed/i)).toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
   });
 
   it('Export Excel button is present for all users', async () => {

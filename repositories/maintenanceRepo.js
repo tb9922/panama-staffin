@@ -21,7 +21,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM maintenance
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY category LIMIT $2 OFFSET $3`,
+     ORDER BY next_due ASC NULLS LAST, category ASC, id DESC LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
@@ -30,8 +30,8 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function sync(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
-  const incomingIds = arr.map(m => m.id);
+  // Legacy sync payloads can be partial/capped. Deletions go through softDelete().
+  if (!arr || arr.length === 0) return;
 
   // Batch upsert — 14 per-row params (id + 12 fields + notes; homeId=$1, updated_at=NOW())
   const COLS_PER_ROW = 14;
@@ -76,19 +76,12 @@ export async function sync(homeId, arr, client) {
          certificate_expiry = EXCLUDED.certificate_expiry,
          notes              = EXCLUDED.notes,
          updated_at         = NOW(),
+         version            = maintenance.version + 1,
          deleted_at         = NULL`,
       [homeId, ...values]
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE maintenance SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(`UPDATE maintenance SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
-  }
 }
 
 // ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
@@ -117,7 +110,7 @@ export async function upsert(homeId, data, client) {
      ON CONFLICT (home_id, id) DO UPDATE SET
        category=$3,description=$4,frequency=$5,last_completed=$6,next_due=$7,
        completed_by=$8,contractor=$9,items_checked=$10,items_passed=$11,items_failed=$12,
-       certificate_ref=$13,certificate_expiry=$14,notes=$15,updated_at=$16,deleted_at=NULL
+       certificate_ref=$13,certificate_expiry=$14,notes=$15,updated_at=$16,version=maintenance.version + 1,deleted_at=NULL
      RETURNING ${COLS}`,
     [
       id, homeId, data.category || null, data.description || null, data.frequency || null,

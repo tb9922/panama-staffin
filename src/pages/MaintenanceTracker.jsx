@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, addDays, parseDate } from '../lib/rotation.js';
@@ -35,7 +35,7 @@ function focusField(id) {
 }
 
 export default function MaintenanceTracker() {
-  const { canWrite, isScanTargetEnabled } = useData();
+  const { canWrite, isScanTargetEnabled, activeHome } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const [checks, setChecks] = useState([]);
@@ -45,21 +45,37 @@ export default function MaintenanceTracker() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState(null);
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  const fieldPrefix = useId();
 
-  useDirtyGuard(showModal);
+  const isDirty = showModal && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
-  const home = getCurrentHome();
+  const storedHome = getCurrentHome();
+  const home = activeHome || storedHome;
+  const fieldId = (name) => `${fieldPrefix}-${name}`;
 
   const load = useCallback(async () => {
+    if (!home) {
+      setChecks([]);
+      setMaintenanceCategories(DEFAULT_MAINTENANCE_CATEGORIES);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       setError(null);
       const result = await getMaintenance(home);
-      setChecks(result.checks || []);
-      setMaintenanceCategories(result.maintenanceCategories || DEFAULT_MAINTENANCE_CATEGORIES);
+      const categories = Array.isArray(result.maintenanceCategories) && result.maintenanceCategories.length > 0
+        ? result.maintenanceCategories
+        : DEFAULT_MAINTENANCE_CATEGORIES;
+      setChecks(Array.isArray(result.checks) ? result.checks : []);
+      setMaintenanceCategories(categories);
     } catch (err) {
       setError(err.message || 'Failed to load maintenance checks');
     } finally {
@@ -88,18 +104,32 @@ export default function MaintenanceTracker() {
     return list;
   }, [checks, filterCategory, filterStatus, today]);
 
+  const categoryName = useCallback((item) => {
+    const cat = maintenanceCategories.find(c => c.id === item.category);
+    return item.category_name || cat?.name || item.category || '-';
+  }, [maintenanceCategories]);
+
   function openAdd() {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM });
+    const nextForm = { ...EMPTY_FORM };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditingId(item.id);
-    setForm({ ...EMPTY_FORM, ...item, _version: item.version });
+    const nextForm = { ...EMPTY_FORM, ...item, _version: item.version };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setFormBaseline(null);
   }
 
   function updateFormWithNextDue(patch) {
@@ -114,9 +144,18 @@ export default function MaintenanceTracker() {
   }
 
   async function handleSave() {
+    if (!home) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
     if (!form.category) {
       setSaveError('Category is required.');
       focusField('maintenance-category');
+      return;
+    }
+    if (!form.description.trim()) {
+      setSaveError('Description is required.');
+      focusField(fieldId('maintenance-description'));
       return;
     }
     const catDef = maintenanceCategories.find(c => c.id === form.category);
@@ -137,7 +176,7 @@ export default function MaintenanceTracker() {
         await createMaintenanceCheck(home, saveItem);
       }
       showNotice(editingId ? 'Maintenance record updated.' : 'Maintenance record added.');
-      setShowModal(false);
+      closeModal();
       await load();
     } catch (err) {
       setSaveError(err.message || 'Failed to save maintenance check');
@@ -149,7 +188,8 @@ export default function MaintenanceTracker() {
     if (!await confirm('Delete this maintenance record?')) return;
     try {
       await deleteMaintenanceCheck(home, editingId);
-      setShowModal(false);
+      closeModal();
+      showNotice('Maintenance record deleted.', { variant: 'warning' });
       await load();
     } catch (err) {
       setSaveError(err.message || 'Failed to delete maintenance check');
@@ -158,7 +198,7 @@ export default function MaintenanceTracker() {
 
   function handleExport() {
     const rows = items.map(m => [
-      m.category_name || m.category,
+      categoryName(m),
       m.description || '',
       FREQUENCY_OPTIONS.find(f => f.id === m.frequency)?.name || m.frequency,
       m.last_completed || '',
@@ -186,20 +226,31 @@ export default function MaintenanceTracker() {
   };
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading maintenance checks..." /></div>;
-  if (error) return <div className={PAGE.container}><ErrorState title="Unable to load maintenance checks" message={error} onRetry={load} /></div>;
+  if (error && checks.length === 0) return <div className={PAGE.container}><ErrorState title="Unable to load maintenance checks" message={error} onRetry={load} /></div>;
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening maintenance checks."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>Maintenance & Environment</h1>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
           {canEdit && isScanTargetEnabled('maintenance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
-          {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
+          {canEdit && <button type="button" onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
         </div>
       </div>
 
       {notice && <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
+      {error && <ErrorState title="Maintenance checks need attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -229,11 +280,21 @@ export default function MaintenanceTracker() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
+        <select
+          aria-label="Filter maintenance by category"
+          value={filterCategory}
+          onChange={e => setFilterCategory(e.target.value)}
+          className={`${INPUT.select} ${INPUT.sm}`}
+        >
           <option value="">All Categories</option>
           {maintenanceCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
+        <select
+          aria-label="Filter maintenance by status"
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          className={`${INPUT.select} ${INPUT.sm}`}
+        >
           <option value="">All Statuses</option>
           {MAINTENANCE_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -241,7 +302,7 @@ export default function MaintenanceTracker() {
 
       {/* Table */}
       <div className={CARD.flush}>
-        <div className="overflow-x-auto">
+        <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
@@ -261,7 +322,7 @@ export default function MaintenanceTracker() {
               {items.map(m => (
                 <tr key={m.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
-                    <div className="text-sm font-medium">{m.category_name || m.category}</div>
+                    <div className="text-sm font-medium">{categoryName(m)}</div>
                     {m.description && <div className="text-xs text-gray-400 max-w-xs truncate">{m.description}</div>}
                   </td>
                   <td className={TABLE.td}>{FREQUENCY_OPTIONS.find(f => f.id === m.frequency)?.name || m.frequency}</td>
@@ -273,7 +334,16 @@ export default function MaintenanceTracker() {
                   </td>
                   <td className={TABLE.td}>{m.certificate_ref || '--'}</td>
                   <td className={TABLE.td}>
-                    {canEdit && <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => openEdit(m)}
+                        className={`${BTN.ghost} ${BTN.xs}`}
+                        aria-label={`Edit maintenance check ${categoryName(m)}${m.description ? ` ${m.description}` : ''}`}
+                      >
+                        Edit
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -283,12 +353,12 @@ export default function MaintenanceTracker() {
       </div>
 
       {/* Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Maintenance Check' : 'Add Maintenance Check'} size="lg">
+      <Modal isOpen={showModal} onClose={closeModal} title={editingId ? 'Edit Maintenance Check' : 'Add Maintenance Check'} size="lg">
 
             <div className="max-h-[60vh] overflow-y-auto space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Category</label>
+                  <label htmlFor="maintenance-category" className={INPUT.label}>Category *</label>
                   <select id="maintenance-category" value={form.category} onChange={e => {
                     const cat = maintenanceCategories.find(c => c.id === e.target.value);
                     updateFormWithNextDue({
@@ -302,8 +372,8 @@ export default function MaintenanceTracker() {
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Frequency</label>
-                  <select value={form.frequency} onChange={e => updateFormWithNextDue({ frequency: e.target.value })}
+                  <label htmlFor={fieldId('maintenance-frequency')} className={INPUT.label}>Frequency</label>
+                  <select id={fieldId('maintenance-frequency')} value={form.frequency} onChange={e => updateFormWithNextDue({ frequency: e.target.value })}
                     className={INPUT.select}>
                     {FREQUENCY_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
@@ -311,71 +381,71 @@ export default function MaintenanceTracker() {
               </div>
 
               <div>
-                <label className={INPUT.label}>Description</label>
-                <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                <label htmlFor={fieldId('maintenance-description')} className={INPUT.label}>Description *</label>
+                <input id={fieldId('maintenance-description')} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
                   className={INPUT.base} placeholder="e.g. Annual PAT test for all portable appliances" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Last Completed</label>
-                  <input type="date" value={form.last_completed}
+                  <label htmlFor={fieldId('maintenance-last-completed')} className={INPUT.label}>Last Completed</label>
+                  <input id={fieldId('maintenance-last-completed')} type="date" value={form.last_completed}
                     onChange={e => updateFormWithNextDue({ last_completed: e.target.value })} className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Next Due (auto-calculated)</label>
-                  <input type="date" value={form.next_due}
+                  <label htmlFor={fieldId('maintenance-next-due')} className={INPUT.label}>Next Due (auto-calculated)</label>
+                  <input id={fieldId('maintenance-next-due')} type="date" value={form.next_due}
                     onChange={e => setForm({ ...form, next_due: e.target.value })} className={INPUT.base} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Completed By</label>
-                  <input value={form.completed_by} onChange={e => setForm({ ...form, completed_by: e.target.value })}
+                  <label htmlFor={fieldId('maintenance-completed-by')} className={INPUT.label}>Completed By</label>
+                  <input id={fieldId('maintenance-completed-by')} value={form.completed_by} onChange={e => setForm({ ...form, completed_by: e.target.value })}
                     className={INPUT.base} placeholder="Engineer / staff name" />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Contractor</label>
-                  <input value={form.contractor} onChange={e => setForm({ ...form, contractor: e.target.value })}
+                  <label htmlFor={fieldId('maintenance-contractor')} className={INPUT.label}>Contractor</label>
+                  <input id={fieldId('maintenance-contractor')} value={form.contractor} onChange={e => setForm({ ...form, contractor: e.target.value })}
                     className={INPUT.base} placeholder="Company name" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className={INPUT.label}>Items Checked</label>
-                  <input type="number" value={form.items_checked}
+                  <label htmlFor={fieldId('maintenance-items-checked')} className={INPUT.label}>Items Checked</label>
+                  <input id={fieldId('maintenance-items-checked')} type="number" inputMode="numeric" value={form.items_checked}
                     onChange={e => setForm({ ...form, items_checked: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })} className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Items Passed</label>
-                  <input type="number" value={form.items_passed}
+                  <label htmlFor={fieldId('maintenance-items-passed')} className={INPUT.label}>Items Passed</label>
+                  <input id={fieldId('maintenance-items-passed')} type="number" inputMode="numeric" value={form.items_passed}
                     onChange={e => setForm({ ...form, items_passed: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })} className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Items Failed</label>
-                  <input type="number" value={form.items_failed}
+                  <label htmlFor={fieldId('maintenance-items-failed')} className={INPUT.label}>Items Failed</label>
+                  <input id={fieldId('maintenance-items-failed')} type="number" inputMode="numeric" value={form.items_failed}
                     onChange={e => setForm({ ...form, items_failed: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })} className={INPUT.base} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Certificate Ref</label>
-                  <input value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}
+                  <label htmlFor={fieldId('maintenance-certificate-ref')} className={INPUT.label}>Certificate Ref</label>
+                  <input id={fieldId('maintenance-certificate-ref')} value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}
                     className={INPUT.base} placeholder="e.g. PAT-2026-001" />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Certificate Expiry</label>
-                  <input type="date" value={form.certificate_expiry}
+                  <label htmlFor={fieldId('maintenance-certificate-expiry')} className={INPUT.label}>Certificate Expiry</label>
+                  <input id={fieldId('maintenance-certificate-expiry')} type="date" value={form.certificate_expiry}
                     onChange={e => setForm({ ...form, certificate_expiry: e.target.value })} className={INPUT.base} />
                 </div>
               </div>
 
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+                <label htmlFor={fieldId('maintenance-notes')} className={INPUT.label}>Notes</label>
+                <textarea id={fieldId('maintenance-notes')} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
                   className={INPUT.base} rows={2} />
               </div>
 
@@ -407,12 +477,12 @@ export default function MaintenanceTracker() {
               </div>
             </div>
 
-            <div className={MODAL.footer}>
-              {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+            <div className={`${MODAL.footer} flex-wrap`}>
+              {canEdit && editingId && <button type="button" onClick={handleDelete} className={BTN.danger}>Delete</button>}
             {saveError && <InlineNotice variant="error" className="mr-auto">{saveError}</InlineNotice>}
               <div className="flex-1" />
-              <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}
+              <button type="button" onClick={closeModal} className={BTN.secondary}>Cancel</button>
+              {canEdit && <button type="button" onClick={handleSave} disabled={!form.category || !form.description.trim()} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
       {ConfirmDialog}
