@@ -215,6 +215,28 @@ describe('Onboarding: route RBAC and audit redaction', () => {
     expect(hrRes.body.summary.total_documents).toBeGreaterThanOrEqual(2);
   });
 
+  it('deletes onboarding attachments without colliding with section routes', async () => {
+    const { rows: [attachment] } = await pool.query(
+      `INSERT INTO onboarding_file_attachments
+         (home_id, staff_id, section, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+       VALUES ($1, 'ONB-S001', 'dbs_check', 'delete-route.pdf', 'delete-route.pdf', 'application/pdf', 10, NULL, 'test')
+       RETURNING id`,
+      [homeA],
+    );
+
+    await request(app)
+      .delete(`/api/onboarding/files/${attachment.id}`)
+      .query({ home: 'onb-test-a' })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const { rows: [deleted] } = await pool.query(
+      `SELECT deleted_at FROM onboarding_file_attachments WHERE id = $1`,
+      [attachment.id],
+    );
+    expect(deleted.deleted_at).not.toBeNull();
+  });
+
   it('scopes scan inbox reads by target permissions', async () => {
     const sha = 'a'.repeat(64);
     const { rows: [item] } = await pool.query(

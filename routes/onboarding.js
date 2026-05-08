@@ -231,24 +231,6 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
   } catch (err) { next(err); }
 });
 
-// DELETE /api/onboarding/:staffId/:section?home=X — clear section data
-router.delete('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAccess, requireOnboardingAccess('write'), async (req, res, next) => {
-  try {
-    const staffIdParsed = staffIdSchema.safeParse(req.params.staffId);
-    const sectionParsed = sectionSchema.safeParse(req.params.section);
-    if (!staffIdParsed.success || !sectionParsed.success) {
-      return res.status(400).json({ error: 'Invalid staffId or section' });
-    }
-    const accessError = requireOnboardingSectionAccess(req, res, sectionParsed.data);
-    if (accessError) return accessError;
-    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
-    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
-    await onboardingRepo.clearSection(req.home.id, staffIdParsed.data, sectionParsed.data);
-    await auditService.log('onboarding_clear', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data });
-    res.json({ ok: true });
-  } catch (err) { next(err); }
-});
-
 // --- File attachment routes (static prefix first to avoid /:staffId/:section collision) ---
 
 router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireOnboardingAccess('read'), async (req, res, next) => {
@@ -296,6 +278,24 @@ router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
       staffId: deleted.staffId,
       section: deleted.section,
     });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/onboarding/:staffId/:section?home=X — clear section data
+router.delete('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAccess, requireOnboardingAccess('write'), async (req, res, next) => {
+  try {
+    const staffIdParsed = staffIdSchema.safeParse(req.params.staffId);
+    const sectionParsed = sectionSchema.safeParse(req.params.section);
+    if (!staffIdParsed.success || !sectionParsed.success) {
+      return res.status(400).json({ error: 'Invalid staffId or section' });
+    }
+    const accessError = requireOnboardingSectionAccess(req, res, sectionParsed.data);
+    if (accessError) return accessError;
+    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+    await onboardingRepo.clearSection(req.home.id, staffIdParsed.data, sectionParsed.data);
+    await auditService.log('onboarding_clear', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
