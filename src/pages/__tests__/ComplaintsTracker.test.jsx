@@ -106,6 +106,8 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getComplaints.mockResolvedValue(MOCK_RESPONSE);
 });
@@ -127,6 +129,20 @@ describe('ComplaintsTracker', () => {
     api.getComplaints.mockReturnValue(new Promise(() => {}));
     renderAdmin();
     expect(screen.getByText('Loading complaints...')).toBeInTheDocument();
+  });
+
+  it('shows a no-home state instead of calling the complaints API', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<ComplaintsTracker />, {
+      user: { username: 'admin', role: 'admin' },
+      activeHome: '',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+      expect(screen.getByText('Select a home before opening complaints and feedback.')).toBeInTheDocument();
+    });
+    expect(api.getComplaints).not.toHaveBeenCalled();
   });
 
   it('shows error message when API call fails', async () => {
@@ -257,5 +273,59 @@ describe('ComplaintsTracker', () => {
       expect(screen.getByRole('button', { name: /View Complaints/i })).toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: /Add Survey/i })).not.toBeInTheDocument();
+  });
+
+  it('omits frozen legacy complaint improvement fields from new complaints', async () => {
+    const user = userEvent.setup();
+    api.getComplaints.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      legacyActionFreeze: true,
+    });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Log Complaint/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Log Complaint/i }));
+    await user.type(screen.getByLabelText('Title'), 'Noise at night');
+    await user.click(screen.getByRole('tab', { name: 'Resolution' }));
+
+    expect(screen.getByLabelText('Improvements Made')).toBeDisabled();
+    expect(screen.getByText(/Legacy improvement actions are read-only/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(api.createComplaint).toHaveBeenCalled();
+    });
+    expect(api.createComplaint.mock.calls.at(-1)[1]).not.toHaveProperty('improvements');
+  });
+
+  it('omits frozen legacy survey action fields from new surveys', async () => {
+    const user = userEvent.setup();
+    api.getComplaints.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      legacyActionFreeze: true,
+    });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /View Surveys/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /View Surveys/i }));
+    await user.click(screen.getByRole('button', { name: /Add Survey/i }));
+    await user.type(screen.getByLabelText('Title'), 'Family feedback sweep');
+
+    expect(screen.getByLabelText('Actions from Feedback')).toBeDisabled();
+    expect(screen.getByText(/Legacy survey action fields are read-only/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(api.createComplaintSurvey).toHaveBeenCalled();
+    });
+    expect(api.createComplaintSurvey.mock.calls.at(-1)[1]).not.toHaveProperty('actions');
   });
 });

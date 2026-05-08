@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -49,20 +49,44 @@ const EMPTY_SURVEY = {
 // The dedicated endpoint does not return this setting; default to 28 days (Reg 16 standard).
 const COMPLAINT_CONFIG = { complaint_response_days: 28 };
 
+function sameForm(a, b) {
+  return JSON.stringify(a || {}) === JSON.stringify(b || {});
+}
+
+function writableComplaintPayload(form, legacyActionFreeze) {
+  if (!legacyActionFreeze) return form;
+  const payload = { ...form };
+  delete payload.improvements;
+  return payload;
+}
+
+function writableSurveyPayload(form, legacyActionFreeze) {
+  if (!legacyActionFreeze) return form;
+  const payload = { ...form };
+  delete payload.actions;
+  return payload;
+}
+
 export default function ComplaintsTracker() {
-  const { canWrite, activeHomeObj, homeRole } = useData();
+  const { canWrite, activeHome, activeHomeObj, homeRole } = useData();
   const canEdit = canWrite('compliance') && homeRole !== 'training_lead';
   const bankHolidays = useMemo(() => activeHomeObj?.config?.bank_holidays || [], [activeHomeObj]);
   const { confirm, ConfirmDialog } = useConfirm();
+  const complaintFormPrefix = useId();
+  const surveyFormPrefix = useId();
+  const complaintFieldId = (suffix) => `${complaintFormPrefix}-${suffix}`;
+  const surveyFieldId = (suffix) => `${surveyFormPrefix}-${suffix}`;
   const [complaints, setComplaints] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [complaintCategories, setComplaintCategories] = useState([]);
+  const [legacyActionFreeze, setLegacyActionFreeze] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -70,19 +94,30 @@ export default function ComplaintsTracker() {
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [editingSurveyId, setEditingSurveyId] = useState(null);
   const [surveyForm, setSurveyForm] = useState({ ...EMPTY_SURVEY });
+  const [surveyBaseline, setSurveyBaseline] = useState({ ...EMPTY_SURVEY });
   const [viewMode, setViewMode] = useState('complaints');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [surveyError, setSurveyError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
 
-  useDirtyGuard(showModal || showSurveyModal);
+  useDirtyGuard((showModal && !sameForm(form, formBaseline)) || (showSurveyModal && !sameForm(surveyForm, surveyBaseline)));
 
-  const home = getCurrentHome();
+  const storedHome = getCurrentHome();
+  const home = activeHome || storedHome;
 
   useEffect(() => {
     let cancelled = false;
     async function loadData() {
+      if (!home) {
+        setComplaints([]);
+        setSurveys([]);
+        setComplaintCategories(DEFAULT_COMPLAINT_CATEGORIES);
+        setLegacyActionFreeze(false);
+        setError(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -93,6 +128,7 @@ export default function ComplaintsTracker() {
         setComplaintCategories(
           result.complaintCategories?.length ? result.complaintCategories : DEFAULT_COMPLAINT_CATEGORIES
         );
+        setLegacyActionFreeze(Boolean(result.legacyActionFreeze));
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load complaints');
       } finally {
@@ -104,6 +140,15 @@ export default function ComplaintsTracker() {
   }, [home]);
 
   function load() {
+    if (!home) {
+      setComplaints([]);
+      setSurveys([]);
+      setComplaintCategories(DEFAULT_COMPLAINT_CATEGORIES);
+      setLegacyActionFreeze(false);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     getComplaints(home)
@@ -113,6 +158,7 @@ export default function ComplaintsTracker() {
         setComplaintCategories(
           result.complaintCategories?.length ? result.complaintCategories : DEFAULT_COMPLAINT_CATEGORIES
         );
+        setLegacyActionFreeze(Boolean(result.legacyActionFreeze));
       })
       .catch(err => setError(err.message || 'Failed to load complaints'))
       .finally(() => setLoading(false));
@@ -179,7 +225,9 @@ export default function ComplaintsTracker() {
   function openAdd() {
     setEditingId(null);
     const deadline = getComplaintResponseDeadline(today, COMPLAINT_CONFIG.complaint_response_days, bankHolidays);
-    setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
+    const nextForm = { ...EMPTY_FORM, date: today, response_deadline: deadline };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -187,7 +235,9 @@ export default function ComplaintsTracker() {
 
   function openEdit(item) {
     setEditingId(item.id);
-    setForm({ ...EMPTY_FORM, ...item, _version: item.version });
+    const nextForm = { ...EMPTY_FORM, ...item, _version: item.version };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -200,10 +250,11 @@ export default function ComplaintsTracker() {
     setSaving(true);
     try {
       if (editingId) {
-        await updateComplaint(home, editingId, form);
+        await updateComplaint(home, editingId, writableComplaintPayload(form, legacyActionFreeze));
         showNotice('Complaint updated.');
       } else {
-        await createComplaint(home, { ...form, reported_by: getLoggedInUser()?.username || 'admin' });
+        const payload = writableComplaintPayload(form, legacyActionFreeze);
+        await createComplaint(home, { ...payload, reported_by: getLoggedInUser()?.username || 'admin' });
         showNotice('Complaint logged.');
       }
       setShowModal(false);
@@ -231,14 +282,18 @@ export default function ComplaintsTracker() {
 
   function openAddSurvey() {
     setEditingSurveyId(null);
-    setSurveyForm({ ...EMPTY_SURVEY, date: today });
+    const nextForm = { ...EMPTY_SURVEY, date: today };
+    setSurveyForm(nextForm);
+    setSurveyBaseline(nextForm);
     setSurveyError(null);
     setShowSurveyModal(true);
   }
 
   function openEditSurvey(item) {
     setEditingSurveyId(item.id);
-    setSurveyForm({ ...EMPTY_SURVEY, ...item, _version: item.version });
+    const nextForm = { ...EMPTY_SURVEY, ...item, _version: item.version };
+    setSurveyForm(nextForm);
+    setSurveyBaseline(nextForm);
     setSurveyError(null);
     setShowSurveyModal(true);
   }
@@ -250,10 +305,10 @@ export default function ComplaintsTracker() {
     setSaving(true);
     try {
       if (editingSurveyId) {
-        await updateComplaintSurvey(home, editingSurveyId, { ...surveyForm, _version: surveyForm._version });
+        await updateComplaintSurvey(home, editingSurveyId, { ...writableSurveyPayload(surveyForm, legacyActionFreeze), _version: surveyForm._version });
         showNotice('Survey updated.');
       } else {
-        await createComplaintSurvey(home, surveyForm);
+        await createComplaintSurvey(home, writableSurveyPayload(surveyForm, legacyActionFreeze));
         showNotice('Survey added.');
       }
       setShowSurveyModal(false);
@@ -320,6 +375,14 @@ export default function ComplaintsTracker() {
     );
   }
 
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="No home selected" message="Select a home before opening complaints and feedback." />
+      </div>
+    );
+  }
+
   return (
     <div className={PAGE.container}>
       {notice && (
@@ -330,18 +393,18 @@ export default function ComplaintsTracker() {
 
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>Complaints & Feedback</h1>
-        <div className="flex gap-2">
-          <button onClick={() => setViewMode(viewMode === 'complaints' ? 'surveys' : 'complaints')}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setViewMode(viewMode === 'complaints' ? 'surveys' : 'complaints')}
             className={`${BTN.secondary} ${BTN.sm}`}>
             {viewMode === 'complaints' ? 'View Surveys' : 'View Complaints'}
           </button>
           {viewMode === 'complaints' ? (
             <>
-              <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-              {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Log Complaint</button>}
+              <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+              {canEdit && <button type="button" onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Log Complaint</button>}
             </>
           ) : (
-            canEdit && <button onClick={openAddSurvey} className={`${BTN.primary} ${BTN.sm}`}>Add Survey</button>
+            canEdit && <button type="button" onClick={openAddSurvey} className={`${BTN.primary} ${BTN.sm}`}>Add Survey</button>
           )}
         </div>
       </div>
@@ -374,15 +437,15 @@ export default function ComplaintsTracker() {
         <>
           {/* Filters */}
           <div className="flex flex-wrap gap-2 mb-4">
-            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
+            <select aria-label="Filter complaints by category" value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
               <option value="">All Categories</option>
               {complaintCategories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
+            <select aria-label="Filter complaints by status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
               <option value="">All Statuses</option>
               {COMPLAINT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+            <input aria-label="Search complaints" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
               className={`${INPUT.base} ${INPUT.sm} w-48`} />
           </div>
 
@@ -437,7 +500,7 @@ export default function ComplaintsTracker() {
                           {c.response_deadline || '--'}
                         </td>
                         <td className={TABLE.td}>
-                          {canEdit && <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                          {canEdit && <button type="button" onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                         </td>
                       </tr>
                     );
@@ -491,7 +554,7 @@ export default function ComplaintsTracker() {
                         ) : '--'}
                       </td>
                       <td className={TABLE.td}>
-                        {canEdit && <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                        {canEdit && <button type="button" onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                       </td>
                     </tr>
                   ))}
@@ -511,15 +574,15 @@ export default function ComplaintsTracker() {
             <div className="max-h-[60vh] overflow-y-auto space-y-3">
               {activeTab === 'details' && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Date</label>
-                      <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                      <label htmlFor={complaintFieldId('date')} className={INPUT.label}>Date</label>
+                      <input id={complaintFieldId('date')} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
                         className={INPUT.base} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Category</label>
-                      <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+                      <label htmlFor={complaintFieldId('category')} className={INPUT.label}>Category</label>
+                      <select id={complaintFieldId('category')} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
                         className={INPUT.select}>
                         <option value="">Select...</option>
                         {complaintCategories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -527,14 +590,14 @@ export default function ComplaintsTracker() {
                     </div>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Title</label>
-                    <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+                    <label htmlFor={complaintFieldId('title')} className={INPUT.label}>Title</label>
+                    <input id={complaintFieldId('title')} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
                       className={INPUT.base} placeholder="Brief summary of complaint" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Raised By</label>
-                      <select value={form.raised_by}
+                      <label htmlFor={complaintFieldId('raised-by')} className={INPUT.label}>Raised By</label>
+                      <select id={complaintFieldId('raised-by')} value={form.raised_by}
                         onChange={e => setForm({ ...form, raised_by: e.target.value, resident_id: null, raised_by_name: '' })}
                         className={INPUT.select}>
                         {RAISED_BY_TYPES.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -550,28 +613,28 @@ export default function ComplaintsTracker() {
                           })} />
                       ) : (
                         <>
-                          <label className={INPUT.label}>Name</label>
-                          <input value={form.raised_by_name} onChange={e => setForm({ ...form, raised_by_name: e.target.value })}
+                          <label htmlFor={complaintFieldId('raised-by-name')} className={INPUT.label}>Name</label>
+                          <input id={complaintFieldId('raised-by-name')} value={form.raised_by_name} onChange={e => setForm({ ...form, raised_by_name: e.target.value })}
                             className={INPUT.base} placeholder="Person's name" />
                         </>
                       )}
                     </div>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Description</label>
-                    <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                    <label htmlFor={complaintFieldId('description')} className={INPUT.label}>Description</label>
+                    <textarea id={complaintFieldId('description')} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
                       className={INPUT.base} rows={3} placeholder="Full details of the complaint" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Acknowledged Date</label>
-                      <input type="date" value={form.acknowledged_date}
+                      <label htmlFor={complaintFieldId('acknowledged-date')} className={INPUT.label}>Acknowledged Date</label>
+                      <input id={complaintFieldId('acknowledged-date')} type="date" value={form.acknowledged_date}
                         onChange={e => setForm({ ...form, acknowledged_date: e.target.value, status: form.status === 'open' ? 'acknowledged' : form.status })}
                         className={INPUT.base} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Response Deadline</label>
-                      <input type="date" value={form.response_deadline}
+                      <label htmlFor={complaintFieldId('response-deadline')} className={INPUT.label}>Response Deadline</label>
+                      <input id={complaintFieldId('response-deadline')} type="date" value={form.response_deadline}
                         onChange={e => setForm({ ...form, response_deadline: e.target.value })}
                         className={INPUT.base} />
                       <p className="mt-1 text-xs text-gray-500">
@@ -580,15 +643,15 @@ export default function ComplaintsTracker() {
                     </div>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Status</label>
-                    <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+                    <label htmlFor={complaintFieldId('status')} className={INPUT.label}>Status</label>
+                    <select id={complaintFieldId('status')} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
                       className={INPUT.select}>
                       {COMPLAINT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Reported By (Staff)</label>
-                    <input value={form.reported_by} onChange={e => setForm({ ...form, reported_by: e.target.value })}
+                    <label htmlFor={complaintFieldId('reported-by')} className={INPUT.label}>Reported By (Staff)</label>
+                    <input id={complaintFieldId('reported-by')} value={form.reported_by} onChange={e => setForm({ ...form, reported_by: e.target.value })}
                       className={INPUT.base} placeholder="Manager recording this complaint" />
                   </div>
                 </>
@@ -596,28 +659,28 @@ export default function ComplaintsTracker() {
 
               {activeTab === 'investigation' && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Investigator</label>
-                      <input value={form.investigator} onChange={e => setForm({ ...form, investigator: e.target.value })}
+                      <label htmlFor={complaintFieldId('investigator')} className={INPUT.label}>Investigator</label>
+                      <input id={complaintFieldId('investigator')} value={form.investigator} onChange={e => setForm({ ...form, investigator: e.target.value })}
                         className={INPUT.base} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Status</label>
-                      <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+                      <label htmlFor={complaintFieldId('investigation-status')} className={INPUT.label}>Status</label>
+                      <select id={complaintFieldId('investigation-status')} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
                         className={INPUT.select}>
                         {COMPLAINT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Investigation Notes</label>
-                    <textarea value={form.investigation_notes} onChange={e => setForm({ ...form, investigation_notes: e.target.value })}
+                    <label htmlFor={complaintFieldId('investigation-notes')} className={INPUT.label}>Investigation Notes</label>
+                    <textarea id={complaintFieldId('investigation-notes')} value={form.investigation_notes} onChange={e => setForm({ ...form, investigation_notes: e.target.value })}
                       className={INPUT.base} rows={3} placeholder="Findings from investigation" />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Root Cause</label>
-                    <textarea value={form.root_cause} onChange={e => setForm({ ...form, root_cause: e.target.value })}
+                    <label htmlFor={complaintFieldId('root-cause')} className={INPUT.label}>Root Cause</label>
+                    <textarea id={complaintFieldId('root-cause')} value={form.root_cause} onChange={e => setForm({ ...form, root_cause: e.target.value })}
                       className={INPUT.base} rows={2} />
                   </div>
                 </>
@@ -626,14 +689,14 @@ export default function ComplaintsTracker() {
               {activeTab === 'resolution' && (
                 <>
                   <div>
-                    <label className={INPUT.label}>Resolution</label>
-                    <textarea value={form.resolution} onChange={e => setForm({ ...form, resolution: e.target.value })}
+                    <label htmlFor={complaintFieldId('resolution')} className={INPUT.label}>Resolution</label>
+                    <textarea id={complaintFieldId('resolution')} value={form.resolution} onChange={e => setForm({ ...form, resolution: e.target.value })}
                       className={INPUT.base} rows={3} placeholder="How the complaint was resolved" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Resolution Date</label>
-                      <input type="date" value={form.resolution_date}
+                      <label htmlFor={complaintFieldId('resolution-date')} className={INPUT.label}>Resolution Date</label>
+                      <input id={complaintFieldId('resolution-date')} type="date" value={form.resolution_date}
                         onChange={e => setForm({ ...form, resolution_date: e.target.value, status: e.target.value ? 'resolved' : form.status })}
                         className={INPUT.base} />
                     </div>
@@ -646,98 +709,106 @@ export default function ComplaintsTracker() {
                     </div>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Improvements Made</label>
-                    <textarea value={form.improvements} onChange={e => setForm({ ...form, improvements: e.target.value })}
+                    <label htmlFor={complaintFieldId('improvements')} className={INPUT.label}>Improvements Made</label>
+                    <textarea id={complaintFieldId('improvements')} value={form.improvements} onChange={e => setForm({ ...form, improvements: e.target.value })}
+                      disabled={legacyActionFreeze}
                       className={INPUT.base} rows={2} placeholder="You Said, We Did — what changed as a result" />
+                    {legacyActionFreeze && (
+                      <p className="mt-1 text-xs text-amber-700">Legacy improvement actions are read-only. Create accountable follow-up in Manager Actions.</p>
+                    )}
                   </div>
                   <div>
-                    <label className={INPUT.label}>Lessons Learned</label>
-                    <textarea value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })}
+                    <label htmlFor={complaintFieldId('lessons-learned')} className={INPUT.label}>Lessons Learned</label>
+                    <textarea id={complaintFieldId('lessons-learned')} value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })}
                       className={INPUT.base} rows={2} />
                   </div>
                 </>
               )}
             </div>
 
-            <div className={MODAL.footer}>
-              {canEdit && editingId && <button onClick={handleDelete} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
+            <div className={`${MODAL.footer} flex-wrap`}>
+              {canEdit && editingId && <button type="button" onClick={handleDelete} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
               {missingComplaintFields.length > 0 && <p className="text-sm text-amber-700 mr-auto">Missing: {missingComplaintFields.join(', ')}</p>}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <div className="flex-1" />
-              <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
+              <button type="button" onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
+              {canEdit && <button type="button" onClick={handleSave} disabled={saving || missingComplaintFields.length > 0} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
             </div>
       </Modal>
 
       {/* Survey Modal */}
       <Modal isOpen={showSurveyModal} onClose={() => setShowSurveyModal(false)} title={editingSurveyId ? 'Edit Survey' : 'Add Survey'} size="md">
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Date</label>
-                  <input type="date" value={surveyForm.date}
+                  <label htmlFor={surveyFieldId('date')} className={INPUT.label}>Date</label>
+                  <input id={surveyFieldId('date')} type="date" value={surveyForm.date}
                     onChange={e => setSurveyForm({ ...surveyForm, date: e.target.value })} className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Survey Type</label>
-                  <select value={surveyForm.type}
+                  <label htmlFor={surveyFieldId('type')} className={INPUT.label}>Survey Type</label>
+                  <select id={surveyFieldId('type')} value={surveyForm.type}
                     onChange={e => setSurveyForm({ ...surveyForm, type: e.target.value })} className={INPUT.select}>
                     {SURVEY_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Title</label>
-                <input value={surveyForm.title}
+                <label htmlFor={surveyFieldId('title')} className={INPUT.label}>Title</label>
+                <input id={surveyFieldId('title')} value={surveyForm.title}
                   onChange={e => setSurveyForm({ ...surveyForm, title: e.target.value })}
                   className={INPUT.base} placeholder="e.g. Q1 2026 Family Satisfaction Survey" />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className={INPUT.label}>Sent</label>
-                  <input type="number" value={surveyForm.total_sent}
+                  <label htmlFor={surveyFieldId('sent')} className={INPUT.label}>Sent</label>
+                  <input id={surveyFieldId('sent')} type="number" value={surveyForm.total_sent}
                     onChange={e => setSurveyForm({ ...surveyForm, total_sent: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })}
                     className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Responses</label>
-                  <input type="number" value={surveyForm.responses}
+                  <label htmlFor={surveyFieldId('responses')} className={INPUT.label}>Responses</label>
+                  <input id={surveyFieldId('responses')} type="number" value={surveyForm.responses}
                     onChange={e => setSurveyForm({ ...surveyForm, responses: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })}
                     className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Satisfaction (1-5)</label>
-                  <input type="number" min="1" max="5" step="0.1" value={surveyForm.overall_satisfaction}
+                  <label htmlFor={surveyFieldId('satisfaction')} className={INPUT.label}>Satisfaction (1-5)</label>
+                  <input id={surveyFieldId('satisfaction')} type="number" min="1" max="5" step="0.1" value={surveyForm.overall_satisfaction}
                     onChange={e => setSurveyForm({ ...surveyForm, overall_satisfaction: (() => { const v = parseFloat(e.target.value); return isNaN(v) ? '' : v; })() })}
                     className={INPUT.base} />
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Key Feedback</label>
-                <textarea value={surveyForm.key_feedback}
+                <label htmlFor={surveyFieldId('key-feedback')} className={INPUT.label}>Key Feedback</label>
+                <textarea id={surveyFieldId('key-feedback')} value={surveyForm.key_feedback}
                   onChange={e => setSurveyForm({ ...surveyForm, key_feedback: e.target.value })}
                   className={INPUT.base} rows={2} />
               </div>
               <div>
-                <label className={INPUT.label}>Actions from Feedback</label>
-                <textarea value={surveyForm.actions}
+                <label htmlFor={surveyFieldId('actions')} className={INPUT.label}>Actions from Feedback</label>
+                <textarea id={surveyFieldId('actions')} value={surveyForm.actions}
                   onChange={e => setSurveyForm({ ...surveyForm, actions: e.target.value })}
+                  disabled={legacyActionFreeze}
                   className={INPUT.base} rows={2} placeholder="You Said, We Did" />
+                {legacyActionFreeze && (
+                  <p className="mt-1 text-xs text-amber-700">Legacy survey action fields are read-only. Create accountable follow-up in Manager Actions.</p>
+                )}
               </div>
               <div>
-                <label className={INPUT.label}>Conducted By</label>
-                <input value={surveyForm.conducted_by}
+                <label htmlFor={surveyFieldId('conducted-by')} className={INPUT.label}>Conducted By</label>
+                <input id={surveyFieldId('conducted-by')} value={surveyForm.conducted_by}
                   onChange={e => setSurveyForm({ ...surveyForm, conducted_by: e.target.value })}
                   className={INPUT.base} />
               </div>
             </div>
-            <div className={MODAL.footer}>
-              {canEdit && editingSurveyId && <button onClick={handleDeleteSurvey} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
+            <div className={`${MODAL.footer} flex-wrap`}>
+              {canEdit && editingSurveyId && <button type="button" onClick={handleDeleteSurvey} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
               {missingSurveyFields.length > 0 && <p className="text-sm text-amber-700 mr-auto">Missing: {missingSurveyFields.join(', ')}</p>}
               {surveyError && <p className="text-sm text-red-600 mr-auto">{surveyError}</p>}
               <div className="flex-1" />
-              <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSaveSurvey} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
+              <button type="button" onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
+              {canEdit && <button type="button" onClick={handleSaveSurvey} disabled={saving || missingSurveyFields.length > 0} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
             </div>
       </Modal>
       {ConfirmDialog}

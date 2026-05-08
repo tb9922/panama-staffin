@@ -12,7 +12,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateComplaintStatusChange } from '../lib/statusTransitions.js';
-import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
+import { isLegacyActionFreezeEnabled, rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const sensitiveComplianceWrite = [
@@ -98,6 +98,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       complaints,
       surveys,
       complaintCategories,
+      legacyActionFreeze: isLegacyActionFreezeEnabled(),
       _total: complaintsResult.total,
       _totals: { complaints: complaintsResult.total, surveys: surveysResult.total },
     });
