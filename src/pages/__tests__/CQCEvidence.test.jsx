@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CQCEvidence from '../CQCEvidence.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
@@ -250,6 +250,14 @@ describe('CQCEvidence', () => {
     });
   });
 
+  it('shows a no-home state instead of hanging on loading', () => {
+    api.getCurrentHome.mockReturnValueOnce('');
+    renderAdmin();
+
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.getByText('Select a home before opening the CQC evidence workspace.')).toBeInTheDocument();
+  });
+
   it('displays the page title after successful load', async () => {
     renderAdmin();
     await waitFor(() => {
@@ -381,6 +389,19 @@ describe('CQCEvidence', () => {
     expect(screen.getByText(/Self-assessment saved for S1/i)).toBeInTheDocument();
   }, 30000);
 
+  it('labels self-assessment fields for keyboard users', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await expandLearningCulture(user);
+
+    expect(screen.getByLabelText('What the evidence shows')).toBeInTheDocument();
+    expect(screen.getByLabelText('Current risks')).toBeInTheDocument();
+    expect(screen.getByLabelText('Improvement actions')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reviewed by')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reviewed at')).toBeInTheDocument();
+    expect(screen.getByLabelText('Review due')).toBeInTheDocument();
+  });
+
   it('clicking + Add Evidence opens the Add Evidence modal', async () => {
     const user = userEvent.setup();
     renderAdmin();
@@ -392,6 +413,26 @@ describe('CQCEvidence', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
     expect(screen.getByRole('heading', { name: 'Add Evidence Item' })).toBeInTheDocument();
+  });
+
+  it('labels add-evidence modal fields for keyboard users', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await expandLearningCulture(user);
+
+    await user.click(await findAddEvidenceButton());
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByLabelText('Quality Statement')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Qualitative')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Quantitative')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Title')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Evidence Category')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Description')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Evidence From')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Evidence To (optional)')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Evidence Owner')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Review Due')).toBeInTheDocument();
   });
 
   it('viewer does NOT see + Add Evidence button when a statement is expanded', async () => {

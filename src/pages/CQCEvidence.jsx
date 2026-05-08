@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useId, useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
@@ -104,6 +104,10 @@ function getEvidenceDateRangeError(form) {
     return 'Evidence To cannot be before Evidence From.';
   }
   return null;
+}
+
+function sameEvidenceForm(a, b) {
+  return JSON.stringify(a || {}) === JSON.stringify(b || {});
 }
 
 function formatFileCount(count) {
@@ -219,6 +223,13 @@ export default function CQCEvidence() {
     return () => { cancelled = true; };
   }, [homeSlug, refreshKey]);
 
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="No home selected" message="Select a home before opening the CQC evidence workspace." />
+      </div>
+    );
+  }
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading CQC data..." /></div>;
   if (error || !moduleData) {
     return (
@@ -232,10 +243,10 @@ export default function CQCEvidence() {
     );
   }
 
-  return <CQCEvidenceInner data={moduleData} partialLoadErrors={partialLoadErrors} />;
+  return <CQCEvidenceInner data={moduleData} partialLoadErrors={partialLoadErrors} onRefresh={() => setRefreshKey((value) => value + 1)} />;
 }
 
-function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
+function CQCEvidenceInner({ data, partialLoadErrors = [], onRefresh }) {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
@@ -254,6 +265,7 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
+  const [evidenceBaseline, setEvidenceBaseline] = useState(blankEvidenceForm());
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
   const [savingNarrativeId, setSavingNarrativeId] = useState(null);
@@ -273,7 +285,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
   const [viewingSnapshot, setViewingSnapshot] = useState(null);
   const [showSnapshots, setShowSnapshots] = useState(false);
 
-  useDirtyGuard(showAddEvidence);
+  const modalIdBase = useId();
+  const evidenceDirty = showAddEvidence && !sameEvidenceForm(evidenceForm, evidenceBaseline);
+  useDirtyGuard(evidenceDirty);
 
   const loadEvidence = useCallback(async () => {
     try {
@@ -481,14 +495,18 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
 
   function openAddEvidence(statementId) {
-    setEvidenceForm(blankEvidenceForm(statementId));
+    const blank = blankEvidenceForm(statementId);
+    setEvidenceForm(blank);
+    setEvidenceBaseline(blank);
     setSaveError(null);
     setSaveNotice(null);
     setShowAddEvidence(true);
   }
 
   function openEditEvidence(item) {
-    setEvidenceForm(toEvidenceForm(item));
+    const form = toEvidenceForm(item);
+    setEvidenceForm(form);
+    setEvidenceBaseline(form);
     setSaveError(null);
     setSaveNotice(null);
     setShowAddEvidence(true);
@@ -555,8 +573,10 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
     setSaveError(null);
     try {
       const saved = await persistEvidenceDraft();
+      const savedForm = toEvidenceForm(saved);
       setSaveNotice(evidenceForm.id ? 'Evidence updated.' : 'Evidence saved. Supporting files are uploaded separately below.');
-      setEvidenceForm(toEvidenceForm(saved));
+      setEvidenceForm(savedForm);
+      setEvidenceBaseline(savedForm);
       await loadEvidence();
     } catch (err) {
       setSaveError('Failed to save evidence: ' + err.message);
@@ -598,7 +618,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
     setSaveNotice(null);
     try {
       const saved = await persistEvidenceDraft();
-      setEvidenceForm(toEvidenceForm(saved));
+      const savedForm = toEvidenceForm(saved);
+      setEvidenceForm(savedForm);
+      setEvidenceBaseline(savedForm);
       await loadEvidence();
       setSaveNotice('Evidence saved. Uploading supporting files now.');
       return saved.id;
@@ -616,9 +638,12 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
     if (!await confirm('Remove this evidence item?')) return;
     const home = getCurrentHome();
     setSavingEvidence(true);
+    setSaveError(null);
+    setSaveNotice(null);
     try {
       await deleteCqcEvidence(home, evId);
       await loadEvidence();
+      setSaveNotice('Evidence removed.');
     } catch (err) {
       setSaveError('Failed to delete evidence: ' + err.message);
     } finally {
@@ -685,6 +710,7 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
           <p className={PAGE.subtitle}>Single Assessment Framework — staffing compliance scorecard and evidence pack</p>
         </div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
+          <button type="button" onClick={onRefresh} disabled={generating} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Refresh</button>
           <button onClick={handleExportExcel} disabled={hasPartialLoadErrors} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
           {canEdit && <button onClick={handleCreateSnapshot} disabled={generating || hasPartialLoadErrors} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>
             Save Snapshot
@@ -703,6 +729,8 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
       )}
       {snapshotNotice && <InlineNotice variant="warning" className="mb-3">{snapshotNotice}</InlineNotice>}
       {snapshotError && <InlineNotice variant="error" className="mb-3" role="alert">{snapshotError}</InlineNotice>}
+      {!showAddEvidence && saveNotice && <InlineNotice variant="success" className="mb-3" onDismiss={() => setSaveNotice(null)}>{saveNotice}</InlineNotice>}
+      {!showAddEvidence && saveError && <InlineNotice variant="error" className="mb-3" role="alert" onDismiss={() => setSaveError(null)}>{saveError}</InlineNotice>}
       {narrativeNotice && <InlineNotice variant="success" className="mb-3">{narrativeNotice}</InlineNotice>}
       {narrativeError && <InlineNotice variant="error" className="mb-3" role="alert">{narrativeError}</InlineNotice>}
       {readinessError && !liveReadiness ? (
@@ -793,6 +821,7 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
       <div className="mb-5 flex flex-wrap gap-1 print:hidden">
         {RANGE_OPTIONS.map(opt => (
           <button key={opt.days} onClick={() => setDateRangeDays(opt.days)}
+            aria-pressed={dateRangeDays === opt.days}
             className={`${dateRangeDays === opt.days ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
             {opt.label}
           </button>
@@ -846,6 +875,12 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
               const statementDomId = String(qs.id).replace(/[^a-z0-9_-]/gi, '-');
               const buttonId = `cqc-statement-button-${statementDomId}`;
               const panelId = `cqc-statement-panel-${statementDomId}`;
+              const narrativeId = `cqc-${statementDomId}-narrative`;
+              const risksId = `cqc-${statementDomId}-risks`;
+              const actionsId = `cqc-${statementDomId}-actions`;
+              const reviewedById = `cqc-${statementDomId}-reviewed-by`;
+              const reviewedAtId = `cqc-${statementDomId}-reviewed-at`;
+              const reviewDueId = `cqc-${statementDomId}-review-due`;
 
               return (
                 <div key={qs.id} className={CARD.padded}>
@@ -968,9 +1003,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Self-Assessment</div>
                         <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
                           <div>
-                            <label className={INPUT.label}>What the evidence shows</label>
+                            <label htmlFor={narrativeId} className={INPUT.label}>What the evidence shows</label>
                             <textarea
-                              aria-label="What the evidence shows"
+                              id={narrativeId}
                               className={`${INPUT.base} h-20`}
                               value={narrativeDraft.narrative}
                               onChange={(e) => updateNarrativeDraft(qs.id, { narrative: e.target.value })}
@@ -978,9 +1013,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                             />
                           </div>
                           <div>
-                            <label className={INPUT.label}>Current risks</label>
+                            <label htmlFor={risksId} className={INPUT.label}>Current risks</label>
                             <textarea
-                              aria-label="Current risks"
+                              id={risksId}
                               className={`${INPUT.base} h-16`}
                               value={narrativeDraft.risks}
                               onChange={(e) => updateNarrativeDraft(qs.id, { risks: e.target.value })}
@@ -988,9 +1023,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                             />
                           </div>
                           <div>
-                            <label className={INPUT.label}>Improvement actions</label>
+                            <label htmlFor={actionsId} className={INPUT.label}>Improvement actions</label>
                             <textarea
-                              aria-label="Improvement actions"
+                              id={actionsId}
                               className={`${INPUT.base} h-16`}
                               value={narrativeDraft.actions}
                               onChange={(e) => updateNarrativeDraft(qs.id, { actions: e.target.value })}
@@ -999,9 +1034,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div>
-                              <label className={INPUT.label}>Reviewed by</label>
+                              <label htmlFor={reviewedById} className={INPUT.label}>Reviewed by</label>
                               <input
-                                aria-label="Reviewed by"
+                                id={reviewedById}
                                 type="text"
                                 className={INPUT.base}
                                 value={narrativeDraft.reviewed_by}
@@ -1010,9 +1045,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                               />
                             </div>
                             <div>
-                              <label className={INPUT.label}>Reviewed at</label>
+                              <label htmlFor={reviewedAtId} className={INPUT.label}>Reviewed at</label>
                               <input
-                                aria-label="Reviewed at"
+                                id={reviewedAtId}
                                 type="datetime-local"
                                 className={INPUT.base}
                                 value={narrativeDraft.reviewed_at}
@@ -1021,9 +1056,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                               />
                             </div>
                             <div>
-                              <label className={INPUT.label}>Review due</label>
+                              <label htmlFor={reviewDueId} className={INPUT.label}>Review due</label>
                               <input
-                                aria-label="Review due"
+                                id={reviewDueId}
                                 type="date"
                                 className={INPUT.base}
                                 value={narrativeDraft.review_due}
@@ -1248,8 +1283,8 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
 
             <div className="space-y-3">
               <div>
-                <label className={INPUT.label}>Quality Statement</label>
-                <select className={INPUT.select} value={evidenceForm.quality_statement}
+                <label htmlFor={`${modalIdBase}-statement`} className={INPUT.label}>Quality Statement</label>
+                <select id={`${modalIdBase}-statement`} className={INPUT.select} value={evidenceForm.quality_statement}
                   onChange={e => setEvidenceForm({ ...evidenceForm, quality_statement: e.target.value })}>
                   <option value="">Select statement...</option>
                   {QUALITY_STATEMENTS.map(qs => (
@@ -1259,11 +1294,11 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
               </div>
 
               <div>
-                <label className={INPUT.label}>Evidence Type</label>
+                <span className={INPUT.label}>Evidence Type</span>
                 <div className="flex gap-4">
                   {['qualitative', 'quantitative'].map(t => (
-                    <label key={t} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                      <input type="radio" name="evidence-type" value={t} checked={evidenceForm.type === t}
+                    <label key={t} htmlFor={`${modalIdBase}-type-${t}`} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                      <input id={`${modalIdBase}-type-${t}`} type="radio" name="evidence-type" value={t} checked={evidenceForm.type === t}
                         onChange={() => setEvidenceForm({ ...evidenceForm, type: t })} className="accent-blue-600" />
                       {t.charAt(0).toUpperCase() + t.slice(1)}
                     </label>
@@ -1271,15 +1306,15 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Title</label>
-                  <input type="text" className={INPUT.base} placeholder="Brief title..."
+                  <label htmlFor={`${modalIdBase}-title`} className={INPUT.label}>Title</label>
+                  <input id={`${modalIdBase}-title`} type="text" className={INPUT.base} placeholder="Brief title..."
                     value={evidenceForm.title} onChange={e => setEvidenceForm({ ...evidenceForm, title: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Evidence Category</label>
-                  <select className={INPUT.select} value={evidenceForm.evidence_category}
+                  <label htmlFor={`${modalIdBase}-category`} className={INPUT.label}>Evidence Category</label>
+                  <select id={`${modalIdBase}-category`} className={INPUT.select} value={evidenceForm.evidence_category}
                     onChange={e => setEvidenceForm({ ...evidenceForm, evidence_category: e.target.value })}>
                     <option value="">— None —</option>
                     {EVIDENCE_CATEGORY_OPTIONS.map((option) => (
@@ -1290,29 +1325,29 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
               </div>
 
               <div>
-                <label className={INPUT.label}>Description</label>
-                <textarea className={`${INPUT.base} h-20`} placeholder="Detailed description..."
+                <label htmlFor={`${modalIdBase}-description`} className={INPUT.label}>Description</label>
+                <textarea id={`${modalIdBase}-description`} className={`${INPUT.base} h-20`} placeholder="Detailed description..."
                   value={evidenceForm.description} onChange={e => setEvidenceForm({ ...evidenceForm, description: e.target.value })} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Evidence From</label>
-                  <input type="date" className={INPUT.base} value={evidenceForm.date_from}
+                  <label htmlFor={`${modalIdBase}-date-from`} className={INPUT.label}>Evidence From</label>
+                  <input id={`${modalIdBase}-date-from`} type="date" className={INPUT.base} value={evidenceForm.date_from}
                     onChange={e => setEvidenceForm({ ...evidenceForm, date_from: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Evidence To (optional)</label>
-                  <input type="date" className={INPUT.base} value={evidenceForm.date_to}
+                  <label htmlFor={`${modalIdBase}-date-to`} className={INPUT.label}>Evidence To (optional)</label>
+                  <input id={`${modalIdBase}-date-to`} type="date" className={INPUT.base} value={evidenceForm.date_to}
                     onChange={e => setEvidenceForm({ ...evidenceForm, date_to: e.target.value })} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Evidence Owner</label>
+                  <label htmlFor={`${modalIdBase}-owner`} className={INPUT.label}>Evidence Owner</label>
                   <input
-                    aria-label="Evidence Owner"
+                    id={`${modalIdBase}-owner`}
                     type="text"
                     className={INPUT.base}
                     placeholder="Who is responsible for keeping this current?"
@@ -1321,9 +1356,9 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
                   />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Review Due</label>
+                  <label htmlFor={`${modalIdBase}-review-due`} className={INPUT.label}>Review Due</label>
                   <input
-                    aria-label="Review Due"
+                    id={`${modalIdBase}-review-due`}
                     type="date"
                     className={INPUT.base}
                     value={evidenceForm.review_due}
