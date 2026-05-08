@@ -744,6 +744,76 @@ describe('approveRun', () => {
       await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = $2`, [homeId, tempStaffId]).catch(() => {});
     }
   }, 30000);
+
+  it('counts SSP waiting days using persisted qualifying weekdays', async () => {
+    const tempStaffId = 'TP-WEEKEND-SSP';
+    const periodStart = '2025-12-20';
+    const periodEnd = '2025-12-22';
+    let tempRunId = null;
+    try {
+      await pool.query(
+        `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out, start_date, date_of_birth, contract_hours)
+         VALUES ($1, $2, 'Weekend SSP Staff', 'Carer', 'Day A', 'E', 1, 13.00, true, false, '2024-01-01', '1991-01-01', 37.5)`,
+        [tempStaffId, homeId],
+      );
+      for (const date of ['2025-12-20', '2025-12-21', '2025-12-22']) {
+        await pool.query(
+          `INSERT INTO shift_overrides (home_id, date, staff_id, shift)
+           VALUES ($1, $2, $3, 'SICK')
+           ON CONFLICT (home_id, date, staff_id) DO UPDATE SET shift = EXCLUDED.shift`,
+          [homeId, date, tempStaffId],
+        );
+        await pool.query(
+          `INSERT INTO timesheet_entries
+             (home_id, staff_id, date, scheduled_start, scheduled_end, actual_start, actual_end, break_minutes, payable_hours, status)
+           VALUES ($1, $2, $3, '07:00', '15:00', '07:00', '15:00', 0, 8, 'approved')
+           ON CONFLICT (home_id, staff_id, date) DO UPDATE SET status = EXCLUDED.status, payable_hours = EXCLUDED.payable_hours`,
+          [homeId, tempStaffId, date],
+        );
+      }
+      await pool.query(
+        `INSERT INTO sick_periods
+           (home_id, staff_id, start_date, qualifying_days_per_week, qualifying_weekdays, waiting_days_served, ssp_weeks_paid)
+         VALUES ($1, $2, $3, 3, ARRAY[6,0,1]::integer[], 0, 0)`,
+        [homeId, tempStaffId, periodStart],
+      );
+      const { rows: [run] } = await pool.query(
+        `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency)
+         VALUES ($1, $2, $3, 'weekly')
+         RETURNING id`,
+        [homeId, periodStart, periodEnd],
+      );
+      tempRunId = run.id;
+
+      await calculateRun(tempRunId, homeId, SLUG, USERNAME);
+      await approveRun(tempRunId, homeId, SLUG, USERNAME);
+
+      const { rows: [approvedSick] } = await pool.query(
+        `SELECT waiting_days_served, ssp_weeks_paid
+         FROM sick_periods
+         WHERE home_id = $1 AND staff_id = $2`,
+        [homeId, tempStaffId],
+      );
+      expect(approvedSick.waiting_days_served).toBe(3);
+      expect(parseFloat(approvedSick.ssp_weeks_paid || 0)).toBe(0);
+    } finally {
+      if (tempRunId) {
+        await pool.query(
+          `DELETE FROM payroll_line_shifts
+            WHERE payroll_line_id IN (SELECT id FROM payroll_lines WHERE payroll_run_id = $1)`,
+          [tempRunId],
+        ).catch(() => {});
+        await pool.query(`DELETE FROM payroll_lines WHERE payroll_run_id = $1`, [tempRunId]).catch(() => {});
+        await pool.query(`DELETE FROM payroll_runs WHERE id = $1`, [tempRunId]).catch(() => {});
+      }
+      await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM sick_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM payroll_ytd WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM tax_codes WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = $2`, [homeId, tempStaffId]).catch(() => {});
+    }
+  }, 30000);
 });
 
 // ── exportRunCSV ────────────────────────────────────────────────────────────

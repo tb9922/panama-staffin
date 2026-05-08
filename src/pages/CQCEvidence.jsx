@@ -634,7 +634,6 @@ function CQCEvidenceInner({ data, partialLoadErrors = [] }) {
     setGenerating(true);
     setPdfError(null);
     try {
-      await new Promise(r => setTimeout(r, 100));
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
       await logReportDownload('cqc-evidence', `${dateRangeDays} days`, { required: true });
       generateEvidencePackPDF(dataWithEvidence, dateRangeDays);

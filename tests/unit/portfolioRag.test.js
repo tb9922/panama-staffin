@@ -125,4 +125,50 @@ describe('portfolio RAG thresholds', () => {
     expect(rag.staffing).toBe(RAG.UNKNOWN);
     expect(rag.overall).toBe(RAG.UNKNOWN);
   });
+
+  it('uses scalable agency rate bands instead of raw shift counts', () => {
+    const rag = buildPortfolioRag({
+      staffing: { gaps_per_100_planned_shifts: 0 },
+      agency: {
+        shifts_28d: 20,
+        shifts_per_100_planned_shifts_28d: 4,
+        emergency_override_pct: 0,
+      },
+      training: { compliance_pct: 100 },
+      incidents: { open: 0, rate_per_resident_month: 0, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
+      complaints: { open: 0, rate_per_resident_month: 0, ack_overdue: 0, response_overdue: 0 },
+      audits: { overdue: 0 },
+      supervisions: { overdue: 0 },
+      cqc_evidence: { open_gaps: 0 },
+      maintenance: { overdue: 0, certs_expired: 0 },
+      manager_actions: { overdue: 0, escalated_l3_plus: 0 },
+      occupancy: { pct: 100 },
+      outcomes: { rag: RAG.GREEN },
+    });
+
+    expect(rag.agency).toBe(RAG.GREEN);
+  });
+
+  it('marks agency volume unknown when shifts exist without a baseline rate', () => {
+    const rag = buildPortfolioRag({
+      staffing: { gaps_per_100_planned_shifts: 0 },
+      agency: {
+        shifts_28d: 2,
+        shifts_per_100_planned_shifts_28d: null,
+        emergency_override_pct: 0,
+      },
+      training: { compliance_pct: 100 },
+      incidents: { open: 0, rate_per_resident_month: 0, cqc_notifiable_overdue: 0, riddor_overdue: 0 },
+      complaints: { open: 0, rate_per_resident_month: 0, ack_overdue: 0, response_overdue: 0 },
+      audits: { overdue: 0 },
+      supervisions: { overdue: 0 },
+      cqc_evidence: { open_gaps: 0 },
+      maintenance: { overdue: 0, certs_expired: 0 },
+      manager_actions: { overdue: 0, escalated_l3_plus: 0 },
+      occupancy: { pct: 100 },
+      outcomes: { rag: RAG.GREEN },
+    });
+
+    expect(rag.agency).toBe(RAG.UNKNOWN);
+  });
 });

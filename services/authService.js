@@ -8,6 +8,7 @@ import * as userRepo from '../repositories/userRepo.js';
 import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import * as auditService from './auditService.js';
 import logger from '../logger.js';
+import { isActivePlatformAdminUser } from '../lib/platformAdmin.js';
 
 const STAFF_LOCKOUT_MINUTES = 15;
 // Cost factor intentionally matches the default production bcrypt rounds so
@@ -33,10 +34,11 @@ export function issueToken(payload) {
 }
 
 export function issueUserToken(dbUser) {
+  const isPlatformAdmin = isActivePlatformAdminUser(dbUser);
   return issueToken({
     username: dbUser.username,
     role: dbUser.role,
-    is_platform_admin: !!dbUser.is_platform_admin,
+    is_platform_admin: isPlatformAdmin,
     session_version: dbUser.session_version || 0,
   });
 }
@@ -115,7 +117,8 @@ export async function login(username, password) {
     await authRepo.clearForUser(dbUser.username);
     userRepo.updateLastLogin(username).catch(() => {});
     const { token } = issueUserToken(dbUser);
-    return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin: !!dbUser.is_platform_admin };
+    const isPlatformAdmin = isActivePlatformAdminUser(dbUser);
+    return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin };
   }
 
   if (usersTableExists && config.enableStaffPortal) {

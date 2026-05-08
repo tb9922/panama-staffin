@@ -175,6 +175,7 @@ describe('portfolio KPI API', () => {
     expect(homeA.staffing.gaps_per_100_planned_shifts).toBe(85.7);
     expect(homeA.rag.staffing).toBe('red');
     expect(homeA.agency.shifts_28d).toBe(1);
+    expect(homeA.agency.shifts_per_100_planned_shifts_28d).toBe(3.6);
     expect(homeA.agency.agency_attempts_7d).toBe(2);
     expect(homeA.agency.emergency_overrides_7d).toBe(2);
     expect(homeA.agency.emergency_override_pct).toBe(100);
@@ -193,11 +194,19 @@ describe('portfolio KPI API', () => {
     expect(homeB.data_quality.unknown_signals).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'staffing',
+        owner_role: 'Home manager',
+        status: 'open',
+        escalation_level: 2,
+        due_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
         reason: expect.stringContaining('No planned staffing baseline'),
         route: '/settings',
       }),
       expect.objectContaining({
         key: 'training',
+        owner_role: 'Home manager',
+        status: 'open',
+        escalation_level: 2,
+        due_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
         reason: expect.stringContaining('Mandatory training requirements'),
         route: '/training',
       }),
@@ -219,7 +228,9 @@ describe('portfolio KPI API', () => {
     expect(res.body.homes.map(home => home.home_slug)).toEqual(expect.arrayContaining([HOME_A, HOME_B]));
     expect(res.body.homes.map(home => home.home_slug)).not.toContain(HOME_C);
     expect(res.body.weakest_homes.length).toBeGreaterThan(0);
+    expect(res.body.weakest_homes[0].unknown_count).toBeGreaterThanOrEqual(0);
     expect(res.body.agency_pressure.find(row => row.home_slug === HOME_A).emergency_override_pct).toBe(100);
+    expect(res.body.agency_pressure.find(row => row.home_slug === HOME_A).shifts_per_100_planned_shifts_28d).toBe(3.6);
     expect(res.body.action_exceptions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         home_slug: HOME_A,
@@ -229,7 +240,17 @@ describe('portfolio KPI API', () => {
     ]));
     expect(res.body.action_exception_count).toBeGreaterThanOrEqual(1);
     expect(res.body.data_quality_issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ home_slug: HOME_B, key: 'staffing', route: '/settings' }),
+      expect.objectContaining({
+        home_slug: HOME_B,
+        key: 'staffing',
+        owner_role: 'Home manager',
+        status: 'open',
+        escalation_level: 2,
+        route: '/settings',
+      }),
+    ]));
+    expect(res.body.audit_exceptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ home_slug: HOME_B, overdue: 1 }),
     ]));
 
     const { rows } = await pool.query(

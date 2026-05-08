@@ -7,6 +7,7 @@ import { findByUsername as findUserByUsername } from '../repositories/userRepo.j
 import { hasModuleAccess, ROLES, isOwnDataOnly } from '../shared/roles.js';
 import { setRequestContext } from '../requestContext.js';
 import { z } from 'zod';
+import { isActivePlatformAdminUser, verifiedPlatformAdminFromRequest } from '../lib/platformAdmin.js';
 
 const homeSlugSchema = z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/i, 'Invalid home slug');
 
@@ -103,6 +104,7 @@ export async function requireAuth(req, res, next) {
       if (!dbUser || !dbUser.active || (dbUser.session_version || 0) !== (decoded.session_version || 0)) {
         return res.status(401).json({ error: 'Token has been revoked' });
       }
+      decoded.is_platform_admin = isActivePlatformAdminUser(dbUser);
     }
   } catch {
     return authServiceUnavailable(res);
@@ -133,10 +135,14 @@ export async function requirePlatformAdmin(req, res, next) {
   // Without this, a terminated platform admin retains full access for the JWT's remaining TTL.
   const dbUser = await getActiveAuthDbUser(req, res);
   if (dbUser === undefined) return;
-  if (dbUser?.role !== 'admin' || !dbUser?.is_platform_admin) {
+  if (!isActivePlatformAdminUser(dbUser)) {
     return res.status(403).json({ error: 'Platform admin access required' });
   }
   next();
+}
+
+export function isVerifiedPlatformAdmin(req) {
+  return verifiedPlatformAdminFromRequest(req);
 }
 
 /**
@@ -159,7 +165,7 @@ export async function requireHomeAccess(req, res, next) {
   if (req.user.role === 'admin' && req.user.is_platform_admin) {
     const dbUser = await getActiveAuthDbUser(req, res);
     if (dbUser === undefined) return;
-    if (dbUser?.role === 'admin' && dbUser?.is_platform_admin) {
+    if (isActivePlatformAdminUser(dbUser)) {
       req.home = home;
       req.homeRole = 'home_manager';
       req.staffId = null;

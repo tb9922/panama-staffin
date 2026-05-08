@@ -9,9 +9,12 @@ vi.mock('../../middleware/auth.js', () => ({
       return res.status(401).json({ error: 'Unauthorised' });
     }
     req.user = { username: 'platform.admin', role: 'admin', is_platform_admin: true };
-    req.authDbUser = { username: 'platform.admin', is_platform_admin: true };
+    req.authDbUser = { username: 'platform.admin', role: 'admin', active: true, is_platform_admin: true };
     return next();
   },
+  isVerifiedPlatformAdmin: req => req.authDbUser?.active === true
+    && req.authDbUser?.role === 'admin'
+    && req.authDbUser?.is_platform_admin === true,
   requirePlatformAdmin: (_req, _res, next) => next(),
 }));
 

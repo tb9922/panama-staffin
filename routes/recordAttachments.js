@@ -5,7 +5,7 @@ import { mkdirSync } from 'fs';
 import { stat, unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
 import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../lib/uploadSecurity.js';
@@ -32,7 +32,7 @@ function safePath(segment) {
 
 function canAccessSensitiveRecordAttachment(req, moduleId) {
   if (!SENSITIVE_RECORD_ATTACHMENT_MODULES.has(moduleId)) return true;
-  if (req.authDbUser?.is_platform_admin === true && req.homeRole != null) return true;
+  if (isVerifiedPlatformAdmin(req) && req.homeRole != null) return true;
   return SENSITIVE_RECORD_ATTACHMENT_ROLES.has(req.homeRole);
 }
 

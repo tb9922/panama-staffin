@@ -3,8 +3,24 @@ import logger from '../logger.js';
 
 // Data category classification by endpoint prefix
 const CATEGORY_MAP = [
+  ['/api/action-items', ['governance', 'actions', 'accountability']],
+  ['/api/agency-attempts', ['scheduling', 'staffing', 'agency']],
+  ['/api/portfolio-snapshots', ['governance', 'portfolio', 'snapshots']],
+  ['/api/portfolio', ['governance', 'portfolio', 'kpi']],
+  ['/api/internal-bank', ['staff', 'scheduling', 'internal_bank']],
+  ['/api/audit-tasks', ['governance', 'audit_tasks', 'compliance']],
+  ['/api/outcomes', ['governance', 'outcomes', 'clinical']],
+  ['/api/reflective-practice', ['hr', 'governance', 'reflective_practice']],
+  ['/api/operational-reviews', ['governance', 'operational_reviews']],
+  ['/api/risk-register', ['governance', 'risk']],
+  ['/api/policies', ['governance', 'policies']],
+  ['/api/acquisition', ['governance', 'acquisition']],
+  ['/api/home-setup', ['config', 'homes', 'setup']],
+  ['/api/platform', ['platform', 'operations']],
+  ['/api/ops', ['platform', 'operations']],
   ['/api/record-attachments', ['attachments', 'personal_data']],
   ['/api/cqc-evidence', ['compliance', 'cqc', 'evidence']],
+  ['/api/cqc-evidence-links', ['compliance', 'cqc', 'evidence_links']],
   ['/api/evidence-hub', ['compliance', 'evidence']],
   ['/api/evidence-quality', ['compliance', 'evidence']],
   ['/api/docs/cqc', ['compliance', 'cqc', 'documents']],
@@ -25,6 +41,8 @@ const CATEGORY_MAP = [
   ['/api/dpia', ['gdpr', 'dpia']],
   ['/api/clock-in', ['staff', 'attendance']],
   ['/api/beds', ['residents', 'occupancy']],
+  ['/api/scheduling', ['staff', 'scheduling', 'overrides']],
+  ['/api/bank-holidays', ['scheduling', 'reference_data']],
   ['/api/data', ['staff', 'scheduling', 'overrides']],
   ['/api/payroll', ['payroll', 'tax', 'pension']],
   ['/api/handover', ['clinical', 'safety', 'handover']],
@@ -34,16 +52,26 @@ const CATEGORY_MAP = [
   ['/api/dashboard', ['compliance', 'staffing']],
   ['/api/hr', ['hr', 'employment', 'special_category']],
   ['/api/finance', ['finance', 'billing']],
+  ['/api/suppliers', ['finance', 'suppliers']],
   ['/api/incidents', ['clinical', 'safety']],
   ['/api/complaints', ['clinical', 'feedback']],
+  ['/api/maintenance', ['compliance', 'maintenance']],
+  ['/api/ipc', ['clinical', 'ipc', 'compliance']],
   ['/api/training', ['staff', 'compliance']],
+  ['/api/assessment', ['clinical', 'assessment']],
+  ['/api/notifications', ['notifications']],
+  ['/api/homes', ['homes', 'access_control']],
   ['/api/dols', ['clinical', 'dols']],
   ['/api/webhooks', ['system', 'integration']],
 ];
 
+function matchesEndpointPrefix(endpoint, prefix) {
+  return endpoint === prefix || endpoint.startsWith(`${prefix}/`);
+}
+
 export function classifyAccessLogCategories(endpoint) {
   for (const [prefix, cats] of CATEGORY_MAP) {
-    if (endpoint.startsWith(prefix)) return cats;
+    if (matchesEndpointPrefix(endpoint, prefix)) return cats;
   }
   return [];
 }

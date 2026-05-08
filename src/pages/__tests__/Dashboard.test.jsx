@@ -206,7 +206,10 @@ describe('Dashboard', () => {
 
   it('viewer with finance read access sees cost summary figures', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-    renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
+    renderDashboard(
+      { username: 'viewer', role: 'viewer' },
+      { canRead: moduleId => moduleId === 'finance', canWrite: false },
+    );
 
     await waitFor(() =>
       expect(screen.getByText('Cost Summary (March 2026)')).toBeInTheDocument()

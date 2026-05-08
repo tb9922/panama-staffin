@@ -110,13 +110,8 @@ export function getPayPeriodNumber(periodEndDate, payFrequency) {
   if (payFrequency === 'fortnightly') {
     return Math.min(27, Math.max(1, Math.floor(daysDiff / 14) + 1));
   }
-  // monthly
-  const endMonth = d.getUTCMonth();
-  const endYear = d.getUTCFullYear();
-  const startMonth = taxStart.getUTCMonth();
-  const startYear = taxStart.getUTCFullYear();
-  const months = (endYear - startYear) * 12 + (endMonth - startMonth);
-  return Math.min(12, Math.max(1, months + 1));
+  // Monthly PAYE follows HMRC tax months (6th-5th), not calendar months.
+  return getHMRCTaxMonth(d);
 }
 
 // ─── Tax Code Parsing ─────────────────────────────────────────────────────────

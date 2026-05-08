@@ -55,6 +55,18 @@ function assertBedDeletable(bed) {
   }
 }
 
+function getSetupHoldExpires(bed) {
+  return bed.holdExpires ?? bed.hold_expires ?? null;
+}
+
+function getSetupMetadata(bed) {
+  return {
+    residentId: bed.resident_id,
+    holdExpires: getSetupHoldExpires(bed),
+    reason: bed.reason,
+  };
+}
+
 async function assertResidentNotAlreadyOccupied(homeId, residentId, currentBedId, client) {
   if (!residentId) return;
   const existing = await bedRepo.findByResidentId(residentId, homeId, client);
@@ -212,14 +224,27 @@ export async function setupBeds(homeId, homeSlug, bedsArray, username) {
   const created = await withTransaction(async (client) => {
     const results = [];
     for (const bed of bedsArray) {
-      if (bed.status === 'occupied') {
+      const status = bed.status || 'available';
+      const metadataErr = validateTransitionMetadata(status, getSetupMetadata(bed));
+      if (metadataErr) throw new ValidationError(metadataErr);
+      if (['occupied', 'hospital_hold'].includes(status)) {
         await assertResidentCanOccupy(homeId, bed.resident_id, null, client);
       }
-      const row = await bedRepo.create(homeId, { ...bed, created_by: username }, client);
+      let row = await bedRepo.create(homeId, { ...bed, status, created_by: username }, client);
+      if (status === 'hospital_hold') {
+        row = await bedRepo.updateStatus(row.id, homeId, {
+          status,
+          resident_id: bed.resident_id,
+          status_since: today(),
+          hold_expires: getSetupHoldExpires(bed),
+          updated_by: username,
+        }, client);
+      }
       await bedTransitionRepo.recordTransition(homeId, {
         bedId: row.id,
         fromStatus: 'initial',
-        toStatus: bed.status || 'available',
+        toStatus: status,
+        residentId: ['occupied', 'hospital_hold'].includes(status) ? bed.resident_id : null,
         changedBy: username,
         reason: 'Bulk setup',
       }, client);
@@ -435,6 +460,7 @@ export async function revertTransition(bedId, homeId, homeSlug, username, reason
       bedId,
       fromStatus: bed.status,
       toStatus: revertTo,
+      residentId,
       changedBy: username,
       reason: `Reverted: ${reason || 'No reason given'}`,
     }, client);

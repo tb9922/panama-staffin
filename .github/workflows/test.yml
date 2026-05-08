@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, v1-os]
   pull_request:
-    branches: [main]
+    branches: [main, v1-os]
 
 jobs:
   test:
@@ -264,6 +264,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     env:
       DEPLOY_CONFIGURED: ${{ secrets.SERVER_HOST != '' && secrets.SERVER_USER != '' && secrets.SERVER_SSH_KEY != '' && secrets.SMOKE_USERNAME != '' && secrets.SMOKE_PASSWORD != '' && secrets.SMOKE_HOME_SLUG != '' }}
 
@@ -307,6 +310,10 @@ jobs:
             npm ci
             npm run build
             find dist -name '*.map' -delete
+            if ! node scripts/verify-v1-operational-gates.js --strict; then
+              echo "Strict V1 operational preflight failed before PM2 stop or migration"
+              exit 1
+            fi
             bash ./scripts/backup-db.sh
             PRE_MIGRATION_BACKUP=$(ls -t backups/db/panama_*.sql.gz | head -1)
             if [ -z "$PRE_MIGRATION_BACKUP" ]; then

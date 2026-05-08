@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:4000}"
+BASE_URL="${BASE_URL:-http://localhost:3001}"
 HOME_SLUG="${HOME_SLUG:-}"
 
 if [[ -z "${SMOKE_USERNAME:-}" || -z "${SMOKE_PASSWORD:-}" ]]; then
@@ -24,6 +24,26 @@ curl_status() {
     exit 1
   fi
   echo "$method $path -> $code"
+}
+
+curl_frontend_shell() {
+  local out="$tmp_dir/frontend.html"
+  local code
+  code="$(curl -sS -o "$out" -w '%{http_code}' "$BASE_URL/")"
+  if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
+    echo "GET / failed with HTTP $code" >&2
+    cat "$out" >&2 || true
+    exit 1
+  fi
+  if ! grep -q 'id="root"' "$out"; then
+    echo "GET / did not return the React root shell" >&2
+    exit 1
+  fi
+  if grep -q '\[object Object\]' "$out"; then
+    echo "GET / contains [object Object]" >&2
+    exit 1
+  fi
+  echo "GET / frontend shell -> $code"
 }
 
 curl_auth_get() {
@@ -49,6 +69,7 @@ curl_auth_get() {
 
 curl_status GET /health
 curl_status GET /readiness
+curl_frontend_shell
 
 login_body="$tmp_dir/login.json"
 node -e "process.stdout.write(JSON.stringify({ username: process.env.SMOKE_USERNAME, password: process.env.SMOKE_PASSWORD }))" > "$login_body"
@@ -66,5 +87,10 @@ echo "POST /api/login -> $login_code"
 curl_auth_get /api/homes
 curl_auth_get /api/audit
 curl_auth_get /api/gdpr/access-log
+curl_auth_get /api/portfolio/kpis
+curl_auth_get /api/action-items
+curl_auth_get /api/audit-tasks
+curl_auth_get /api/outcomes/dashboard
+curl_auth_get "/api/internal-bank/candidates?shift_date=$(date +%F)&shift_code=AG-E&role=Carer"
 
 echo "Smoke checks passed for $BASE_URL"

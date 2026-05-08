@@ -28,6 +28,12 @@ describe('payrollTax', () => {
     expect(getPayPeriodNumber('2026-06-30', 'monthly')).toBe(3);
   });
 
+  it('uses HMRC tax months for monthly PAYE pay periods', () => {
+    expect(getPayPeriodNumber('2026-05-01', 'monthly')).toBe(1);
+    expect(getPayPeriodNumber('2026-05-05', 'monthly')).toBe(1);
+    expect(getPayPeriodNumber('2026-05-06', 'monthly')).toBe(2);
+  });
+
   it('derives the HMRC payment due date from tax year and tax month', () => {
     expect(getHMRCPaymentDueDate(2026, 1)).toBe('2026-05-19');
     expect(getHMRCPaymentDueDate(2026, 12)).toBe('2027-04-19');

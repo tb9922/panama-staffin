@@ -1,56 +1,58 @@
 import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { SCAN_INTAKE_TARGET_IDS } from '../../shared/scanIntake.js';
 import { AuthProvider } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { createMockDataContext } from './dataContextMock.js';
+
+function currentMockDataContext() {
+  try {
+    return useData.getMockImplementation?.()?.();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Render a component wrapped in all required providers.
  * Uses createMemoryRouter (required by useBlocker in useDirtyGuard).
  * Sets localStorage so AuthContext → getLoggedInUser() works.
  *
- * When canWrite is false, overrides the DataContext mock to return viewer
- * permissions (canWrite: () => false, homeRole: 'viewer').
+ * DataContext is always set explicitly here. By default this helper renders
+ * as a home manager; pass homeRole/canRead/canWrite for role-sensitive cases.
  */
 export function renderWithProviders(ui, {
   route = '/',
   path = '*',
   user = { username: 'admin', role: 'admin' },
-  canWrite = true,
+  canRead,
+  canWrite,
   homeRole = 'home_manager',
   isPlatformAdmin = false,
+  activeHome = 'test-home',
+  activeHomeObj,
+  staffId = null,
   routes = [],
   renderOptions = {},
 } = {}) {
-  const shouldOverrideDataContext = canWrite !== true || homeRole !== 'home_manager' || isPlatformAdmin;
-  if (shouldOverrideDataContext) {
-    const resolvedHomeRole = canWrite === false && homeRole === 'home_manager' ? 'viewer' : homeRole;
-    const canWriteFn = typeof canWrite === 'function' ? canWrite : () => Boolean(canWrite);
-    useData.mockReturnValue({
-      loading: false,
-      error: null,
-      homes: [],
-      activeHome: 'test-home',
-      switchHome: () => {},
-      refreshHomes: async () => {},
-      setError: () => {},
-      clearError: () => {},
-      canRead: () => true,
-      canWrite: canWriteFn,
+  const resolvedHomeRole = canWrite === false && homeRole === 'home_manager' ? 'viewer' : homeRole;
+  const hasDataContextOptions = canRead !== undefined
+    || canWrite !== undefined
+    || homeRole !== 'home_manager'
+    || isPlatformAdmin !== false
+    || activeHome !== 'test-home'
+    || activeHomeObj !== undefined
+    || staffId !== null;
+  const currentCtx = currentMockDataContext();
+  if (hasDataContextOptions || currentCtx?.__testDataContext === true) {
+    useData.mockReturnValue(createMockDataContext({
+      activeHome,
+      activeHomeObj,
+      canRead,
+      canWrite,
       homeRole: resolvedHomeRole,
       isPlatformAdmin,
-      staffId: null,
-      activeHomeObj: {
-        roleId: resolvedHomeRole,
-        staffId: null,
-        scanIntakeEnabled: true,
-        staffPortalEnabled: true,
-      },
-      scanIntakeEnabled: true,
-      scanIntakeTargets: SCAN_INTAKE_TARGET_IDS,
-      isScanTargetEnabled: () => true,
-      staffPortalEnabled: true,
-    });
+      staffId,
+    }));
   }
   localStorage.setItem('user', JSON.stringify(user));
   const router = createMemoryRouter(

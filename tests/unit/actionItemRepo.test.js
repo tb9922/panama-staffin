@@ -159,6 +159,9 @@ describe('action item repo source creation', () => {
       query: vi.fn(async (sql) => {
         expect(sql).toContain("ai.priority IN ('high', 'critical')");
         expect(sql).toContain('ai.due_date < CURRENT_DATE');
+        expect(sql.indexOf('WHEN ai.escalation_level >= 3')).toBeLessThan(
+          sql.indexOf("CASE ai.priority WHEN 'critical'")
+        );
         return {
           rows: [{
             ...actionRow({ owner_user_id: 77, owner_name: null, escalation_level: 1 }),

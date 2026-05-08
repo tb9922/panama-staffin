@@ -41,11 +41,18 @@ DB_USER="${DB_USER:-panama}"
 # Max allowed drift between live and restored counts (percentage)
 MAX_DRIFT_PCT="${MAX_DRIFT_PCT:-5}"
 
-# Tables to compare (core tables that must exist and have data)
+# Tables to compare. Keep this list aligned with the operating-system and
+# accountability surfaces; a backup that omits these tables is not restorable
+# enough for production rollback.
 TABLES=(
   staff homes shift_overrides training_records supervisions appraisals
   incidents complaints maintenance ipc_audits risk_register policy_reviews
   payroll_runs payroll_lines
+  audit_log retention_schedule retention_purge_files
+  cqc_evidence cqc_evidence_files cqc_evidence_links cqc_partner_feedback
+  cqc_observations cqc_statement_narratives
+  action_items reflective_practice agency_approval_attempts agency_shifts
+  audit_tasks outcome_metrics
 )
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -94,11 +101,42 @@ echo "[$(date --iso-8601=seconds)] Restore complete, comparing counts..."
 FAILURES=0
 REPORT=""
 
+table_exists() {
+  local db="$1"
+  local table="$2"
+  psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+    -d "${db}" -t -A -c \
+    "SELECT to_regclass('public.${table}') IS NOT NULL" 2>/dev/null
+}
+
 for TABLE in "${TABLES[@]}"; do
-  # Get live count (skip if table doesn't exist yet)
+  LIVE_EXISTS=$(table_exists "${DB_NAME}" "${TABLE}") || LIVE_EXISTS="f"
+  RESTORED_EXISTS=$(table_exists "${VERIFY_DB}" "${TABLE}") || RESTORED_EXISTS="f"
+
+  if [ "${LIVE_EXISTS}" != "t" ]; then
+    LINE="${TABLE}: live table missing [MISSING]"
+    REPORT="${REPORT}${LINE}\n"
+    echo "[$(date --iso-8601=seconds)] ${LINE}"
+    FAILURES=$((FAILURES + 1))
+    continue
+  fi
+
+  if [ "${RESTORED_EXISTS}" != "t" ]; then
+    LINE="${TABLE}: live table exists but restored table missing [MISSING]"
+    REPORT="${REPORT}${LINE}\n"
+    echo "[$(date --iso-8601=seconds)] ${LINE}"
+    FAILURES=$((FAILURES + 1))
+    continue
+  fi
+
+  # Get live count
   LIVE=$(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
     -d "${DB_NAME}" -t -A -c \
-    "SELECT COUNT(*) FROM ${TABLE}" 2>/dev/null) || continue
+    "SELECT COUNT(*) FROM ${TABLE}" 2>/dev/null) || {
+      echo "[$(date --iso-8601=seconds)] ${TABLE}: failed to count live table [ERROR]"
+      FAILURES=$((FAILURES + 1))
+      continue
+    }
 
   # Get restored count
   RESTORED=$(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \

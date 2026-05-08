@@ -32,6 +32,8 @@ const updateBedSchema = createBedSchema.extend({
 const setupBedSchema = createBedSchema.extend({
   status:      z.enum(statusValues).optional(),
   resident_id: z.number().int().positive().optional(),
+  holdExpires: dateSchema.optional(),
+  hold_expires: dateSchema.optional(),
 });
 
 const setupBedsSchema = z.array(setupBedSchema).min(1).max(200);

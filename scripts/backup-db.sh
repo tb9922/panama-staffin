@@ -25,7 +25,8 @@ if [ -f "${SCRIPT_DIR}/load-env-file.sh" ]; then
   . "${SCRIPT_DIR}/load-env-file.sh"
   load_env_keys "${APP_DIR}/.env" \
     DB_PASSWORD DB_NAME DB_HOST DB_PORT DB_USER \
-    BACKUP_S3_BUCKET BACKUP_SCP_TARGET HEALTHCHECK_URL
+    BACKUP_S3_BUCKET BACKUP_SCP_TARGET HEALTHCHECK_URL \
+    NODE_ENV BACKUP_REQUIRE_OFFSITE BACKUP_ALLOW_LOCAL_ONLY
 fi
 
 : "${DB_PASSWORD:?DB_PASSWORD is required}"
@@ -93,6 +94,21 @@ if [ "${VERIFY_AFTER_BACKUP:-false}" = "true" ] && [ -f "${SCRIPT_DIR}/verify-ba
 fi
 
 # ── Offsite upload (auto-detected from env vars) ──────────────────────────────
+
+OFFSITE_CONFIGURED=false
+if [ -n "${BACKUP_S3_BUCKET:-}" ] || [ -n "${BACKUP_SCP_TARGET:-}" ]; then
+  OFFSITE_CONFIGURED=true
+fi
+
+if [ "${OFFSITE_CONFIGURED}" != "true" ]; then
+  if [ "${BACKUP_REQUIRE_OFFSITE:-false}" = "true" ]; then
+    echo "[$(date --iso-8601=seconds)] ERROR: BACKUP_REQUIRE_OFFSITE=true but BACKUP_S3_BUCKET/BACKUP_SCP_TARGET is not configured."
+    exit 1
+  fi
+  if [ "${NODE_ENV:-}" = "production" ] && [ "${BACKUP_ALLOW_LOCAL_ONLY:-false}" != "true" ]; then
+    echo "[$(date --iso-8601=seconds)] WARNING: Production backup has no offsite target. Configure BACKUP_S3_BUCKET or BACKUP_SCP_TARGET, or set BACKUP_REQUIRE_OFFSITE=true to make this a hard release gate."
+  fi
+fi
 
 if [ -n "${BACKUP_S3_BUCKET:-}" ]; then
   echo "[$(date --iso-8601=seconds)] Uploading DB backup to S3: ${BACKUP_S3_BUCKET}"

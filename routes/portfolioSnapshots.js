@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { zodError } from '../errors.js';
-import { requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput, requiredDateInput } from '../lib/zodHelpers.js';
@@ -32,7 +32,7 @@ const captureBodySchema = z.object({
 function authContext(req) {
   return {
     username: req.user.username,
-    isPlatformAdmin: req.authDbUser?.is_platform_admin === true,
+    isPlatformAdmin: isVerifiedPlatformAdmin(req),
   };
 }
 

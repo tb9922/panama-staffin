@@ -389,6 +389,42 @@ describe('bedService: setupBeds', () => {
       { room_number: 'BULK-CROSSHOME', status: 'occupied', resident_id: crossHomeResidentId },
     ], 'admin')).rejects.toThrow(/resident not found in this home/i);
   });
+
+  it('validates bulk hospital-hold beds as resident-linked holds', async () => {
+    const holdResidentId = await createResident(homeA, 'Bulk Hospital Hold Resident');
+    const crossHomeResidentId = await createResident(homeB, 'Cross Home Hospital Hold Resident');
+
+    const beds = await bedService.setupBeds(homeA, 'bed-test-a', [
+      {
+        room_number: 'BULK-HOLD',
+        status: 'hospital_hold',
+        resident_id: holdResidentId,
+        holdExpires: '2026-06-01',
+      },
+    ], 'admin');
+    bedIds.push(beds[0].id);
+
+    expect(beds[0].status).toBe('hospital_hold');
+    expect(beds[0].resident_id).toBe(holdResidentId);
+    expect(beds[0].hold_expires).toBe('2026-06-01');
+
+    const transitions = await bedTransitionRepo.getTransitionsByBed(beds[0].id, homeA);
+    expect(transitions[0].to_status).toBe('hospital_hold');
+    expect(transitions[0].resident_id).toBe(holdResidentId);
+
+    await expect(bedService.setupBeds(homeA, 'bed-test-a', [
+      { room_number: 'BULK-HOLD-NO-EXPIRY', status: 'hospital_hold', resident_id: holdResidentId },
+    ], 'admin')).rejects.toThrow(/expiry/i);
+
+    await expect(bedService.setupBeds(homeA, 'bed-test-a', [
+      {
+        room_number: 'BULK-HOLD-CROSSHOME',
+        status: 'hospital_hold',
+        resident_id: crossHomeResidentId,
+        holdExpires: '2026-06-01',
+      },
+    ], 'admin')).rejects.toThrow(/resident not found in this home/i);
+  });
 });
 
 // ── bedService: transitionStatus ─────────────────────────────────────────────
@@ -853,6 +889,37 @@ describe('bedService: revertTransition', () => {
     await expect(bedService.revertTransition(
       bed.id, homeA, 'bed-test-a', 'admin', 'Bad revert',
     )).rejects.toThrow(/non-active resident/i);
+  });
+
+  it('records resident id on resident-linked revert transitions', async () => {
+    const revertResidentId = await createResident(homeA, 'Resident Revert Audit');
+    const bed = await bedService.createBed(homeA, 'bed-test-a', { room_number: 'REV004' }, 'admin');
+    bedIds.push(bed.id);
+
+    const reserved = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: bed.updated_at,
+    });
+    const occupied = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: revertResidentId,
+      username: 'admin',
+      clientUpdatedAt: reserved.updated_at,
+    });
+    await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+      status: 'hospital_hold',
+      holdExpires: '2026-04-15',
+      username: 'admin',
+      clientUpdatedAt: occupied.updated_at,
+    });
+
+    await bedService.revertTransition(bed.id, homeA, 'bed-test-a', 'admin', 'Resident returned');
+
+    const transitions = await bedTransitionRepo.getTransitionsByBed(bed.id, homeA);
+    expect(transitions[0].from_status).toBe('hospital_hold');
+    expect(transitions[0].to_status).toBe('occupied');
+    expect(transitions[0].resident_id).toBe(revertResidentId);
   });
 });
 

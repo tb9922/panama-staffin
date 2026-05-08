@@ -515,7 +515,7 @@ export async function getFinanceAlerts(homeId) {
 
   // Scheduled payments due
   if (upcoming.length > 0) {
-    alerts.push({ type: 'info', message: `${upcoming.length} scheduled payment${upcoming.length > 1 ? 's' : ''} due`, link: '/finance/payment-schedules' });
+    alerts.push({ type: 'info', message: `${upcoming.length} scheduled payment${upcoming.length > 1 ? 's' : ''} due`, link: '/finance/payables' });
   }
 
   // Resident outstanding balances

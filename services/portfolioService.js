@@ -113,6 +113,7 @@ function withDefaultAgency(map, homeId) {
     emergency_overrides_7d: 0,
     linked_emergency_override_shifts_7d: 0,
     emergency_override_pct: 0,
+    shifts_per_100_planned_shifts_28d: 0,
   };
 }
 
@@ -329,18 +330,66 @@ const UNKNOWN_SIGNAL_FIXES = Object.freeze({
   },
 });
 
+const UNKNOWN_SIGNAL_ACCOUNTABILITY = Object.freeze({
+  staffing: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  agency: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  training: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  care_certificate: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  incidents: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  complaints: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  audits: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  supervisions: { priority: 'medium', escalation_level: 1, owner_role: 'Home manager' },
+  cqc_evidence: { priority: 'high', escalation_level: 2, owner_role: 'Registered manager' },
+  maintenance: { priority: 'medium', escalation_level: 1, owner_role: 'Home manager' },
+  manager_actions: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  occupancy: { priority: 'high', escalation_level: 2, owner_role: 'Home manager' },
+  outcomes: { priority: 'medium', escalation_level: 1, owner_role: 'Home manager' },
+});
+
+function unknownSignalAccountability(key) {
+  return UNKNOWN_SIGNAL_ACCOUNTABILITY[key] || {
+    priority: 'medium',
+    escalation_level: 1,
+    owner_role: 'Home manager',
+  };
+}
+
+function dataQualityDueDate(today = new Date()) {
+  return formatDate(addDays(today, 7));
+}
+
+function accountableUnknownSignal(key, base, dueDate) {
+  const accountability = unknownSignalAccountability(key);
+  return {
+    key,
+    ...base,
+    source_type: 'portfolio_data_quality',
+    source_action_key: `unknown_${key}`,
+    title: `Resolve ${base.label || key} portfolio data-quality gap`,
+    category: 'governance',
+    priority: accountability.priority,
+    owner_role: accountability.owner_role,
+    due_date: dueDate,
+    status: 'open',
+    escalation_level: accountability.escalation_level,
+    evidence_required: true,
+  };
+}
+
 function buildDataQuality(rag) {
+  const dueDate = dataQualityDueDate();
   const unknownSignals = Object.entries(rag || {})
     .filter(([key, value]) => key !== 'overall' && value === 'unknown')
-    .map(([key]) => ({
+    .map(([key]) => accountableUnknownSignal(
       key,
-      ...(UNKNOWN_SIGNAL_FIXES[key] || {
+      UNKNOWN_SIGNAL_FIXES[key] || {
         label: key.replace(/_/g, ' '),
         reason: 'This KPI could not be calculated from current data.',
         fix: 'Review source records for this signal.',
         route: '/',
-      }),
-    }));
+      },
+      dueDate,
+    ));
 
   return {
     unknown_count: unknownSignals.length,
@@ -450,6 +499,23 @@ async function findAgencyShiftOverrides(homeId, from, to, existingOverrides = {}
   return agencyOverrides;
 }
 
+function oneDecimal(value) {
+  return Math.round(Number(value || 0) * 10) / 10;
+}
+
+function buildAgencyKpis(agency, staffing) {
+  const shifts28d = Number(agency?.shifts_28d || 0);
+  const plannedSlots7d = Number(staffing?.planned_shift_slots_7d || 0);
+  const plannedSlots28d = plannedSlots7d > 0 ? plannedSlots7d * 4 : 0;
+  const shiftsPer100 = plannedSlots28d > 0
+    ? oneDecimal((shifts28d / plannedSlots28d) * 100)
+    : (shifts28d > 0 ? null : 0);
+  return {
+    ...agency,
+    shifts_per_100_planned_shifts_28d: shiftsPer100,
+  };
+}
+
 export async function getStaffingPressure(home, days = 7) {
   const dates = dateRange(days);
   const from = formatDate(dates[0]);
@@ -489,6 +555,7 @@ export async function getStaffingPressure(home, days = 7) {
 function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes, staffing) {
   const m = summary.modules || {};
   const outcomeKpis = buildOutcomeKpis(outcomes, home);
+  const agencyKpis = buildAgencyKpis(agency, staffing);
   const trainingTotalRequired = Number(m.training?.totalRequired || 0);
   const trainingCompliancePct = trainingTotalRequired > 0 ? m.training?.compliancePct : null;
   const kpis = {
@@ -497,7 +564,7 @@ function buildHomeKpis(home, summary, actionCounts, agency, readiness, outcomes,
     home_name: home.config?.home_name || home.name,
     role_id: home.role_id,
     staffing,
-    agency,
+    agency: agencyKpis,
     training: {
       compliance_pct: trainingCompliancePct,
       baseline_configured: trainingTotalRequired > 0,
@@ -625,10 +692,18 @@ function weakestHomes(homes, limit = 3) {
       ...home,
       red_count: countRag(home, 'red'),
       amber_count: countRag(home, 'amber'),
+      unknown_count: Number(home.data_quality?.unknown_count || countRag(home, 'unknown')),
+    }))
+    .map(home => ({
+      ...home,
+      hidden_chaos_score: (home.red_count * 4) + (home.unknown_count * 3) + (home.amber_count * 2),
     }))
     .sort((a, b) => (
-      b.red_count - a.red_count
+      b.hidden_chaos_score - a.hidden_chaos_score
+      || b.red_count - a.red_count
+      || b.unknown_count - a.unknown_count
       || b.amber_count - a.amber_count
+      || Number(b.manager_actions?.escalated_l3_plus || 0) - Number(a.manager_actions?.escalated_l3_plus || 0)
       || Number(b.manager_actions?.overdue || 0) - Number(a.manager_actions?.overdue || 0)
       || String(a.home_name).localeCompare(String(b.home_name))
     ))
@@ -643,6 +718,7 @@ function agencyPressure(homes) {
       home_name: home.home_name,
       shifts_28d: home.agency?.shifts_28d || 0,
       shifts_7d: home.agency?.shifts_7d || 0,
+      shifts_per_100_planned_shifts_28d: home.agency?.shifts_per_100_planned_shifts_28d ?? null,
       agency_attempts_7d: home.agency?.agency_attempts_7d || 0,
       emergency_overrides_7d: home.agency?.emergency_overrides_7d || 0,
       linked_emergency_override_shifts_7d: home.agency?.linked_emergency_override_shifts_7d || 0,
@@ -651,6 +727,7 @@ function agencyPressure(homes) {
     }))
     .sort((a, b) => (
       b.emergency_override_pct - a.emergency_override_pct
+      || Number(b.shifts_per_100_planned_shifts_28d ?? -1) - Number(a.shifts_per_100_planned_shifts_28d ?? -1)
       || b.shifts_28d - a.shifts_28d
       || String(a.home_name).localeCompare(String(b.home_name))
     ));
@@ -700,6 +777,17 @@ function dataQualityIssues(homes) {
       home_id: home.home_id,
       home_slug: home.home_slug,
       home_name: home.home_name,
+      source_type: signal.source_type,
+      source_id: String(home.home_id ?? home.home_slug),
+      source_action_key: signal.source_action_key,
+      title: signal.title,
+      category: signal.category,
+      priority: signal.priority,
+      owner_role: signal.owner_role,
+      due_date: signal.due_date,
+      status: signal.status,
+      escalation_level: signal.escalation_level,
+      evidence_required: signal.evidence_required,
       key: signal.key,
       label: signal.label,
       reason: signal.reason,
@@ -708,7 +796,120 @@ function dataQualityIssues(homes) {
     })))
     .sort((a, b) => (
       String(a.home_name).localeCompare(String(b.home_name))
+      || Number(b.escalation_level || 0) - Number(a.escalation_level || 0)
+      || String(a.due_date || '').localeCompare(String(b.due_date || ''))
       || String(a.label).localeCompare(String(b.label))
+    ));
+}
+
+function auditExceptions(homes) {
+  return homes
+    .map(home => ({
+      home_id: home.home_id,
+      home_slug: home.home_slug,
+      home_name: home.home_name,
+      overdue: home.audits?.overdue || 0,
+      due_7d: home.audits?.due_7d || 0,
+      pending_qa: home.audits?.pending_qa || 0,
+      evidence_missing: home.audits?.evidence_missing || 0,
+      policy_due_30d: home.audits?.policy_due_30d || 0,
+      rag: home.rag?.audits || 'unknown',
+    }))
+    .filter(row => row.rag !== 'green' || row.overdue > 0 || row.pending_qa > 0 || row.evidence_missing > 0)
+    .sort((a, b) => (
+      b.overdue - a.overdue
+      || b.evidence_missing - a.evidence_missing
+      || b.pending_qa - a.pending_qa
+      || String(a.home_name).localeCompare(String(b.home_name))
+    ));
+}
+
+function supervisionExceptions(homes) {
+  return homes
+    .map(home => ({
+      home_id: home.home_id,
+      home_slug: home.home_slug,
+      home_name: home.home_name,
+      overdue: home.supervisions?.overdue || 0,
+      due_7d: home.supervisions?.due_7d || 0,
+      no_record: home.supervisions?.no_record || 0,
+      rag: home.rag?.supervisions || 'unknown',
+    }))
+    .filter(row => row.rag !== 'green' || row.overdue > 0 || row.no_record > 0)
+    .sort((a, b) => (
+      b.overdue - a.overdue
+      || b.no_record - a.no_record
+      || b.due_7d - a.due_7d
+      || String(a.home_name).localeCompare(String(b.home_name))
+    ));
+}
+
+function maintenanceExceptions(homes) {
+  return homes
+    .map(home => ({
+      home_id: home.home_id,
+      home_slug: home.home_slug,
+      home_name: home.home_name,
+      overdue: home.maintenance?.overdue || 0,
+      due_30d: home.maintenance?.due_30d || 0,
+      certs_expired: home.maintenance?.certs_expired || 0,
+      rag: home.rag?.maintenance || 'unknown',
+    }))
+    .filter(row => row.rag !== 'green' || row.overdue > 0 || row.certs_expired > 0)
+    .sort((a, b) => (
+      b.certs_expired - a.certs_expired
+      || b.overdue - a.overdue
+      || b.due_30d - a.due_30d
+      || String(a.home_name).localeCompare(String(b.home_name))
+    ));
+}
+
+function incidentComplaintExceptions(homes) {
+  return homes
+    .map(home => ({
+      home_id: home.home_id,
+      home_slug: home.home_slug,
+      home_name: home.home_name,
+      incidents_open: home.incidents?.open || 0,
+      incidents_rate_per_resident_month: home.incidents?.rate_per_resident_month ?? null,
+      incident_overdue_notifications: Number(home.incidents?.cqc_notifiable_overdue || 0)
+        + Number(home.incidents?.riddor_overdue || 0)
+        + Number(home.incidents?.duty_of_candour_overdue || 0),
+      complaints_open: home.complaints?.open || 0,
+      complaints_rate_per_resident_month: home.complaints?.rate_per_resident_month ?? null,
+      complaint_overdue_responses: Number(home.complaints?.ack_overdue || 0)
+        + Number(home.complaints?.response_overdue || 0),
+      incidents_rag: home.rag?.incidents || 'unknown',
+      complaints_rag: home.rag?.complaints || 'unknown',
+    }))
+    .filter(row => row.incidents_rag !== 'green' || row.complaints_rag !== 'green')
+    .sort((a, b) => (
+      b.incident_overdue_notifications - a.incident_overdue_notifications
+      || b.complaint_overdue_responses - a.complaint_overdue_responses
+      || b.incidents_open - a.incidents_open
+      || b.complaints_open - a.complaints_open
+      || String(a.home_name).localeCompare(String(b.home_name))
+    ));
+}
+
+function outcomeExceptions(homes) {
+  return homes
+    .map(home => ({
+      home_id: home.home_id,
+      home_slug: home.home_slug,
+      home_name: home.home_name,
+      falls_28d: home.outcomes?.falls_28d ?? null,
+      infections_28d: home.outcomes?.infections_28d ?? null,
+      pressure_sores_new_28d: home.outcomes?.pressure_sores_new_28d ?? null,
+      manual_rag: home.outcomes?.manual_rag || null,
+      rag: home.rag?.outcomes || 'unknown',
+    }))
+    .filter(row => row.rag !== 'green')
+    .sort((a, b) => (
+      Number(b.pressure_sores_new_28d ?? -1) - Number(a.pressure_sores_new_28d ?? -1)
+      || Number(b.falls_28d ?? -1) - Number(a.falls_28d ?? -1)
+      || Number(b.infections_28d ?? -1) - Number(a.infections_28d ?? -1)
+      || String(a.home_name).localeCompare(String(b.home_name))
     ));
 }
 
@@ -738,6 +939,11 @@ export function buildPortfolioBoardPack(kpis, escalatedActions = []) {
     training_gaps: trainingGaps(homes),
     cqc_evidence_gaps: cqcEvidenceGaps(homes),
     data_quality_issues: dataQualityIssues(homes),
+    audit_exceptions: auditExceptions(homes),
+    supervision_exceptions: supervisionExceptions(homes),
+    maintenance_exceptions: maintenanceExceptions(homes),
+    incident_complaint_exceptions: incidentComplaintExceptions(homes),
+    outcome_exceptions: outcomeExceptions(homes),
   };
 }
 

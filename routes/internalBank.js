@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { zodError } from '../errors.js';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter } from '../lib/rateLimiter.js';
 import { requiredDateInput } from '../lib/zodHelpers.js';
 import * as internalBankService from '../services/internalBankService.js';
@@ -22,7 +22,7 @@ router.get('/candidates', readRateLimiter, requireAuth, requireHomeAccess, requi
     const result = await internalBankService.findCandidates({
       targetHomeId: req.home.id,
       username: req.user.username,
-      isPlatformAdmin: req.authDbUser?.is_platform_admin === true,
+      isPlatformAdmin: isVerifiedPlatformAdmin(req),
       role: parsed.data.role,
       shiftDate: parsed.data.shift_date,
       shiftCode: parsed.data.shift_code,

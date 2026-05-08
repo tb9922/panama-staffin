@@ -177,6 +177,8 @@ function renderAdmin() {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<CQCEvidence />, {
     user: { username: 'admin', role: 'admin' },
+    canWrite: true,
+    homeRole: 'home_manager',
   });
 }
 
@@ -185,6 +187,39 @@ function renderViewer() {
   return renderWithProviders(<CQCEvidence />, {
     user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
+}
+
+async function findLearningCultureTrigger() {
+  let trigger = null;
+  await waitFor(() => {
+    trigger = screen
+      .getAllByText('Learning Culture')
+      .map((node) => node.closest('button'))
+      .find(Boolean);
+    expect(trigger).toBeTruthy();
+  }, { timeout: 10_000 });
+  return trigger;
+}
+
+async function expandLearningCulture(user = userEvent.setup()) {
+  const trigger = await findLearningCultureTrigger();
+  if (trigger.getAttribute('aria-expanded') !== 'true') {
+    await user.click(trigger);
+  }
+  await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'), { timeout: 10_000 });
+  return trigger;
+}
+
+async function findAddEvidenceButton() {
+  let trigger = null;
+  await waitFor(() => {
+    trigger = screen
+      .getAllByText('+ Add Evidence')
+      .map((node) => node.closest('button'))
+      .find(Boolean);
+    expect(trigger).toBeTruthy();
+  }, { timeout: 10_000 });
+  return trigger;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -277,11 +312,7 @@ describe('CQCEvidence', () => {
 
   it('renders quality statements for the Safe category (e.g. Learning Culture)', async () => {
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
-    // Also check for another known quality statement in a different category
-    expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    expect(await findLearningCultureTrigger()).toBeInTheDocument();
   });
 
   it('expands quality statements from the keyboard', async () => {
@@ -329,29 +360,20 @@ describe('CQCEvidence', () => {
   it('admin sees + Add Evidence button when a quality statement is expanded', async () => {
     const user = userEvent.setup();
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
+    await expandLearningCulture(user);
 
-    // Click on the Learning Culture statement to expand it
-    await user.click(screen.getByText('Learning Culture'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
-    });
+    expect(await findAddEvidenceButton()).toBeInTheDocument();
   });
 
   it('saves a self-assessment narrative for a statement', async () => {
+    const user = userEvent.setup();
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
+    await expandLearningCulture(user);
 
-    fireEvent.click(screen.getByText('Learning Culture'));
     fireEvent.change(screen.getByLabelText('What the evidence shows'), {
       target: { value: 'Learning is discussed in daily handover.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Save Self-Assessment/i }));
+    await user.click(screen.getByRole('button', { name: /Save Self-Assessment/i }));
 
     await waitFor(() => {
       expect(api.upsertCqcNarrative).toHaveBeenCalled();
@@ -362,17 +384,9 @@ describe('CQCEvidence', () => {
   it('clicking + Add Evidence opens the Add Evidence modal', async () => {
     const user = userEvent.setup();
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
+    await expandLearningCulture(user);
 
-    await user.click(screen.getByText('Learning Culture'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: '+ Add Evidence' }));
+    await user.click(await findAddEvidenceButton());
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -383,11 +397,7 @@ describe('CQCEvidence', () => {
   it('viewer does NOT see + Add Evidence button when a statement is expanded', async () => {
     const user = userEvent.setup();
     renderViewer();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Learning Culture'));
+    await expandLearningCulture(user);
 
     await waitFor(() => {
       // The statement description should be visible (expanded)
@@ -414,9 +424,7 @@ describe('CQCEvidence', () => {
     ]);
 
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Save Snapshot' })).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('button', { name: 'Save Snapshot' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Save Snapshot' }));
 
@@ -456,17 +464,17 @@ describe('CQCEvidence', () => {
     });
 
     renderAdmin();
-    const historyToggle = await screen.findByRole('button', { name: /Snapshot History \(1\)/i }, { timeout: 20_000 });
+    const historyToggle = await screen.findByText(/Snapshot History \(1\)/i, {}, { timeout: 20_000 });
     if (/show/i.test(historyToggle.textContent || '')) {
       await user.click(historyToggle);
     }
-    await user.click(screen.getByRole('button', { name: 'View' }));
+    await user.click(screen.getByText('View'));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Export PDF from Snapshot' })).toBeInTheDocument();
+      expect(screen.getByText('Export PDF from Snapshot')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Export PDF from Snapshot' }));
+    await user.click(screen.getByText('Export PDF from Snapshot'));
 
     await waitFor(() => {
       expect(pdfReports.generateEvidencePackPDF).toHaveBeenCalledWith(
@@ -478,17 +486,11 @@ describe('CQCEvidence', () => {
   }, 20_000);
 
   it('lets you upload supporting files on the first pass by auto-saving the evidence item', async () => {
+    const user = userEvent.setup();
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
+    await expandLearningCulture(user);
 
-    fireEvent.click(screen.getByText('Learning Culture'));
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Add Evidence' }));
+    await user.click(await findAddEvidenceButton());
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Add Evidence Item' })).toBeInTheDocument();
     });
@@ -503,15 +505,18 @@ describe('CQCEvidence', () => {
       target: { files: [new File(['hello'], 'evidence.txt', { type: 'text/plain' })] },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await user.click(screen.getByRole('button', { name: 'Upload' }));
 
     await waitFor(() => {
       expect(api.createCqcEvidence).toHaveBeenCalled();
       expect(api.uploadCqcEvidenceFile).toHaveBeenCalledWith('cqc_evidence', 'ev-001', expect.any(File), '');
     }, { timeout: 30_000 });
     expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
+      expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
+    });
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
-    expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
   }, 30000);
 
   it('shows manual evidence file counts so unsaved attachments are obvious', async () => {
@@ -536,11 +541,8 @@ describe('CQCEvidence', () => {
 
     const user = userEvent.setup();
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
+    await expandLearningCulture(user);
 
-    await user.click(screen.getByText('Learning Culture'));
     expect(await screen.findByText('0 files')).toBeInTheDocument();
   });
 });

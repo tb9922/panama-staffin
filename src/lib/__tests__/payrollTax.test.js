@@ -130,6 +130,11 @@ describe('getPayPeriodNumber', () => {
   it('monthly: Apr 30 2025 → period 1', () => {
     expect(getPayPeriodNumber('2025-04-30', 'monthly')).toBe(1);
   });
+  it('monthly: May 1-5 stays in HMRC tax month 1', () => {
+    expect(getPayPeriodNumber('2026-05-01', 'monthly')).toBe(1);
+    expect(getPayPeriodNumber('2026-05-05', 'monthly')).toBe(1);
+    expect(getPayPeriodNumber('2026-05-06', 'monthly')).toBe(2);
+  });
   it('monthly: Mar 31 2026 → period 12', () => {
     expect(getPayPeriodNumber('2026-03-31', 'monthly')).toBe(12);
   });

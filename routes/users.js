@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requirePlatformAdmin, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requirePlatformAdmin, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import * as userService from '../services/userService.js';
@@ -69,6 +69,10 @@ function logUserAudit(action, homeSlug, actorUsername, details = null) {
   return auditService.log(action, homeSlug, actorUsername, details).catch((err) => {
     logger.warn({ action, homeSlug, actorUsername, err: err.message }, 'User-management audit write failed');
   });
+}
+
+function canActAsPlatformAdmin(req) {
+  return isVerifiedPlatformAdmin(req);
 }
 
 async function ensureHomesExist(homeIds) {
@@ -142,7 +146,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
     const { username, password, role, displayName, homeRoleId } = parsed.data;
 
     // If assigning a role, validate permission
-    if (homeRoleId && !req.user.is_platform_admin) {
+    const isPlatformAdmin = canActAsPlatformAdmin(req);
+    if (homeRoleId && !isPlatformAdmin) {
       if (!canAssignRole(req.homeRole, homeRoleId)) {
         return res.status(403).json({
           error: homeRoleId === 'home_manager'
@@ -191,10 +196,11 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireHome
     // Verify target user belongs to this home
     const targetAtHome = await userRepo.findByIdAtHome(id.data, req.home.id);
     if (!targetAtHome) return res.status(404).json({ error: 'User not found at this home' });
-    if (!req.user.is_platform_admin && targetAtHome.is_platform_admin) {
+    const isPlatformAdmin = canActAsPlatformAdmin(req);
+    if (!isPlatformAdmin && targetAtHome.is_platform_admin) {
       return res.status(403).json({ error: 'Only platform admins can manage platform admin accounts' });
     }
-    if (!req.user.is_platform_admin && (parsed.data.active !== undefined || parsed.data.role !== undefined)) {
+    if (!isPlatformAdmin && (parsed.data.active !== undefined || parsed.data.role !== undefined)) {
       return res.status(403).json({ error: 'Only platform admins can change account status or global role' });
     }
 
@@ -225,7 +231,7 @@ router.post('/:id/reset-password', writeRateLimiter, requireAuth, requireHomeAcc
     // Verify target user belongs to this home
     const targetAtHome = await userRepo.findByIdAtHome(id.data, req.home.id);
     if (!targetAtHome) return res.status(404).json({ error: 'User not found at this home' });
-    if (!req.user.is_platform_admin) {
+    if (!canActAsPlatformAdmin(req)) {
       return res.status(403).json({ error: 'Only platform admins can reset user passwords' });
     }
 
@@ -325,7 +331,7 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireHomeAccess, requi
     }
 
     // Permission check
-    if (!req.user.is_platform_admin) {
+    if (!canActAsPlatformAdmin(req)) {
       if (!canAssignRole(req.homeRole, parsed.data.roleId)) {
         return res.status(403).json({
           error: parsed.data.roleId === 'home_manager'

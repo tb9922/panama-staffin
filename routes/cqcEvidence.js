@@ -6,7 +6,7 @@ import { mkdirSync } from 'fs';
 import { stat, unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
 import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
@@ -83,7 +83,7 @@ const readinessQuerySchema = z.object({
 });
 
 function canReadHrEvidenceSources(req) {
-  return req.authDbUser?.is_platform_admin === true
+  return isVerifiedPlatformAdmin(req)
     || hasModuleAccess(req.homeRole, 'hr', 'read', { includeOwn: false });
 }
 

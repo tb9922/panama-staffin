@@ -524,11 +524,32 @@ export async function getSSPDaysByRun(runId, homeId, client) {
             COUNT(*) FILTER (WHERE pls.total_amount > 0)::int AS ssp_days,
             COUNT(*) FILTER (
               WHERE pls.total_amount = 0
-                AND EXTRACT(DOW FROM pls.date) BETWEEN 1 AND 5
+                AND COALESCE(
+                  sick_meta.qualifying_weekdays,
+                  CASE LEAST(7, GREATEST(1, COALESCE(sick_meta.qualifying_days_per_week, 5)))
+                    WHEN 1 THEN ARRAY[1]::integer[]
+                    WHEN 2 THEN ARRAY[1,2]::integer[]
+                    WHEN 3 THEN ARRAY[1,2,3]::integer[]
+                    WHEN 4 THEN ARRAY[1,2,3,4]::integer[]
+                    WHEN 5 THEN ARRAY[1,2,3,4,5]::integer[]
+                    WHEN 6 THEN ARRAY[1,2,3,4,5,6]::integer[]
+                    ELSE ARRAY[0,1,2,3,4,5,6]::integer[]
+                  END
+                ) @> ARRAY[EXTRACT(DOW FROM pls.date)::integer]
             )::int AS waiting_days_used
      FROM payroll_line_shifts pls
      JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     LEFT JOIN LATERAL (
+       SELECT qualifying_days_per_week, qualifying_weekdays
+       FROM sick_periods sp
+       WHERE sp.home_id = pr.home_id
+         AND sp.staff_id = pl.staff_id
+         AND sp.start_date <= pls.date
+         AND (sp.end_date IS NULL OR sp.end_date >= pls.date)
+       ORDER BY sp.start_date DESC
+       LIMIT 1
+     ) sick_meta ON true
      WHERE pl.payroll_run_id = $1 AND pr.home_id = $2
        AND pls.shift_code = 'SICK'
      GROUP BY pl.staff_id`,

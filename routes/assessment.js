@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import crypto from 'node:crypto';
-import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as assessmentRepo from '../repositories/assessmentRepo.js';
 import * as assessmentService from '../services/assessmentService.js';
@@ -22,7 +22,7 @@ const signOffSchema = z.object({
 });
 
 function canReadHrEvidenceSources(req) {
-  return req.authDbUser?.is_platform_admin === true
+  return isVerifiedPlatformAdmin(req)
     || hasModuleAccess(req.homeRole, 'hr', 'read', { includeOwn: false });
 }
 

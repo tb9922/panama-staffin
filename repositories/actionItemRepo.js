@@ -539,10 +539,14 @@ export async function findBoardPackExceptionsByHomeIds(homeIds, limit = 50, clie
           OR ai.escalation_level >= 3
         )
       ORDER BY
-        CASE ai.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
-        CASE WHEN ai.due_date < CURRENT_DATE THEN 0 ELSE 1 END,
-        ai.due_date ASC,
+        CASE
+          WHEN ai.escalation_level >= 3 THEN 0
+          WHEN ai.due_date < CURRENT_DATE THEN 1
+          ELSE 2
+        END,
         ai.escalation_level DESC,
+        CASE ai.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
+        ai.due_date ASC,
         ai.id DESC
       LIMIT $2`,
     [homeIds, cappedLimit]

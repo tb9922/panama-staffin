@@ -72,14 +72,19 @@ psql panama_restore -c "SELECT COUNT(*) FROM staff"
 
 # If verified OK, restore to production
 # WARNING: This drops the production database
-./scripts/restore-db.sh backups/db/panama_20260227_020000.sql.gz
+RESTORE_USE_ENV_DB=true FORCE_RESTORE_DB=true ./scripts/restore-db.sh backups/db/panama_20260227_020000.sql.gz
 
 # Run any migrations added after the backup
 node scripts/migrate.js
 
 # Restart application
-pm2 restart panama
+pm2 restart panama panama-webhooks
 ```
+
+`restore-db.sh` deliberately defaults to the safe `panama_restore` target.
+Production restores must set `RESTORE_USE_ENV_DB=true` so the script loads the
+live `DB_NAME` from `.env`; keep `FORCE_RESTORE_DB=true` only for documented
+emergency runbook execution where the backup has already been test-restored.
 
 **Time to recover:** ~10 minutes (depends on DB size)
 
