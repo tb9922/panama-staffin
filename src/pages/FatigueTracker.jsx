@@ -20,6 +20,7 @@ export default function FatigueTracker() {
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Reactive today — updates at midnight so fatigue data is never stale
   const [today, setToday] = useState(() => new Date());
@@ -31,14 +32,35 @@ export default function FatigueTracker() {
 
   useEffect(() => {
     if (!homeSlug) return;
-    getSchedulingData(homeSlug)
+    const controller = new AbortController();
+    getSchedulingData(homeSlug, { signal: controller.signal })
       .then(setSchedData)
-      .catch(e => setError(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
-  }, [homeSlug]);
+      .catch(e => {
+        if (controller.signal.aborted) return;
+        setError(e.message || 'Failed to load');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [homeSlug, refreshKey]);
 
+  if (!homeSlug) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="No home selected" message="Select a home before opening fatigue monitoring." /></div>;
   if (loading) return <LoadingState message="Loading fatigue data..." className="px-6 py-6" />;
-  if (error || !schedData) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="Unable to load fatigue data" message={error || 'Failed to load scheduling data'} /></div>;
+  if (error || !schedData) return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <ErrorState
+        title="Unable to load fatigue data"
+        message={error || 'Failed to load scheduling data'}
+        onRetry={() => {
+          setError(null);
+          setSchedData(null);
+          setLoading(true);
+          setRefreshKey((current) => current + 1);
+        }}
+      />
+    </div>
+  );
 
   return <FatigueTrackerInner schedData={schedData} today={today} navigate={navigate} />;
 }
@@ -115,9 +137,9 @@ function FatigueTrackerInner({ schedData, today, navigate }) {
         <p className="text-xs text-gray-500">Max consecutive days: {maxConsec} | {activeStaff.length} staff | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-2 print:hidden">
+      <div className="mb-2 flex flex-col gap-3 print:hidden sm:flex-row sm:items-start sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Fatigue Tracker</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => {
             const headers = ['Staff', 'Team', 'Role', 'Current Consec Days', 'Max Block (28d)', 'Status', 'Total Working', 'Total Off', 'Avg Shifts/wk'];
             const rows = fatigueData.map(s => [
@@ -130,8 +152,8 @@ function FatigueTrackerInner({ schedData, today, navigate }) {
               parseFloat(s.avgWeeklyShifts.toFixed(1)),
             ]);
             downloadXLSX(`fatigue_${config.home_name}`, [{ name: 'Fatigue Tracker', headers, rows }]);
-          }} className={BTN.secondary}>Export Excel</button>
-          <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
+          }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          <button onClick={() => window.print()} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
         </div>
       </div>
       <p className="text-sm text-gray-500 mb-6 print:hidden">Max consecutive days: {maxConsec} | Monitoring {activeStaff.length} staff</p>
@@ -172,55 +194,59 @@ function FatigueTrackerInner({ schedData, today, navigate }) {
               </tr>
             </thead>
             <tbody>
-              {fatigueData.map(s => (
-                <tr
-                  key={s.id}
-                  className={`${TABLE.tr} ${s.fatigue.exceeded ? 'bg-red-50' : s.fatigue.atRisk ? 'bg-amber-50' : ''} cursor-pointer`}
-                  {...clickableRowProps(() => navigate(`/day/${formatDate(today)}`))}
-                >
-                  <td className="py-1 px-2 sticky left-0 bg-white z-10 border-r">
-                    <div className="font-medium truncate max-w-[120px]">{s.name}</div>
-                    <div className="text-[9px] text-gray-400">{s.team}</div>
-                  </td>
-                  <td className="py-1 px-1 text-center">
-                    <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      s.fatigue.exceeded ? 'bg-red-200 text-red-800' :
-                      s.fatigue.atRisk ? 'bg-amber-200 text-amber-800' : 'bg-green-100 text-green-700'
-                    }`}>{s.fatigue.consecutive}d</span>
-                  </td>
-                  <td className="py-1 px-1 text-center font-mono">{s.maxBlock}</td>
-                  <td className="py-1 px-1 text-center">
-                    {s.fatigue.exceeded ? (
-                      <span className="text-red-600 font-bold">BREACH</span>
-                    ) : s.fatigue.atRisk ? (
-                      <span className="text-amber-600 font-bold">RISK</span>
-                    ) : (
-                      <span className="text-green-600">OK</span>
-                    )}
-                  </td>
-                  {s.pattern.map((p, i) => (
-                    <td key={i} className={`py-0.5 px-0 text-center ${i === todayIdx ? 'ring-1 ring-blue-400' : ''}`}>
-                      <div className={`w-5 h-5 mx-auto rounded-sm text-[8px] flex items-center justify-center ${
-                        p.working ? (
-                          p.shift === 'N' ? 'bg-purple-200 text-purple-800' :
-                          p.shift.startsWith('OC') ? 'bg-orange-200 text-orange-800' :
-                          p.shift.startsWith('AG') ? 'bg-red-200 text-red-800' :
-                          'bg-green-200 text-green-800'
-                        ) : (
-                          p.shift === 'SICK' ? 'bg-red-100 text-red-600' :
-                          p.shift === 'NS' ? 'bg-pink-100 text-pink-700' :
-                          p.shift === 'AL' ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-gray-100 text-gray-300'
-                        )
-                      }`}>
-                        {p.working ? (p.shift === 'N' ? 'N' : 'W') : (p.shift === 'SICK' ? 'S' : p.shift === 'NS' ? 'NS' : p.shift === 'AL' ? 'A' : '-')}
-                      </div>
+              {fatigueData.map(s => {
+                const rowTone = s.fatigue.exceeded ? 'bg-red-50' : s.fatigue.atRisk ? 'bg-amber-50' : '';
+                const stickyTone = s.fatigue.exceeded ? 'bg-red-50' : s.fatigue.atRisk ? 'bg-amber-50' : 'bg-white';
+                return (
+                  <tr
+                    key={s.id}
+                    className={`${TABLE.tr} ${rowTone} cursor-pointer`}
+                    {...clickableRowProps(() => navigate(`/day/${formatDate(today)}`))}
+                  >
+                    <td className={`py-1 px-2 sticky left-0 ${stickyTone} z-10 border-r`}>
+                      <div className="font-medium truncate max-w-[120px]">{s.name}</div>
+                      <div className="text-[9px] text-gray-400">{s.team}</div>
                     </td>
-                  ))}
-                  <td className={TABLE.tdMono + ' text-center'}>{s.totalWorking}/28</td>
-                  <td className={TABLE.tdMono + ' text-center'}>{s.avgWeeklyShifts.toFixed(1)}</td>
-                </tr>
-              ))}
+                    <td className="py-1 px-1 text-center">
+                      <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        s.fatigue.exceeded ? 'bg-red-200 text-red-800' :
+                        s.fatigue.atRisk ? 'bg-amber-200 text-amber-800' : 'bg-green-100 text-green-700'
+                      }`}>{s.fatigue.consecutive}d</span>
+                    </td>
+                    <td className="py-1 px-1 text-center font-mono">{s.maxBlock}</td>
+                    <td className="py-1 px-1 text-center">
+                      {s.fatigue.exceeded ? (
+                        <span className="text-red-600 font-bold">BREACH</span>
+                      ) : s.fatigue.atRisk ? (
+                        <span className="text-amber-600 font-bold">RISK</span>
+                      ) : (
+                        <span className="text-green-600">OK</span>
+                      )}
+                    </td>
+                    {s.pattern.map((p, i) => (
+                      <td key={i} className={`py-0.5 px-0 text-center ${i === todayIdx ? 'ring-1 ring-blue-400' : ''}`}>
+                        <div className={`w-5 h-5 mx-auto rounded-sm text-[8px] flex items-center justify-center ${
+                          p.working ? (
+                            p.shift === 'N' ? 'bg-purple-200 text-purple-800' :
+                            p.shift.startsWith('OC') ? 'bg-orange-200 text-orange-800' :
+                            p.shift.startsWith('AG') ? 'bg-red-200 text-red-800' :
+                            'bg-green-200 text-green-800'
+                          ) : (
+                            p.shift === 'SICK' ? 'bg-red-100 text-red-600' :
+                            p.shift === 'NS' ? 'bg-pink-100 text-pink-700' :
+                            p.shift === 'AL' ? 'bg-yellow-100 text-yellow-600' :
+                            'bg-gray-100 text-gray-300'
+                          )
+                        }`}>
+                          {p.working ? (p.shift === 'N' ? 'N' : 'W') : (p.shift === 'SICK' ? 'S' : p.shift === 'NS' ? 'NS' : p.shift === 'AL' ? 'A' : '-')}
+                        </div>
+                      </td>
+                    ))}
+                    <td className={TABLE.tdMono + ' text-center'}>{s.totalWorking}/28</td>
+                    <td className={TABLE.tdMono + ' text-center'}>{s.avgWeeklyShifts.toFixed(1)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

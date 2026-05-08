@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import FatigueTracker from '../FatigueTracker.jsx';
 
@@ -19,6 +19,7 @@ vi.mock('../../lib/excel.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import { downloadXLSX } from '../../lib/excel.js';
 
 // ── Fixture data ──────────────────────────────────────────────────────────────
 
@@ -114,6 +115,21 @@ describe('FatigueTracker', () => {
     });
   });
 
+  it('retries after a load failure', async () => {
+    api.getSchedulingData
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce(MOCK_RESPONSE);
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Network error')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Retry/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Fatigue Tracker')).toBeInTheDocument();
+    });
+    expect(api.getSchedulingData).toHaveBeenCalledTimes(2);
+  });
+
   it('renders page heading and monitoring summary after load', async () => {
     renderPage();
     await waitFor(() => {
@@ -176,5 +192,24 @@ describe('FatigueTracker', () => {
     });
     expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Print/i })).toBeInTheDocument();
+  });
+
+  it('exports the fatigue workbook and triggers print', async () => {
+    const originalPrint = window.print;
+    window.print = vi.fn();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Fatigue Tracker')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Export Excel/i }));
+    expect(downloadXLSX).toHaveBeenCalledWith(
+      'fatigue_Sunrise Care',
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Fatigue Tracker' }),
+      ])
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Print$/i }));
+    expect(window.print).toHaveBeenCalled();
+    window.print = originalPrint;
   });
 });
