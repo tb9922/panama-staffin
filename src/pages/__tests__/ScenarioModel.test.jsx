@@ -114,13 +114,35 @@ describe('ScenarioModel', () => {
       expect(screen.getByText('Custom What-If Scenario')).toBeInTheDocument()
     );
     // Labels are not linked via htmlFor — query by their text and nearby inputs
-    expect(screen.getByText('Sick per day')).toBeInTheDocument();
-    expect(screen.getByText('AL per day')).toBeInTheDocument();
-    expect(screen.getByText('Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sick per day')).toBeInTheDocument();
+    expect(screen.getByLabelText('AL per day')).toBeInTheDocument();
     // Three inputs exist in the custom scenario builder
     const inputs = screen.getAllByRole('spinbutton');
     // Two numeric inputs (sick, AL)
     expect(inputs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not render NaN when optional cost config is sparse', async () => {
+    api.getSchedulingData.mockResolvedValue({
+      ...SCHED_DATA,
+      config: {
+        ...SCHED_DATA.config,
+        shifts: {},
+        agency_rate_day: null,
+        agency_rate_night: null,
+        ot_premium: null,
+        bank_staff_pool_size: null,
+        weekly_ot_cap: null,
+      },
+    });
+    renderWithProviders(<ScenarioModel />, {
+      user: { username: 'admin', role: 'admin' },
+    });
+    await waitFor(() =>
+      expect(screen.getByText('Staffing Cost Scenarios')).toBeInTheDocument()
+    );
+    expect(document.body).not.toHaveTextContent(/NaN|undefined/);
   });
 
   it('renders all preset scenario rows in the table', async () => {

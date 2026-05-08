@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useId, useState, useMemo, useEffect } from 'react';
 import { getCycleDates, getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost, calculateScenario } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, PAGE } from '../lib/design.js';
@@ -23,6 +23,26 @@ const WINTER_SCENARIOS = [
   { name: 'WINTER WORST', gaps: 9 },
   { name: 'NOROVIRUS PEAK', gaps: 9 },
 ];
+
+function normalizeScenarioConfig(config = {}) {
+  const shifts = {
+    ...(config.shifts || {}),
+    E: { ...(config.shifts?.E || {}), hours: Number(config.shifts?.E?.hours) || 8 },
+    L: { ...(config.shifts?.L || {}), hours: Number(config.shifts?.L?.hours) || 8 },
+    EL: { ...(config.shifts?.EL || {}), hours: Number(config.shifts?.EL?.hours) || 12 },
+    N: { ...(config.shifts?.N || {}), hours: Number(config.shifts?.N?.hours) || 10 },
+  };
+  return {
+    ...config,
+    shifts,
+    agency_rate_day: Number(config.agency_rate_day) || 0,
+    agency_rate_night: Number(config.agency_rate_night) || 0,
+    ot_premium: Number(config.ot_premium) || 0,
+    bank_staff_pool_size: Number(config.bank_staff_pool_size) || 0,
+    weekly_ot_cap: Number(config.weekly_ot_cap) || 8,
+    night_gap_pct: Number.isFinite(Number(config.night_gap_pct)) ? Number(config.night_gap_pct) : 0.3,
+  };
+}
 
 export default function ScenarioModel() {
   const { homeRole } = useData();
@@ -100,7 +120,10 @@ export default function ScenarioModel() {
 }
 
 function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, setCustomAL, customName, setCustomName }) {
-  const config = schedData.config;
+  const config = useMemo(() => normalizeScenarioConfig(schedData.config), [schedData.config]);
+  const nameId = useId();
+  const sickId = useId();
+  const alId = useId();
 
   // Calculate base 28-day cost from actual roster
   const baseCost = useMemo(() => {
@@ -173,19 +196,19 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
         <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Custom What-If Scenario</h2>
         <div className="grid gap-4 sm:grid-cols-[minmax(0,12rem)_repeat(2,6rem)_minmax(0,1fr)] sm:items-end">
           <div>
-            <label className={INPUT.label}>Name</label>
-            <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
+            <label htmlFor={nameId} className={INPUT.label}>Name</label>
+            <input id={nameId} type="text" value={customName} onChange={e => setCustomName(e.target.value)}
               className={INPUT.sm} />
           </div>
           <div>
-            <label className={INPUT.label}>Sick per day</label>
-            <input type="number" min="0" max="15" step="1" value={customSick}
+            <label htmlFor={sickId} className={INPUT.label}>Sick per day</label>
+            <input id={sickId} type="number" min="0" max="15" step="1" value={customSick}
               onChange={e => setCustomSick(parseInt(e.target.value) || 0)}
               className={INPUT.sm} />
           </div>
           <div>
-            <label className={INPUT.label}>AL per day</label>
-            <input type="number" min="0" max="10" step="1" value={customAL}
+            <label htmlFor={alId} className={INPUT.label}>AL per day</label>
+            <input id={alId} type="number" min="0" max="10" step="1" value={customAL}
               onChange={e => setCustomAL(parseInt(e.target.value) || 0)}
               className={INPUT.sm} />
           </div>
