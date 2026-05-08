@@ -69,6 +69,36 @@ async function validateResidentId(homeId, residentId, res) {
   return true;
 }
 
+// Sensitive DoLS/MCA narrative is limited to manager-level readers.
+function canReadSensitiveCompliance(req) {
+  return (req.user?.is_platform_admin && req.homeRole != null)
+    || req.homeRole === 'home_manager'
+    || req.homeRole === 'deputy_manager';
+}
+
+function redactDolsForBroadReader(record) {
+  const {
+    dob: _dob,
+    authorisation_number: _authorisationNumber,
+    authorising_authority: _authorisingAuthority,
+    restrictions: _restrictions,
+    notes: _notes,
+    ...rest
+  } = record;
+  return rest;
+}
+
+function redactMcaForBroadReader(record) {
+  const {
+    lacks_capacity: _lacksCapacity,
+    best_interest_decision: _bestInterestDecision,
+    decision_area: _decisionArea,
+    notes: _notes,
+    ...rest
+  } = record;
+  return rest;
+}
+
 // GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -78,12 +108,12 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       dolsRepo.findMcaByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
     ]);
     // Strip resident DoB for non-admin users (GDPR special category — not needed for care delivery)
-    const isAdmin = req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager';
-    const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob: _dob, ...rest }) => rest);
+    const canReadSensitive = canReadSensitiveCompliance(req);
+    const dols = canReadSensitive ? dolsResult.rows : dolsResult.rows.map(redactDolsForBroadReader);
     // Strip Article 9 mental-capacity fields for non-manager roles
-    const mcaAssessments = isAdmin
+    const mcaAssessments = canReadSensitive
       ? mcaResult.rows
-      : mcaResult.rows.map(({ lacks_capacity: _lc, best_interest_decision: _bid, ...rest }) => rest);
+      : mcaResult.rows.map(redactMcaForBroadReader);
     res.json({
       dols,
       mcaAssessments,

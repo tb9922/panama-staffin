@@ -14,11 +14,13 @@ import { app } from '../../server.js';
 const RUN_ID = Date.now().toString(36).slice(-6);
 const PREFIX = `compliance-route-${RUN_ID}`;
 const USERNAME = `${PREFIX}-manager`;
+const TRAINING_USERNAME = `${PREFIX}-training-lead`;
 const PASSWORD = 'CompliancePass1Test';
 const HOME_SLUG = `${PREFIX}-home`;
 const STAFF_ID = `CP${RUN_ID}`.slice(0, 20);
 
 let token;
+let trainingLeadToken;
 let homeId;
 
 beforeAll(async () => {
@@ -29,8 +31,11 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM dols WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE id = $1`, [STAFF_ID]).catch(() => {});
   await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM users WHERE username = $1`, [TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]).catch(() => {});
 
   const { rows: [home] } = await pool.query(
@@ -52,9 +57,19 @@ beforeAll(async () => {
     [USERNAME, passwordHash]
   );
   await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'Compliance Training Lead', 'test-setup')`,
+    [TRAINING_USERNAME, passwordHash]
+  );
+  await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
      VALUES ($1, $2, 'home_manager', 'test-setup')`,
     [USERNAME, homeId]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'training_lead', 'test-setup')`,
+    [TRAINING_USERNAME, homeId]
   );
 
   const loginRes = await request(app)
@@ -62,6 +77,11 @@ beforeAll(async () => {
     .send({ username: USERNAME, password: PASSWORD })
     .expect(200);
   token = loginRes.body.token;
+  const trainingLeadLoginRes = await request(app)
+    .post('/api/login')
+    .send({ username: TRAINING_USERNAME, password: PASSWORD })
+    .expect(200);
+  trainingLeadToken = trainingLeadLoginRes.body.token;
 });
 
 afterAll(async () => {
@@ -72,8 +92,11 @@ afterAll(async () => {
   await pool.query(`DELETE FROM dols WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE id = $1`, [STAFF_ID]).catch(() => {});
   await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM users WHERE username = $1`, [TRAINING_USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]).catch(() => {});
 });
 
@@ -218,6 +241,78 @@ describe('Compliance route create flows', () => {
       .expect(400);
 
     expect(res.body.error).toContain('12 months');
+  });
+
+  it('redacts DoLS and MCA special-category details for training leads', async () => {
+    const dolsRes = await request(app)
+      .post('/api/dols')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        resident_name: 'Redacted DoLS Resident',
+        dob: '1934-05-06',
+        room_number: '11',
+        application_type: 'dols',
+        application_date: '2026-03-25',
+        authorised: true,
+        authorisation_date: '2026-03-25',
+        expiry_date: '2027-03-25',
+        authorisation_number: 'AUTH-SENSITIVE-1',
+        authorising_authority: 'Sensitive Authority',
+        restrictions: ['Line of sight observation'],
+        notes: 'Sensitive DoLS narrative',
+      })
+      .expect(201);
+
+    const mcaRes = await request(app)
+      .post('/api/dols/mca')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        resident_name: 'Redacted MCA Resident',
+        assessment_date: '2026-03-25',
+        assessor: 'Dr Capacity',
+        decision_area: 'Medical treatment',
+        lacks_capacity: true,
+        best_interest_decision: 'Sensitive best-interest decision',
+        next_review_date: '2026-09-25',
+        notes: 'Sensitive MCA note',
+      })
+      .expect(201);
+
+    const listRes = await request(app)
+      .get('/api/dols')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${trainingLeadToken}`)
+      .expect(200);
+
+    const dolsRecord = listRes.body.dols.find(record => record.id === dolsRes.body.id);
+    expect(dolsRecord).toBeTruthy();
+    expect(dolsRecord).not.toHaveProperty('dob');
+    expect(dolsRecord).not.toHaveProperty('authorisation_number');
+    expect(dolsRecord).not.toHaveProperty('authorising_authority');
+    expect(dolsRecord).not.toHaveProperty('restrictions');
+    expect(dolsRecord).not.toHaveProperty('notes');
+
+    const mcaRecord = listRes.body.mcaAssessments.find(record => record.id === mcaRes.body.id);
+    expect(mcaRecord).toBeTruthy();
+    expect(mcaRecord).not.toHaveProperty('lacks_capacity');
+    expect(mcaRecord).not.toHaveProperty('decision_area');
+    expect(mcaRecord).not.toHaveProperty('best_interest_decision');
+    expect(mcaRecord).not.toHaveProperty('notes');
+  });
+
+  it('blocks training leads from writing DoLS records', async () => {
+    await request(app)
+      .post('/api/dols')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${trainingLeadToken}`)
+      .send({
+        resident_name: 'Training Lead Write Block',
+        application_type: 'dols',
+        application_date: '2026-03-25',
+      })
+      .expect(403);
   });
 
   it('accepts onboarding section-specific keys from the tracker UI', async () => {

@@ -43,7 +43,7 @@ function focusField(id) {
 }
 
 export default function DolsTracker() {
-  const { canWrite, homeRole } = useData();
+  const { canWrite, homeRole, activeHome } = useData();
   const canEdit = canWrite('compliance') && homeRole !== 'training_lead';
   const { confirm, ConfirmDialog } = useConfirm();
   const [dols, setDols] = useState([]);
@@ -57,19 +57,28 @@ export default function DolsTracker() {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const [formBaseline, setFormBaseline] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
 
-  useDirtyGuard(showModal);
+  const isDirty = showModal && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
   const today = useLiveDate();
-  const homeSlug = getCurrentHome();
+  const storedHome = getCurrentHome();
+  const homeSlug = activeHome || storedHome;
   const isMounted = useRef(true);
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
 
   const load = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug) {
+      setDols([]);
+      setMcaAssessments([]);
+      setLoading(false);
+      return;
+    }
     try {
       setError(null);
+      setLoading(true);
       const result = await getDols(homeSlug);
       if (isMounted.current) {
         setDols(result.dols || []);
@@ -142,7 +151,9 @@ export default function DolsTracker() {
 
   function openAddDols() {
     setEditingId(null);
-    setForm({ ...EMPTY_DOLS_FORM, application_date: today });
+    const nextForm = { ...EMPTY_DOLS_FORM, application_date: today };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
@@ -154,7 +165,7 @@ export default function DolsTracker() {
     if (typeof restrictions === 'string') {
       restrictions = restrictions.trim() ? [restrictions] : [];
     }
-    setForm({
+    const nextForm = {
       resident_name: dol.resident_name || '',
       resident_id: dol.resident_id || null,
       _version: dol.version,
@@ -172,12 +183,18 @@ export default function DolsTracker() {
       review_status: dol.review_status || '',
       next_review_date: dol.next_review_date || '',
       notes: dol.notes || '',
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
 
   async function handleSaveDols() {
+    if (!homeSlug) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
     if (!form.resident_name) {
       setSaveError('Resident is required.');
       focusField('dols-resident');
@@ -226,14 +243,16 @@ export default function DolsTracker() {
 
   function openAddMca() {
     setEditingId(null);
-    setForm({ ...EMPTY_MCA_FORM, assessment_date: today });
+    const nextForm = { ...EMPTY_MCA_FORM, assessment_date: today };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
 
   function openEditMca(mca) {
     setEditingId(mca.id);
-    setForm({
+    const nextForm = {
       resident_name: mca.resident_name || '',
       resident_id: mca.resident_id || null,
       _version: mca.version,
@@ -244,12 +263,18 @@ export default function DolsTracker() {
       best_interest_decision: mca.best_interest_decision || '',
       next_review_date: mca.next_review_date || '',
       notes: mca.notes || '',
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setShowModal(true);
   }
 
   async function handleSaveMca() {
+    if (!homeSlug) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
     if (!form.resident_name) {
       setSaveError('Resident is required.');
       focusField('mca-resident');
@@ -356,6 +381,16 @@ export default function DolsTracker() {
   if (error) {
     return <div className={PAGE.container}><ErrorState title="Unable to load DoLS and MCA records" message={error} onRetry={load} /></div>;
   }
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening the DoLS/LPS and MCA tracker."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -371,9 +406,9 @@ export default function DolsTracker() {
           <h1 className={PAGE.title}>DoLS/LPS & MCA Tracker</h1>
           <p className={PAGE.subtitle}>CQC Regulation 11/13 — Consent & Deprivation of Liberty</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={viewMode === 'dols' ? openAddDols : openAddMca} className={BTN.primary}>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={viewMode === 'dols' ? openAddDols : openAddMca} className={BTN.primary}>
             + {viewMode === 'dols' ? 'New DoLS/LPS' : 'New MCA'}
           </button>}
         </div>
@@ -407,11 +442,11 @@ export default function DolsTracker() {
 
       {/* View Toggle */}
       <div className="flex gap-1 mb-4">
-        <button onClick={() => { setViewMode('dols'); setShowModal(false); }}
+        <button type="button" onClick={() => { setViewMode('dols'); setShowModal(false); }}
           className={`${viewMode === 'dols' ? BTN.primary : BTN.ghost} ${BTN.sm}`}>
           DoLS / LPS
         </button>
-        <button onClick={() => { setViewMode('mca'); setShowModal(false); }}
+        <button type="button" onClick={() => { setViewMode('mca'); setShowModal(false); }}
           className={`${viewMode === 'mca' ? BTN.primary : BTN.ghost} ${BTN.sm}`}>
           MCA Assessments
         </button>
@@ -422,11 +457,11 @@ export default function DolsTracker() {
         <>
           {/* Filters */}
           <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-            <select className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)}>
+            <select aria-label="Filter DoLS by type" className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)}>
               <option value="">All Types</option>
               {APPLICATION_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <select aria-label="Filter DoLS by status" className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">All Statuses</option>
               {DOLS_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -550,34 +585,34 @@ export default function DolsTracker() {
 
             <div className="space-y-3">
               {/* Resident Info */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <ResidentPicker id="dols-resident" label="Resident" required value={form.resident_id}
                     onChange={(id, resident) => setForm({ ...form, resident_id: id, resident_name: resident?.resident_name || form.resident_name })} />
                 </div>
                 {canEdit && <div>
-                  <label className={INPUT.label}>Date of Birth</label>
-                  <input type="date" className={INPUT.base} value={form.dob}
+                  <label htmlFor="dols-dob" className={INPUT.label}>Date of Birth</label>
+                  <input id="dols-dob" type="date" className={INPUT.base} value={form.dob}
                     onChange={e => setForm({ ...form, dob: e.target.value })} />
                 </div>}
                 <div>
-                  <label className={INPUT.label}>Room Number</label>
-                  <input type="text" className={INPUT.base} value={form.room_number}
+                  <label htmlFor="dols-room-number" className={INPUT.label}>Room Number</label>
+                  <input id="dols-room-number" type="text" className={INPUT.base} value={form.room_number}
                     onChange={e => setForm({ ...form, room_number: e.target.value })} />
                 </div>
               </div>
 
               {/* Application */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Application Type *</label>
-                  <select className={INPUT.select} value={form.application_type}
+                  <label htmlFor="dols-application-type" className={INPUT.label}>Application Type *</label>
+                  <select id="dols-application-type" className={INPUT.select} value={form.application_type}
                     onChange={e => setForm({ ...form, application_type: e.target.value })}>
                     {APPLICATION_TYPES.map(t => <option key={t.id} value={t.id}>{t.name} — {t.description}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Application Date *</label>
+                  <label htmlFor="dols-application-date" className={INPUT.label}>Application Date *</label>
                   <input id="dols-application-date" type="date" className={INPUT.base} value={form.application_date}
                     onChange={e => setForm({ ...form, application_date: e.target.value })} />
                 </div>
@@ -591,16 +626,16 @@ export default function DolsTracker() {
               </label>
 
               {form.authorised && (
-                <div className="ml-6 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-3 sm:ml-6">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Authorisation Date</label>
-                      <input type="date" className={INPUT.base} value={form.authorisation_date}
+                      <label htmlFor="dols-authorisation-date" className={INPUT.label}>Authorisation Date</label>
+                      <input id="dols-authorisation-date" type="date" className={INPUT.base} value={form.authorisation_date}
                         onChange={e => setForm({ ...form, authorisation_date: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Expiry Date</label>
-                      <input type="date" className={INPUT.base} value={form.expiry_date}
+                      <label htmlFor="dols-expiry-date" className={INPUT.label}>Expiry Date</label>
+                      <input id="dols-expiry-date" type="date" className={INPUT.base} value={form.expiry_date}
                         max={dolsMaxExpiryDate || undefined}
                         onChange={e => setForm({ ...form, expiry_date: e.target.value })} />
                       {dolsMaxExpiryDate && (
@@ -608,15 +643,15 @@ export default function DolsTracker() {
                       )}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Authorisation Number</label>
-                      <input type="text" className={INPUT.base} value={form.authorisation_number}
+                      <label htmlFor="dols-authorisation-number" className={INPUT.label}>Authorisation Number</label>
+                      <input id="dols-authorisation-number" type="text" className={INPUT.base} value={form.authorisation_number}
                         onChange={e => setForm({ ...form, authorisation_number: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Authorising Authority</label>
-                      <input type="text" className={INPUT.base} placeholder="e.g. Local Authority"
+                      <label htmlFor="dols-authorising-authority" className={INPUT.label}>Authorising Authority</label>
+                      <input id="dols-authorising-authority" type="text" className={INPUT.base} placeholder="e.g. Local Authority"
                         value={form.authorising_authority}
                         onChange={e => setForm({ ...form, authorising_authority: e.target.value })} />
                     </div>
@@ -627,7 +662,7 @@ export default function DolsTracker() {
               {/* Restrictions */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className={INPUT.label}>Restrictions / Conditions</label>
+                  <span className={INPUT.label}>Restrictions / Conditions</span>
                   <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
                     onClick={() => setForm({ ...form, restrictions: [...form.restrictions, ''] })}>
                     + Add Restriction
@@ -636,25 +671,26 @@ export default function DolsTracker() {
                 {form.restrictions.length === 0 && <p className="text-xs text-gray-400">No restrictions recorded</p>}
                 {form.restrictions.map((r, i) => (
                   <div key={i} className="flex gap-2 mb-1.5">
-                    <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Restriction detail..."
+                    <input id={`dols-restriction-${i}`} aria-label={`Restriction ${i + 1}`} type="text" className={`${INPUT.sm} flex-1`} placeholder="Restriction detail..."
                       value={r}
                       onChange={e => { const arr = [...form.restrictions]; arr[i] = e.target.value; setForm({ ...form, restrictions: arr }); }} />
                     <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                      aria-label={`Remove restriction ${i + 1}`}
                       onClick={() => setForm({ ...form, restrictions: form.restrictions.filter((_, j) => j !== i) })}>Remove</button>
                   </div>
                 ))}
               </div>
 
               {/* Review */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className={INPUT.label}>Last Reviewed</label>
-                  <input type="date" className={INPUT.base} value={form.reviewed_date}
+                  <label htmlFor="dols-reviewed-date" className={INPUT.label}>Last Reviewed</label>
+                  <input id="dols-reviewed-date" type="date" className={INPUT.base} value={form.reviewed_date}
                     onChange={e => setForm({ ...form, reviewed_date: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Review Status</label>
-                  <select className={INPUT.select} value={form.review_status}
+                  <label htmlFor="dols-review-status" className={INPUT.label}>Review Status</label>
+                  <select id="dols-review-status" className={INPUT.select} value={form.review_status}
                     onChange={e => setForm({ ...form, review_status: e.target.value })}>
                     <option value="">Not set</option>
                     <option value="pending">Pending</option>
@@ -663,16 +699,16 @@ export default function DolsTracker() {
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Next Review Date</label>
-                  <input type="date" className={INPUT.base} value={form.next_review_date}
+                  <label htmlFor="dols-next-review-date" className={INPUT.label}>Next Review Date</label>
+                  <input id="dols-next-review-date" type="date" className={INPUT.base} value={form.next_review_date}
                     onChange={e => setForm({ ...form, next_review_date: e.target.value })} />
                 </div>
               </div>
 
               {/* Notes */}
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={`${INPUT.base} h-16`} value={form.notes}
+                <label htmlFor="dols-notes" className={INPUT.label}>Notes</label>
+                <textarea id="dols-notes" className={`${INPUT.base} h-16`} value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
             </div>
@@ -680,17 +716,17 @@ export default function DolsTracker() {
             {/* Footer */}
             <div className={MODAL.footer}>
               {editingId && canEdit && (
-                <button onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                <button type="button" onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               {missingDolsFields.length > 0 && (
                 <p className="text-sm text-amber-700 mr-auto">Missing: {missingDolsFields.join(', ')}</p>
               )}
               {!saveError && dolsWindowError && <p className="text-sm text-red-600 mr-auto">{dolsWindowError}</p>}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+              <button type="button" onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
-                <button onClick={handleSaveDols}
-                  disabled={Boolean(dolsWindowError)}
+                <button type="button" onClick={handleSaveDols}
+                  disabled={missingDolsFields.length > 0 || Boolean(dolsWindowError)}
                   className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>
@@ -704,28 +740,28 @@ export default function DolsTracker() {
         <Modal isOpen onClose={() => setShowModal(false)} title={editingId ? 'Edit MCA Assessment' : 'New MCA Assessment'} size="lg">
 
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <ResidentPicker id="mca-resident" label="Resident" required value={form.resident_id}
                     onChange={(id, resident) => setForm({ ...form, resident_id: id, resident_name: resident?.resident_name || form.resident_name })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Assessment Date *</label>
+                  <label htmlFor="mca-assessment-date" className={INPUT.label}>Assessment Date *</label>
                   <input id="mca-assessment-date" type="date" className={INPUT.base} value={form.assessment_date}
                     onChange={e => setForm({ ...form, assessment_date: e.target.value })} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Assessor</label>
-                  <input type="text" className={INPUT.base} placeholder="Name of assessor"
+                  <label htmlFor="mca-assessor" className={INPUT.label}>Assessor</label>
+                  <input id="mca-assessor" type="text" className={INPUT.base} placeholder="Name of assessor"
                     value={form.assessor}
                     onChange={e => setForm({ ...form, assessor: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Decision Area</label>
-                  <input type="text" className={INPUT.base} placeholder="e.g. Financial, Medical, Residence"
+                  <label htmlFor="mca-decision-area" className={INPUT.label}>Decision Area</label>
+                  <input id="mca-decision-area" type="text" className={INPUT.base} placeholder="e.g. Financial, Medical, Residence"
                     value={form.decision_area}
                     onChange={e => setForm({ ...form, decision_area: e.target.value })} />
                 </div>
@@ -739,8 +775,8 @@ export default function DolsTracker() {
 
               {form.lacks_capacity && (
                 <div>
-                  <label className={INPUT.label}>Best Interest Decision</label>
-                  <textarea className={`${INPUT.base} h-20`}
+                  <label htmlFor="mca-best-interest-decision" className={INPUT.label}>Best Interest Decision</label>
+                  <textarea id="mca-best-interest-decision" className={`${INPUT.base} h-20`}
                     placeholder="Document the best interest decision made..."
                     value={form.best_interest_decision}
                     onChange={e => setForm({ ...form, best_interest_decision: e.target.value })} />
@@ -748,14 +784,14 @@ export default function DolsTracker() {
               )}
 
               <div>
-                <label className={INPUT.label}>Next Review Date</label>
-                <input type="date" className={INPUT.base} value={form.next_review_date}
+                <label htmlFor="mca-next-review-date" className={INPUT.label}>Next Review Date</label>
+                <input id="mca-next-review-date" type="date" className={INPUT.base} value={form.next_review_date}
                   onChange={e => setForm({ ...form, next_review_date: e.target.value })} />
               </div>
 
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={`${INPUT.base} h-16`} value={form.notes}
+                <label htmlFor="mca-notes" className={INPUT.label}>Notes</label>
+                <textarea id="mca-notes" className={`${INPUT.base} h-16`} value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
             </div>
@@ -763,15 +799,16 @@ export default function DolsTracker() {
             {/* Footer */}
             <div className={MODAL.footer}>
               {editingId && canEdit && (
-                <button onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                <button type="button" onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               {missingMcaFields.length > 0 && (
                 <p className="text-sm text-amber-700 mr-auto">Missing: {missingMcaFields.join(', ')}</p>
               )}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+              <button type="button" onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
-                <button onClick={handleSaveMca}
+                <button type="button" onClick={handleSaveMca}
+                  disabled={missingMcaFields.length > 0}
                   className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>

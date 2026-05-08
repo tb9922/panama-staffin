@@ -97,10 +97,11 @@ const MOCK_RESPONSE = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function renderAdmin() {
+function renderAdmin(options = {}) {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<DolsTracker />, {
     user: { username: 'admin', role: 'admin' },
+    ...options,
   });
 }
 
@@ -114,7 +115,9 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getDols.mockResolvedValue(MOCK_RESPONSE);
 });
 
@@ -152,6 +155,23 @@ describe('DolsTracker', () => {
       expect(screen.getByText('DoLS/LPS & MCA Tracker')).toBeInTheDocument();
     });
     expect(screen.getByText(/CQC Regulation 11\/13/i)).toBeInTheDocument();
+  });
+
+  it('loads the active home instead of a stale stored home', async () => {
+    api.getCurrentHome.mockReturnValue('old-home');
+    renderAdmin({ activeHome: 'new-home' });
+    await waitFor(() => {
+      expect(api.getDols).toHaveBeenCalledWith('new-home');
+    });
+  });
+
+  it('shows a no-home state instead of hanging on the loading screen', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderAdmin({ activeHome: '' });
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+    });
+    expect(api.getDols).not.toHaveBeenCalled();
   });
 
   it('displays KPI stat cards', async () => {
@@ -265,8 +285,19 @@ describe('DolsTracker', () => {
   it('type filter dropdown is present in DoLS view', async () => {
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByDisplayValue('All Types')).toBeInTheDocument();
+      expect(screen.getByLabelText('Filter DoLS by type')).toBeInTheDocument();
     });
-    expect(screen.getByDisplayValue('All Statuses')).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter DoLS by status')).toBeInTheDocument();
+  });
+
+  it('wires DoLS modal labels to their fields and disables save until required fields are present', async () => {
+    const user = userEvent.setup();
+    api.getDols.mockResolvedValue(EMPTY_RESPONSE);
+    renderAdmin();
+    await user.click(await screen.findByRole('button', { name: 'New DoLS/LPS' }));
+
+    expect(screen.getByLabelText('Application Date *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Application Type *')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 });
