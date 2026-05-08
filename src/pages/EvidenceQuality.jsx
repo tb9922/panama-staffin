@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import ErrorState from '../components/ErrorState.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -74,11 +74,11 @@ function WeakestStatementsTable({ statements }) {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Statement</th>
-              <th className={TABLE.th}>Domain</th>
-              <th className={TABLE.th}>Score</th>
-              <th className={TABLE.th}>RAG</th>
-              <th className={TABLE.th}>Practical gaps</th>
+              <th scope="col" className={TABLE.th}>Statement</th>
+              <th scope="col" className={TABLE.th}>Domain</th>
+              <th scope="col" className={TABLE.th}>Score</th>
+              <th scope="col" className={TABLE.th}>RAG</th>
+              <th scope="col" className={TABLE.th}>Practical gaps</th>
             </tr>
           </thead>
           <tbody>
@@ -126,12 +126,15 @@ function GapsList({ gaps }) {
 
 export default function EvidenceQuality() {
   const { activeHome, canRead } = useData();
+  const domainFilterId = useId();
+  const statementFilterId = useId();
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({ domain: '', statement: '' });
   const canReadCompliance = canRead ? canRead('compliance') : true;
+  const hasActiveHome = Boolean(activeHome);
 
   const statementOptions = useMemo(
     () => QUALITY_STATEMENTS.filter((statement) => !filters.domain || statement.category === filters.domain),
@@ -141,6 +144,13 @@ export default function EvidenceQuality() {
   const load = useCallback(async ({ silent = false, signal } = {}) => {
     if (!canReadCompliance) {
       setLoading(false);
+      return;
+    }
+    if (!hasActiveHome) {
+      setPayload(null);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
     if (silent) setRefreshing(true);
@@ -158,7 +168,7 @@ export default function EvidenceQuality() {
         setRefreshing(false);
       }
     }
-  }, [activeHome, canReadCompliance, filters]);
+  }, [activeHome, canReadCompliance, filters, hasActiveHome]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -177,6 +187,13 @@ export default function EvidenceQuality() {
   if (!canReadCompliance) {
     return <ErrorState title="Compliance access required" message="Your role cannot read CQC evidence quality for this home." />;
   }
+  if (!hasActiveHome) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="No home selected" message="Select a home before opening the evidence quality dashboard." />
+      </div>
+    );
+  }
   if (loading) return <LoadingState message="Scoring evidence quality..." card />;
 
   const summary = payload?.summary || {};
@@ -189,9 +206,11 @@ export default function EvidenceQuality() {
           <h1 className={PAGE.title}>Evidence Quality</h1>
           <p className={PAGE.subtitle}>Deterministic CQC evidence scoring by domain and quality statement.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:flex-wrap lg:justify-end">
+          <label htmlFor={domainFilterId} className="sr-only">Filter by CQC domain</label>
           <select
-            className={INPUT.select}
+            id={domainFilterId}
+            className={`${INPUT.select} w-full sm:w-auto`}
             value={filters.domain}
             onChange={(event) => setFilter('domain', event.target.value)}
             aria-label="Filter by CQC domain"
@@ -199,8 +218,10 @@ export default function EvidenceQuality() {
             <option value="">All domains</option>
             {DOMAIN_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
+          <label htmlFor={statementFilterId} className="sr-only">Filter by quality statement</label>
           <select
-            className={INPUT.select}
+            id={statementFilterId}
+            className={`${INPUT.select} w-full sm:w-auto`}
             value={filters.statement}
             onChange={(event) => setFilter('statement', event.target.value)}
             aria-label="Filter by quality statement"
@@ -208,7 +229,7 @@ export default function EvidenceQuality() {
             <option value="">All statements</option>
             {statementOptions.map((statement) => <option key={statement.id} value={statement.id}>{statement.id} - {statement.name}</option>)}
           </select>
-          <button type="button" className={BTN.secondary} onClick={() => load({ silent: true })} disabled={refreshing}>
+          <button type="button" className={`${BTN.secondary} w-full sm:w-auto`} onClick={() => load({ silent: true })} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>

@@ -76,6 +76,25 @@ describe('EvidenceQuality', () => {
     expect(screen.getByLabelText('Filter by CQC domain')).toBeInTheDocument();
   });
 
+  it('shows a no-home state instead of falling through to the API fallback', () => {
+    renderWithProviders(<EvidenceQuality />, { route: '/evidence-quality', activeHome: '' });
+
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.getByText('Select a home before opening the evidence quality dashboard.')).toBeInTheDocument();
+    expect(getEvidenceQuality).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the current filtered dashboard on demand', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EvidenceQuality />, { route: '/evidence-quality' });
+
+    await waitFor(() => expect(getEvidenceQuality).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: /^Refresh$/i }));
+
+    await waitFor(() => expect(getEvidenceQuality).toHaveBeenCalledTimes(2));
+    expect(getEvidenceQuality).toHaveBeenLastCalledWith(expect.objectContaining({ home: 'test-home' }), expect.any(Object));
+  });
+
   it('reloads when filters change', async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvidenceQuality />, { route: '/evidence-quality' });
