@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { hasModuleAccess, isOwnDataOnly, ROLES } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
+import { canManageSensitiveStaffFields } from '../../shared/staffPolicy.js';
 
 export function RequireModule({ module, allowOwn = false, children }) {
   const { isPlatformAdmin } = useAuth();
@@ -18,6 +19,15 @@ export function RequireAnyModule({ modules = [], children }) {
   if (isPlatformAdmin) return children;
   const allowed = modules.some(moduleId => hasModuleAccess(homeRole, moduleId, 'read', { includeOwn: false }));
   if (!allowed) return <Navigate to="/" replace />;
+  return children;
+}
+
+export function RequireOnboardingAccess({ children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { canRead, homeRole } = useData();
+  const canReadCompliance = canRead('compliance');
+  const canManageOnboardingEvidence = canManageSensitiveStaffFields(homeRole, { isPlatformAdmin });
+  if (!canReadCompliance && !canManageOnboardingEvidence) return <Navigate to="/" replace />;
   return children;
 }
 

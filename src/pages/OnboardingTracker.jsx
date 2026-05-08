@@ -40,8 +40,8 @@ const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite, homeRole, isPlatformAdmin } = useData();
-  const canEdit = canWrite('compliance');
   const canAccessSensitiveOnboarding = canManageSensitiveStaffFields(homeRole, { isPlatformAdmin });
+  const canEdit = canWrite('compliance') || canAccessSensitiveOnboarding;
   const { confirm, ConfirmDialog } = useConfirm();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState(null);

@@ -6,6 +6,17 @@ import ErrorState from '../components/ErrorState.jsx';
 import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { canManageSensitiveStaffFields } from '../../shared/staffPolicy.js';
+import { ONBOARDING_SECTIONS, STATUS_DISPLAY } from '../lib/onboarding.js';
+
+const SECTION_LABELS = Object.fromEntries(ONBOARDING_SECTIONS.map((section) => [section.id, section.name]));
+
+function sectionLabel(section) {
+  return SECTION_LABELS[section] || String(section || '').replace(/_/g, ' ');
+}
+
+function statusLabel(status) {
+  return STATUS_DISPLAY[status]?.label || String(status || '').replace(/_/g, ' ');
+}
 
 export default function OnboardingDocsTracker() {
   const home = getCurrentHome();
@@ -72,11 +83,11 @@ export default function OnboardingDocsTracker() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className={CARD.flush}>
           <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900">By Section</div>
-          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Section</th><th className={TABLE.th}>Documents</th><th className={TABLE.th}>Missing Required</th></tr></thead><tbody>{data.bySection.map((row) => <tr key={row.section} className={TABLE.tr}><td className={TABLE.td}>{row.section}</td><td className={TABLE.td}>{row.attachment_count}</td><td className={TABLE.td}>{row.missing_required_count > 0 ? <span className={BADGE.red}>{row.missing_required_count}</span> : <span className={BADGE.green}>0</span>}</td></tr>)}</tbody></table></div>
+          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Section</th><th className={TABLE.th}>Documents</th><th className={TABLE.th}>Missing Required</th></tr></thead><tbody>{data.bySection.map((row) => <tr key={row.section} className={TABLE.tr}><td className={TABLE.td}>{sectionLabel(row.section)}</td><td className={TABLE.td}>{row.attachment_count}</td><td className={TABLE.td}>{row.missing_required_count > 0 ? <span className={BADGE.red}>{row.missing_required_count}</span> : <span className={BADGE.green}>0</span>}</td></tr>)}</tbody></table></div>
         </div>
         <div className={CARD.flush}>
           <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900">Outstanding Mandatory Sections</div>
-          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Staff</th><th className={TABLE.th}>Section</th><th className={TABLE.th}>Status</th></tr></thead><tbody>{data.outstandingMandatory.map((row, index) => <tr key={`${row.staff_id}:${row.section}:${index}`} className={TABLE.tr}><td className={TABLE.td}>{row.staff_name}</td><td className={TABLE.td}>{row.section}</td><td className={TABLE.td}><span className={BADGE.amber}>{row.status}</span></td></tr>)}</tbody></table></div>
+          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Staff</th><th className={TABLE.th}>Section</th><th className={TABLE.th}>Status</th></tr></thead><tbody>{data.outstandingMandatory.map((row, index) => <tr key={`${row.staff_id}:${row.section}:${index}`} className={TABLE.tr}><td className={TABLE.td}>{row.staff_name}</td><td className={TABLE.td}>{sectionLabel(row.section)}</td><td className={TABLE.td}><span className={BADGE.amber}>{statusLabel(row.status)}</span></td></tr>)}</tbody></table></div>
         </div>
       </div>
     </div>

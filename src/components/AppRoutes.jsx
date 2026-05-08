@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
-import { RequireAnyModule, RequireEvidenceHub, RequireHomeRole, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
+import { RequireAnyModule, RequireEvidenceHub, RequireHomeRole, RequireModule, RequireOnboardingAccess, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
 import { SCAN_INTAKE_ACCESS_MODULES } from '../../shared/scanIntake.js';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
@@ -102,8 +102,8 @@ export default function AppRoutes() {
       {/* Staff */}
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
       <Route path="/internal-bank" element={<RouteErrorBoundary><RequireModule module="staff"><InternalBank /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/onboarding" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingTracker /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/onboarding/docs" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingDocsTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/onboarding" element={<RouteErrorBoundary><RequireOnboardingAccess><OnboardingTracker /></RequireOnboardingAccess></RouteErrorBoundary>} />
+      <Route path="/onboarding/docs" element={<RouteErrorBoundary><RequireOnboardingAccess><OnboardingDocsTracker /></RequireOnboardingAccess></RouteErrorBoundary>} />
       <Route path="/acquisition" element={<RouteErrorBoundary><RequireModule module="governance"><AcquisitionOnboarding /></RequireModule></RouteErrorBoundary>} />
       <Route path="/training" element={<RouteErrorBoundary><RequireModule module="compliance"><TrainingMatrix /></RequireModule></RouteErrorBoundary>} />
       <Route path="/sick-trends" element={<RouteErrorBoundary><RequireModule module="staff"><SickTrends /></RequireModule></RouteErrorBoundary>} />

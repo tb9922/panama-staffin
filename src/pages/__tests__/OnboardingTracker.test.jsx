@@ -101,6 +101,14 @@ function renderTrainingLead() {
   });
 }
 
+function renderHrOfficer() {
+  api.getLoggedInUser.mockReturnValue({ username: 'hr', role: 'user' });
+  return renderWithProviders(<OnboardingTracker />, {
+    user: { username: 'hr', role: 'user' },
+    homeRole: 'hr_officer',
+  });
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -279,6 +287,25 @@ describe('OnboardingTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /Qualifications/i })).toBeInTheDocument();
     });
+  });
+
+  it('lets HR officers open sensitive onboarding sections without compliance access', async () => {
+    const user = userEvent.setup();
+    renderHrOfficer();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Alice Smith').closest('.cursor-pointer'));
+    await waitFor(() => {
+      expect(screen.getByText('Enhanced DBS Check')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Enhanced DBS Check'));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Enhanced DBS Check/i })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 
   it('deep-links to a staff member from the query string', async () => {
