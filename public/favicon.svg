@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Panama Staffing">
+  <rect width="64" height="64" rx="14" fill="#18212f"/>
+  <path d="M18 46V18h20a10 10 0 0 1 0 20H28v8h-10Zm10-18h9a3 3 0 0 0 0-6h-9v6Z" fill="#f8fafc"/>
+  <path d="M42 39c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5Z" fill="#2dd4bf"/>
+</svg>
