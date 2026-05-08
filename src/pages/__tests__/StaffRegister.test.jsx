@@ -203,6 +203,21 @@ describe('StaffRegister', () => {
     expect(screen.getByLabelText('Invite link').value).toContain('/staff/setup?token=test-token');
   });
 
+  it('hides portal actions when the selected home has staff portal disabled', async () => {
+    renderWithProviders(<StaffRegister />, {
+      user: { username: 'admin', role: 'admin' },
+      staffPortalEnabled: false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('button', { name: 'Invite' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Remove' }).length).toBeGreaterThan(0);
+  });
+
   it('shows NLW badge for staff below minimum wage (care role)', async () => {
     // Use a staff member with a rate below the MOCK_CONFIG nlw_rate (12.21)
     const staffWithBelowNLW = [

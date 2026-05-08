@@ -72,7 +72,7 @@ const NEW_STAFF_FIELD_IDS = {
 
 export default function StaffRegister() {
   const homeSlug = getCurrentHome();
-  const { canWrite, homeRole, isPlatformAdmin } = useData();
+  const { canWrite, homeRole, isPlatformAdmin, staffPortalEnabled } = useData();
   const canEdit = canWrite('staff');
   const canManageSensitiveStaff = canManageSensitiveStaffFields(homeRole, { isPlatformAdmin });
   const staffTableColSpan = canManageSensitiveStaff ? 17 : 9;
@@ -943,7 +943,7 @@ export default function StaffRegister() {
                         ) : (
                           <>
                             <button onClick={() => startEditing(s)} className="text-gray-600 hover:text-blue-700 text-xs transition-colors">Edit</button>
-                            {canManageSensitiveStaff && s.active !== false && (
+                            {canManageSensitiveStaff && staffPortalEnabled && s.active !== false && (
                               <button
                                 onClick={() => { void handleInviteStaff(s); }}
                                 disabled={inviteBusyId === s.id}
@@ -952,7 +952,7 @@ export default function StaffRegister() {
                                 {inviteBusyId === s.id ? 'Inviting...' : 'Invite'}
                               </button>
                             )}
-                            {canManageSensitiveStaff && (
+                            {canManageSensitiveStaff && staffPortalEnabled && (
                               <button
                                 onClick={() => { void handleRevokeSessions(s); }}
                                 disabled={revokeBusyId === s.id}

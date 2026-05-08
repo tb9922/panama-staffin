@@ -30,6 +30,7 @@ export function renderWithProviders(ui, {
   isPlatformAdmin = false,
   activeHome = 'test-home',
   activeHomeObj,
+  staffPortalEnabled = true,
   staffId = null,
   routes = [],
   renderOptions = {},
@@ -41,12 +42,14 @@ export function renderWithProviders(ui, {
     || isPlatformAdmin !== false
     || activeHome !== 'test-home'
     || activeHomeObj !== undefined
+    || staffPortalEnabled !== true
     || staffId !== null;
   const currentCtx = currentMockDataContext();
   if (hasDataContextOptions || currentCtx?.__testDataContext === true) {
     useData.mockReturnValue(createMockDataContext({
       activeHome,
       activeHomeObj,
+      staffPortalEnabled,
       canRead,
       canWrite,
       homeRole: resolvedHomeRole,
