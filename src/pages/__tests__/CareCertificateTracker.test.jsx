@@ -143,6 +143,21 @@ describe('CareCertificateTracker', () => {
     expect(screen.getByRole('button', { name: /Start New/i })).not.toBeDisabled();
   });
 
+  it('labels filters and start-modal fields for keyboard users', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Start New/i })).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/Search Care Certificate staff/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter Care Certificate status/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Start New/i }));
+    expect(screen.getByLabelText('Staff Member')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Supervisor / Assessor')).toBeInTheDocument();
+  });
+
   it('viewer does not see Start New button', async () => {
     renderViewer();
     await waitFor(() => {
@@ -182,5 +197,22 @@ describe('CareCertificateTracker', () => {
     await waitFor(() => {
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
     });
+  });
+
+  it('labels detail-modal supervisor and standard fields', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /Edit/i }));
+    expect(screen.getByLabelText(/Supervisor:/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Understand Your Role/i }));
+    expect(screen.getByLabelText('Status')).toBeInTheDocument();
+    expect(screen.getByLabelText('Completion Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Assessor')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notes')).toBeInTheDocument();
   });
 });

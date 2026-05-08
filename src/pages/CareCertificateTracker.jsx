@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useId, useState, useMemo, useEffect } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -40,6 +40,10 @@ function cloneCareCertRecord(record) {
   return JSON.parse(JSON.stringify(record));
 }
 
+function sameRecord(a, b) {
+  return JSON.stringify(a || {}) === JSON.stringify(b || {});
+}
+
 export default function CareCertificateTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
@@ -63,11 +67,17 @@ export default function CareCertificateTracker() {
   const [pendingUpdates, setPendingUpdates] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const { notice, showNotice, clearNotice } = useTransientNotice();
-  useDirtyGuard(showModal || showStartModal);
 
   const today = useLiveDate();
+  const searchId = useId();
+  const statusFilterId = useId();
+  const startStaffId = useId();
+  const startDateId = useId();
+  const startSupervisorId = useId();
+  const detailSupervisorId = useId();
 
   useEffect(() => {
+    if (!homeSlug) return;
     let stale = false;
     (async () => {
       try {
@@ -104,6 +114,14 @@ export default function CareCertificateTracker() {
   const eligibleStaff = useMemo(() => {
     return activeStaff.filter(s => !careCertData[s.id]).sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, careCertData]);
+  const selectedOriginalRecord = selectedStaffId ? careCertData[selectedStaffId] : null;
+  const detailDirty = showModal && selectedStaffId
+    ? !sameRecord(pendingUpdates, selectedOriginalRecord) || editSupervisor !== (selectedOriginalRecord?.supervisor || '')
+    : false;
+  const startDirty = showStartModal
+    ? startForm.staffId !== (eligibleStaff[0]?.id || '') || startForm.start_date !== today || startForm.supervisor.trim() !== ''
+    : false;
+  useDirtyGuard(detailDirty || startDirty);
 
   // ── Start New CC ─────────────────────────────────────────────────────────
 
@@ -280,6 +298,13 @@ export default function CareCertificateTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="No home selected" message="Select a home before opening Care Certificate tracking." />
+      </div>
+    );
+  }
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading Care Certificate data..." /></div>;
   if (!state && error) return <div className={PAGE.container}><ErrorState title="Unable to load Care Certificate tracker" message={error} onRetry={() => setRefreshKey(k => k + 1)} /></div>;
 
@@ -294,9 +319,9 @@ export default function CareCertificateTracker() {
           <h1 className={PAGE.title}>Care Certificate Tracker</h1>
           <p className="text-xs text-gray-500 mt-1">CQC Regulation 18 — 16 standards (2025 update incl. Oliver McGowan)</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
-          {canEdit && <button onClick={openStartModal} className={BTN.primary} disabled={eligibleStaff.length === 0}>Start New</button>}
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <button onClick={handleExport} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          {canEdit && <button onClick={openStartModal} className={`${BTN.primary} flex-1 whitespace-nowrap sm:flex-none`} disabled={eligibleStaff.length === 0}>Start New</button>}
         </div>
       </div>
 
@@ -329,8 +354,10 @@ export default function CareCertificateTracker() {
 
       {/* Filters */}
       <div className={`${CARD.padded} mb-4 flex gap-3 flex-wrap items-center`}>
-        <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <label htmlFor={searchId} className="sr-only">Search Care Certificate staff</label>
+        <input id={searchId} type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-full sm:w-44`} />
+        <label htmlFor={statusFilterId} className="sr-only">Filter Care Certificate status</label>
+        <select id={statusFilterId} value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} w-full sm:w-auto`}>
           <option value="all">All Statuses</option>
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
@@ -405,22 +432,22 @@ export default function CareCertificateTracker() {
       <Modal isOpen={showStartModal} onClose={() => { setShowStartModal(false); setError(null); }} title="Start Care Certificate" size="md">
             <div className="space-y-4">
               <div>
-                <label className={INPUT.label}>Staff Member</label>
+                <label htmlFor={startStaffId} className={INPUT.label}>Staff Member</label>
                 {eligibleStaff.length === 0 ? (
                   <p className="text-sm text-gray-500">All active staff already have a Care Certificate record.</p>
                 ) : (
-                  <select value={startForm.staffId} onChange={e => setStartForm({ ...startForm, staffId: e.target.value })} className={INPUT.select}>
+                  <select id={startStaffId} value={startForm.staffId} onChange={e => setStartForm({ ...startForm, staffId: e.target.value })} className={INPUT.select}>
                     {eligibleStaff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
                   </select>
                 )}
               </div>
               <div>
-                <label className={INPUT.label}>Start Date</label>
-                <input type="date" value={startForm.start_date} onChange={e => setStartForm({ ...startForm, start_date: e.target.value })} className={INPUT.base} />
+                <label htmlFor={startDateId} className={INPUT.label}>Start Date</label>
+                <input id={startDateId} type="date" value={startForm.start_date} onChange={e => setStartForm({ ...startForm, start_date: e.target.value })} className={INPUT.base} />
               </div>
               <div>
-                <label className={INPUT.label}>Supervisor / Assessor</label>
-                <input type="text" value={startForm.supervisor} onChange={e => setStartForm({ ...startForm, supervisor: e.target.value })} className={INPUT.base} placeholder="e.g. Jane Smith" />
+                <label htmlFor={startSupervisorId} className={INPUT.label}>Supervisor / Assessor</label>
+                <input id={startSupervisorId} type="text" value={startForm.supervisor} onChange={e => setStartForm({ ...startForm, supervisor: e.target.value })} className={INPUT.base} placeholder="e.g. Jane Smith" />
               </div>
               {startForm.start_date && (
                 <div className="text-xs text-gray-500">
@@ -476,8 +503,8 @@ export default function CareCertificateTracker() {
 
             {/* Supervisor edit */}
             <div className="flex items-center gap-2 mb-4">
-              <label className="text-xs text-gray-500">Supervisor:</label>
-              <input type="text" value={editSupervisor} onChange={e => setEditSupervisor(e.target.value)} className={`${INPUT.sm} w-48`} placeholder="Assessor name" />
+              <label htmlFor={detailSupervisorId} className="text-xs text-gray-500">Supervisor:</label>
+              <input id={detailSupervisorId} type="text" value={editSupervisor} onChange={e => setEditSupervisor(e.target.value)} className={`${INPUT.sm} w-48`} placeholder="Assessor name" />
               {editSupervisor !== (careCertData[selectedStaffId]?.supervisor || '') && (
                 <button onClick={handleSaveSupervisor} disabled={saving} className={`${BTN.primary} ${BTN.xs}`}>Save</button>
               )}
@@ -497,6 +524,10 @@ export default function CareCertificateTracker() {
                 const badgeClass = STD_BADGE_MAP[stdRec.status] || BADGE.gray;
                 const statusLabel = CC_STANDARD_STATUSES[stdRec.status]?.label || stdRec.status;
                 const cat = CC_CATEGORIES.find(c => c.id === std.category);
+                const statusId = `care-cert-${std.id}-status`;
+                const completionDateId = `care-cert-${std.id}-completion-date`;
+                const assessorId = `care-cert-${std.id}-assessor`;
+                const notesId = `care-cert-${std.id}-notes`;
                 return (
                   <div key={std.id} className="border border-gray-100 rounded-lg overflow-hidden">
                     <button
@@ -518,8 +549,9 @@ export default function CareCertificateTracker() {
                       <div className="px-3 py-3 bg-gray-50 border-t border-gray-100 space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className={INPUT.label}>Status</label>
+                            <label htmlFor={statusId} className={INPUT.label}>Status</label>
                             <select
+                              id={statusId}
                               value={stdRec.status}
                               onChange={e => handleStandardUpdate(std.id, 'status', e.target.value)}
                               className={INPUT.select}
@@ -531,8 +563,9 @@ export default function CareCertificateTracker() {
                             </select>
                           </div>
                           <div>
-                            <label className={INPUT.label}>Completion Date</label>
+                            <label htmlFor={completionDateId} className={INPUT.label}>Completion Date</label>
                             <input
+                              id={completionDateId}
                               type="date"
                               value={stdRec.completion_date || ''}
                               onChange={e => handleStandardUpdate(std.id, 'completion_date', e.target.value || null)}
@@ -541,8 +574,9 @@ export default function CareCertificateTracker() {
                           </div>
                         </div>
                         <div>
-                          <label className={INPUT.label}>Assessor</label>
+                          <label htmlFor={assessorId} className={INPUT.label}>Assessor</label>
                           <input
+                            id={assessorId}
                             type="text"
                             value={stdRec.assessor || ''}
                             onChange={e => handleStandardUpdate(std.id, 'assessor', e.target.value)}
@@ -551,8 +585,9 @@ export default function CareCertificateTracker() {
                           />
                         </div>
                         <div>
-                          <label className={INPUT.label}>Notes</label>
+                          <label htmlFor={notesId} className={INPUT.label}>Notes</label>
                           <textarea
+                            id={notesId}
                             value={stdRec.notes || ''}
                             onChange={e => handleStandardUpdate(std.id, 'notes', e.target.value)}
                             className={INPUT.base}
