@@ -99,6 +99,7 @@ export default function IncidentTrackerModal({
   handleFreeze,
   handleSave,
   handleAddAddendum,
+  legacyActionFreeze = false,
 }) {
   const title = editingId ? (isFrozen ? 'Incident (Frozen)' : 'Edit Incident') : 'New Incident';
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -526,15 +527,22 @@ export default function IncidentTrackerModal({
           <div>
             <div className="flex items-center justify-between mb-1">
               <p className={INPUT.label}>Corrective Actions</p>
-              <button
-                type="button"
-                className={`${BTN.ghost} ${BTN.xs}`}
-                onClick={() => setForm({ ...form, corrective_actions: [...form.corrective_actions, { description: '', assigned_to: '', due_date: '', completed_date: '', status: 'pending' }] })}
-              >
-                + Add Action
-              </button>
+              {!legacyActionFreeze && (
+                <button
+                  type="button"
+                  className={`${BTN.ghost} ${BTN.xs}`}
+                  onClick={() => setForm({ ...form, corrective_actions: [...form.corrective_actions, { description: '', assigned_to: '', due_date: '', completed_date: '', status: 'pending' }] })}
+                >
+                  + Add Action
+                </button>
+              )}
             </div>
-            {form.corrective_actions.length === 0 && <p className="text-xs text-gray-600">No corrective actions recorded</p>}
+            {legacyActionFreeze && (
+              <p className="mb-2 text-xs text-amber-700">
+                Legacy incident actions are read-only. Create new accountable actions in Manager Actions.
+              </p>
+            )}
+            {form.corrective_actions.length === 0 && <p className="text-xs text-gray-600">{legacyActionFreeze ? 'No legacy corrective actions recorded' : 'No corrective actions recorded'}</p>}
             {form.corrective_actions.map((action, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -543,6 +551,7 @@ export default function IncidentTrackerModal({
                     className={`${INPUT.sm} flex-1`}
                     placeholder="Action description"
                     aria-label={`Corrective action ${index + 1} description`}
+                    disabled={legacyActionFreeze}
                     value={action.description}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -550,9 +559,11 @@ export default function IncidentTrackerModal({
                       setForm({ ...form, corrective_actions: actions });
                     }}
                   />
-                  <button type="button" aria-label={`Remove corrective action ${index + 1}`} className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, actionIndex) => actionIndex !== index) })}>
-                    Remove
-                  </button>
+                  {!legacyActionFreeze && (
+                    <button type="button" aria-label={`Remove corrective action ${index + 1}`} className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, actionIndex) => actionIndex !== index) })}>
+                      Remove
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <input
@@ -560,6 +571,7 @@ export default function IncidentTrackerModal({
                     className={INPUT.sm}
                     placeholder="Assigned to"
                     aria-label={`Corrective action ${index + 1} assigned to`}
+                    disabled={legacyActionFreeze}
                     value={action.assigned_to}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -572,6 +584,7 @@ export default function IncidentTrackerModal({
                     className={INPUT.sm}
                     title="Due date"
                     aria-label={`Corrective action ${index + 1} due date`}
+                    disabled={legacyActionFreeze}
                     value={action.due_date}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -584,6 +597,7 @@ export default function IncidentTrackerModal({
                     className={INPUT.sm}
                     title="Completed date"
                     aria-label={`Corrective action ${index + 1} completed date`}
+                    disabled={legacyActionFreeze}
                     value={action.completed_date}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -594,6 +608,7 @@ export default function IncidentTrackerModal({
                   <select
                     className={INPUT.sm}
                     aria-label={`Corrective action ${index + 1} status`}
+                    disabled={legacyActionFreeze}
                     value={action.status}
                     onChange={e => {
                       const actions = [...form.corrective_actions];

@@ -366,6 +366,33 @@ describe('IncidentTracker', () => {
     expect(screen.getByText('Date *')).toBeInTheDocument();
   });
 
+  it('hides legacy corrective action editing when the V1 action freeze is active', async () => {
+    const user = userEvent.setup();
+    api.getIncidents.mockResolvedValue({
+      ...MOCK_INCIDENTS_RESPONSE,
+      legacyActionFreeze: true,
+    });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ New Incident/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /\+ New Incident/i }));
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'fall');
+    await user.click(screen.getByRole('tab', { name: 'Investigation' }));
+
+    expect(screen.queryByRole('button', { name: /\+ Add Action/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Legacy incident actions are read-only/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(api.createIncident).toHaveBeenCalled();
+    });
+    expect(api.createIncident.mock.calls.at(-1)[1]).not.toHaveProperty('corrective_actions');
+  });
+
   it('Export Excel button is present for all users', async () => {
     renderAdmin();
     await waitFor(() => {

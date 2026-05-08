@@ -13,7 +13,7 @@ import { dispatchEvent } from '../services/webhookService.js';
 import { nullableDateInput, timeStr } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateIncidentStatusChange } from '../lib/statusTransitions.js';
-import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
+import { isLegacyActionFreezeEnabled, rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 import { getCqcNotificationDeadline } from '../shared/incidents.js';
 
 const router = Router();
@@ -188,7 +188,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
         return safe;
       });
     }
-    res.json({ incidents, incidentTypes, staff, _total: incidentsResult.total });
+    res.json({ incidents, incidentTypes, staff, _total: incidentsResult.total, legacyActionFreeze: isLegacyActionFreezeEnabled() });
   } catch (err) { next(err); }
 });
 

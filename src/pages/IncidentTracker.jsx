@@ -55,6 +55,13 @@ function sameIncidentForm(a, b) {
   return JSON.stringify(a || {}) === JSON.stringify(b || {});
 }
 
+function writableIncidentPayload(form, legacyActionFreeze) {
+  if (!legacyActionFreeze) return form;
+  const payload = { ...form };
+  delete payload.corrective_actions;
+  return payload;
+}
+
 export default function IncidentTracker() {
   const { activeHome, canWrite } = useData();
   const canEdit = canWrite('compliance');
@@ -64,6 +71,7 @@ export default function IncidentTracker() {
   const [incidents, setIncidents] = useState([]);
   const [incidentTypes, setIncidentTypes] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [legacyActionFreeze, setLegacyActionFreeze] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -91,6 +99,7 @@ export default function IncidentTracker() {
       setIncidents([]);
       setIncidentTypes(DEFAULT_INCIDENT_TYPES);
       setStaff([]);
+      setLegacyActionFreeze(false);
       setLoading(false);
       setError(null);
       return;
@@ -117,6 +126,7 @@ export default function IncidentTracker() {
         : DEFAULT_INCIDENT_TYPES;
       setIncidentTypes(types.filter(t => t.active !== false));
       setStaff(firstResult?.staff || []);
+      setLegacyActionFreeze(Boolean(firstResult?.legacyActionFreeze));
     } catch (err) {
       setError(err.message || 'Failed to load incidents');
     } finally {
@@ -264,9 +274,10 @@ export default function IncidentTracker() {
     setSaveError(null);
     try {
       if (editingId) {
-        await updateIncident(home, editingId, form);
+        await updateIncident(home, editingId, writableIncidentPayload(form, legacyActionFreeze));
       } else {
-        await createIncident(home, { ...form, reported_by: username });
+        const payload = writableIncidentPayload(form, legacyActionFreeze);
+        await createIncident(home, { ...payload, reported_by: username });
       }
       setFormBaseline(cloneIncidentForm(form));
       await load();
@@ -556,6 +567,7 @@ export default function IncidentTracker() {
         handleFreeze={handleFreeze}
         handleSave={handleSave}
         handleAddAddendum={handleAddAddendum}
+        legacyActionFreeze={legacyActionFreeze}
       />
       {ConfirmDialog}
     </div>
