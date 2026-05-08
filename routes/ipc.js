@@ -10,7 +10,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateIpcOutbreakStatusChange } from '../lib/statusTransitions.js';
-import { rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
+import { isLegacyActionFreezeEnabled, rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -71,7 +71,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const auditsResult = await ipcRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const audits = auditsResult.rows;
     const auditTypes = req.home.config?.ipc_audit_types || [];
-    res.json({ audits, auditTypes, _total: auditsResult.total });
+    res.json({ audits, auditTypes, legacyActionFreeze: isLegacyActionFreezeEnabled(), _total: auditsResult.total });
   } catch (err) { next(err); }
 });
 
@@ -107,7 +107,9 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (audit === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, audit);
+    const changes = diffFields(existing, audit, {
+      extraSensitive: ['risk_areas', 'corrective_actions', 'outbreak'],
+    });
     await auditService.log('ipc_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(audit);
   } catch (err) { next(err); }

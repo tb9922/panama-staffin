@@ -364,4 +364,43 @@ describe('Compliance route create flows', () => {
 
     expect(updateRes.body.error).toContain('cannot move');
   });
+
+  it('reports and enforces the IPC legacy corrective-action freeze', async () => {
+    const previousFreeze = process.env.V1_LEGACY_ACTION_FREEZE;
+    process.env.V1_LEGACY_ACTION_FREEZE = '1';
+    try {
+      const listRes = await request(app)
+        .get('/api/ipc')
+        .query({ home: HOME_SLUG })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(listRes.body.legacyActionFreeze).toBe(true);
+
+      await request(app)
+        .post('/api/ipc')
+        .query({ home: HOME_SLUG })
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          audit_date: '2026-03-29',
+          audit_type: 'hand-hygiene',
+          corrective_actions: [{ description: 'Legacy action should be blocked' }],
+        })
+        .expect(409);
+
+      await request(app)
+        .post('/api/ipc')
+        .query({ home: HOME_SLUG })
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          audit_date: '2026-03-30',
+          audit_type: 'hand-hygiene',
+          notes: 'Metadata-only IPC audit while legacy actions are frozen',
+        })
+        .expect(201);
+    } finally {
+      if (previousFreeze == null) delete process.env.V1_LEGACY_ACTION_FREEZE;
+      else process.env.V1_LEGACY_ACTION_FREEZE = previousFreeze;
+    }
+  });
 });

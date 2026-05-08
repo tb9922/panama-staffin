@@ -20,7 +20,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM ipc_audits
      WHERE home_id = $1 AND deleted_at IS NULL
-     ORDER BY audit_date DESC NULLS LAST LIMIT $2 OFFSET $3`,
+     ORDER BY audit_date DESC NULLS LAST, id DESC LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
@@ -62,7 +62,7 @@ export async function sync(homeId, arr, client) {
          overall_score=EXCLUDED.overall_score,compliance_pct=EXCLUDED.compliance_pct,
          risk_areas=EXCLUDED.risk_areas,corrective_actions=EXCLUDED.corrective_actions,
          outbreak=EXCLUDED.outbreak,notes=EXCLUDED.notes,
-         reported_at=EXCLUDED.reported_at,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+         reported_at=EXCLUDED.reported_at,updated_at=EXCLUDED.updated_at,version=ipc_audits.version + 1,deleted_at=NULL`,
       [homeId, ...values]
     );
   }
@@ -100,7 +100,7 @@ export async function upsert(homeId, data) {
      ON CONFLICT (home_id, id) DO UPDATE SET
        audit_date=$3,audit_type=$4,auditor=$5,overall_score=$6,compliance_pct=$7,
        risk_areas=$8,corrective_actions=$9,outbreak=$10,notes=$11,
-       reported_at=$12,updated_at=$13,deleted_at=NULL
+       reported_at=$12,updated_at=$13,version=ipc_audits.version + 1,deleted_at=NULL
      RETURNING ${COLS}`,
     [
       id, homeId, data.audit_date || null, data.audit_type || null, data.auditor || null,

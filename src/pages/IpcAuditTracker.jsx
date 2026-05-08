@@ -43,7 +43,7 @@ function focusField(id) {
 }
 
 export default function IpcAuditTracker() {
-  const { canWrite } = useData();
+  const { canWrite, activeHome } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const [audits, setAudits] = useState([]);
@@ -51,22 +51,38 @@ export default function IpcAuditTracker() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  useDirtyGuard(showModal);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [filterType, setFilterType] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const [legacyActionFreeze, setLegacyActionFreeze] = useState(false);
   const { notice, showNotice, clearNotice } = useTransientNotice();
 
-  const home = getCurrentHome();
+  const isDirty = showModal && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
+
+  const storedHome = getCurrentHome();
+  const home = activeHome || storedHome;
 
   const load = useCallback(async () => {
+    if (!home) {
+      setAudits([]);
+      setAuditTypes(DEFAULT_IPC_AUDIT_TYPES.filter(t => t.active));
+      setLoading(false);
+      return;
+    }
     try {
       setError(null);
+      setLoading(true);
       const result = await getIpcAudits(home);
       setAudits(result.audits || []);
-      setAuditTypes((result.auditTypes || DEFAULT_IPC_AUDIT_TYPES).filter(t => t.active));
+      const configuredTypes = Array.isArray(result.auditTypes) && result.auditTypes.length > 0
+        ? result.auditTypes
+        : DEFAULT_IPC_AUDIT_TYPES;
+      setAuditTypes(configuredTypes.filter(t => t.active));
+      setLegacyActionFreeze(Boolean(result.legacyActionFreeze));
     } catch (err) {
       setError(err.message || 'Failed to load IPC audits');
     } finally {
@@ -88,13 +104,15 @@ export default function IpcAuditTracker() {
 
   function openAdd() {
     setEditingId(null);
-    setForm({
+    const nextForm = {
       ...EMPTY_FORM,
       audit_date: today,
       risk_areas: [],
       corrective_actions: [],
       outbreak: { ...EMPTY_FORM.outbreak },
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -102,7 +120,7 @@ export default function IpcAuditTracker() {
 
   function openEdit(audit) {
     setEditingId(audit.id);
-    setForm({
+    const nextForm = {
       audit_date: audit.audit_date || '',
       audit_type: audit.audit_type || '',
       auditor: audit.auditor || '',
@@ -115,13 +133,19 @@ export default function IpcAuditTracker() {
         : { ...EMPTY_FORM.outbreak },
       notes: audit.notes || '',
       _version: audit.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
   }
 
   async function handleSave() {
+    if (!home) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
     if (!form.audit_type) {
       setSaveError('Audit type is required.');
       focusField('ipc-audit-type');
@@ -137,6 +161,7 @@ export default function IpcAuditTracker() {
       ...form,
       overall_score: form.overall_score !== '' ? Number(form.overall_score) : null,
       compliance_pct: form.compliance_pct !== '' ? Number(form.compliance_pct) : null,
+      corrective_actions: legacyActionFreeze ? undefined : form.corrective_actions,
       outbreak: form.outbreak.suspected ? { ...form.outbreak, status: normalizeOutbreakStatus(form.outbreak.status) } : null,
       _version: form._version,
     };
@@ -225,6 +250,16 @@ export default function IpcAuditTracker() {
       </div>
     );
   }
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening IPC audits."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -234,9 +269,9 @@ export default function IpcAuditTracker() {
           <h1 className={PAGE.title}>IPC Audit Tracker</h1>
           <p className={PAGE.subtitle}>CQC Regulation 12 — Infection Prevention & Control</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Audit</button>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={openAdd} className={BTN.primary}>+ New Audit</button>}
         </div>
       </div>
 
@@ -272,7 +307,7 @@ export default function IpcAuditTracker() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <select className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)}>
+        <select aria-label="Filter IPC audits by type" className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">All Types</option>
           {auditTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
@@ -315,8 +350,11 @@ export default function IpcAuditTracker() {
                 const actionsTotal = (audit.corrective_actions || []).length;
                 const outbreakStatus = normalizeOutbreakStatus(audit.outbreak?.status);
                 const hasOutbreak = audit.outbreak && (outbreakStatus === 'suspected' || outbreakStatus === 'confirmed');
+                const auditLabel = [typeDef?.name || audit.audit_type || 'IPC audit', audit.audit_date, audit.auditor ? `by ${audit.auditor}` : null]
+                  .filter(Boolean)
+                  .join(' ');
                 return (
-                  <tr key={audit.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(audit), { disabled: !canEdit, label: `Open IPC audit from ${audit.audit_date}` })}>
+                  <tr key={audit.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(audit), { disabled: !canEdit, label: `Open ${auditLabel}` })}>
                     <td className={TABLE.td}>{audit.audit_date}</td>
                     <td className={TABLE.td}>{typeDef?.name || audit.audit_type}</td>
                     <td className={TABLE.td}>{audit.auditor || '-'}</td>
@@ -357,33 +395,33 @@ export default function IpcAuditTracker() {
           {/* Details Tab */}
           {activeTab === 'details' && (
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className={INPUT.label}>Audit Type *</label>
+                  <label htmlFor="ipc-audit-type" className={INPUT.label}>Audit Type *</label>
                   <select id="ipc-audit-type" className={INPUT.select} value={form.audit_type} onChange={e => setForm({ ...form, audit_type: e.target.value })}>
                     <option value="">Select...</option>
                     {auditTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Date *</label>
+                  <label htmlFor="ipc-audit-date" className={INPUT.label}>Date *</label>
                   <input id="ipc-audit-date" type="date" className={INPUT.base} value={form.audit_date} onChange={e => setForm({ ...form, audit_date: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Auditor</label>
-                  <input type="text" className={INPUT.base} placeholder="Name" value={form.auditor} onChange={e => setForm({ ...form, auditor: e.target.value })} />
+                  <label htmlFor="ipc-auditor" className={INPUT.label}>Auditor</label>
+                  <input id="ipc-auditor" type="text" className={INPUT.base} placeholder="Name" value={form.auditor} onChange={e => setForm({ ...form, auditor: e.target.value })} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={INPUT.label}>Overall Score (0-100)</label>
-                  <input type="number" min="0" max="100" className={INPUT.base} value={form.overall_score}
+                  <label htmlFor="ipc-overall-score" className={INPUT.label}>Overall Score (0-100)</label>
+                  <input id="ipc-overall-score" type="number" min="0" max="100" className={INPUT.base} value={form.overall_score}
                     onChange={e => setForm({ ...form, overall_score: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Compliance % (0-100)</label>
-                  <input type="number" min="0" max="100" className={INPUT.base} value={form.compliance_pct}
+                  <label htmlFor="ipc-compliance-pct" className={INPUT.label}>Compliance % (0-100)</label>
+                  <input id="ipc-compliance-pct" type="number" min="0" max="100" className={INPUT.base} value={form.compliance_pct}
                     onChange={e => setForm({ ...form, compliance_pct: e.target.value })} />
                 </div>
               </div>
@@ -391,7 +429,7 @@ export default function IpcAuditTracker() {
               {/* Risk Areas */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className={INPUT.label}>Risk Areas</label>
+                  <span className={INPUT.label}>Risk Areas</span>
                   <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
                     onClick={() => setForm({ ...form, risk_areas: [...form.risk_areas, { area: '', severity: 'low', details: '' }] })}>
                     + Add Risk Area
@@ -400,19 +438,20 @@ export default function IpcAuditTracker() {
                 {form.risk_areas.length === 0 && <p className="text-xs text-gray-400">No risk areas identified</p>}
                 {form.risk_areas.map((risk, i) => (
                   <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
-                    <div className="flex gap-2">
-                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Area" value={risk.area}
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input type="text" aria-label={`Risk area ${i + 1}`} className={`${INPUT.sm} flex-1`} placeholder="Area" value={risk.area}
                         onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], area: e.target.value }; setForm({ ...form, risk_areas: r }); }} />
-                      <select className={`${INPUT.sm} w-28`} value={risk.severity}
+                      <select aria-label={`Risk severity ${i + 1}`} className={`${INPUT.sm} w-full sm:w-28`} value={risk.severity}
                         onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], severity: e.target.value }; setForm({ ...form, risk_areas: r }); }}>
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
                         <option value="high">High</option>
                       </select>
                       <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                        aria-label={`Remove risk area ${i + 1}`}
                         onClick={() => setForm({ ...form, risk_areas: form.risk_areas.filter((_, j) => j !== i) })}>Remove</button>
                     </div>
-                    <textarea className={`${INPUT.sm} h-12`} placeholder="Details..."
+                    <textarea className={`${INPUT.sm} h-12`} aria-label={`Risk details ${i + 1}`} placeholder="Details..."
                       value={risk.details}
                       onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], details: e.target.value }; setForm({ ...form, risk_areas: r }); }} />
                   </div>
@@ -422,29 +461,41 @@ export default function IpcAuditTracker() {
               {/* Corrective Actions */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className={INPUT.label}>Corrective Actions</label>
-                  <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+                  <span className={INPUT.label}>Corrective Actions</span>
+                  {!legacyActionFreeze && <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
                     onClick={() => setForm({ ...form, corrective_actions: [...form.corrective_actions, { id: 'ca-' + Date.now(), description: '', assigned_to: '', due_date: '', completed_date: '', status: 'open' }] })}>
                     + Add Action
-                  </button>
+                  </button>}
                 </div>
+                {legacyActionFreeze && (
+                  <InlineNotice variant="warning" className="mb-2">
+                    Legacy corrective actions are read-only after the V1 Manager Actions freeze.
+                  </InlineNotice>
+                )}
                 {form.corrective_actions.length === 0 && <p className="text-xs text-gray-400">No corrective actions recorded</p>}
                 {form.corrective_actions.map((action, i) => (
                   <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
-                    <div className="flex gap-2">
-                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description}
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input type="text" aria-label={`Corrective action ${i + 1}`} className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description}
+                        disabled={legacyActionFreeze}
                         onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], description: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                      <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                      {!legacyActionFreeze && <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                        aria-label={`Remove corrective action ${i + 1}`}
                         onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, j) => j !== i) })}>Remove</button>
+                      }
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <input type="text" className={INPUT.sm} placeholder="Assigned to" value={action.assigned_to}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                      <input type="text" aria-label={`Corrective action assignee ${i + 1}`} className={INPUT.sm} placeholder="Assigned to" value={action.assigned_to}
+                        disabled={legacyActionFreeze}
                         onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], assigned_to: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                      <input type="date" className={INPUT.sm} title="Due date" value={action.due_date}
+                      <input type="date" aria-label={`Corrective action due date ${i + 1}`} className={INPUT.sm} title="Due date" value={action.due_date}
+                        disabled={legacyActionFreeze}
                         onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], due_date: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                      <input type="date" className={INPUT.sm} title="Completed date" value={action.completed_date}
+                      <input type="date" aria-label={`Corrective action completed date ${i + 1}`} className={INPUT.sm} title="Completed date" value={action.completed_date}
+                        disabled={legacyActionFreeze}
                         onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], completed_date: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                      <select className={INPUT.sm} value={action.status}
+                      <select aria-label={`Corrective action status ${i + 1}`} className={INPUT.sm} value={action.status}
+                        disabled={legacyActionFreeze}
                         onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], status: e.target.value }; setForm({ ...form, corrective_actions: a }); }}>
                         <option value="open">Open</option>
                         <option value="in_progress">In Progress</option>
@@ -456,8 +507,8 @@ export default function IpcAuditTracker() {
               </div>
 
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={`${INPUT.base} h-16`} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                <label htmlFor="ipc-notes" className={INPUT.label}>Notes</label>
+                <textarea id="ipc-notes" className={`${INPUT.base} h-16`} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
             </div>
           )}
@@ -472,50 +523,50 @@ export default function IpcAuditTracker() {
                 Outbreak suspected / confirmed
               </label>
               {form.outbreak.suspected && (
-                <div className="ml-6 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-3 sm:ml-6">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Outbreak Type</label>
-                      <input type="text" className={INPUT.base} placeholder="e.g. Norovirus, COVID-19"
+                      <label htmlFor="ipc-outbreak-type" className={INPUT.label}>Outbreak Type</label>
+                      <input id="ipc-outbreak-type" type="text" className={INPUT.base} placeholder="e.g. Norovirus, COVID-19"
                         value={form.outbreak.type}
                         onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, type: e.target.value } })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Status</label>
-                      <select className={INPUT.select} value={form.outbreak.status}
+                      <label htmlFor="ipc-outbreak-status" className={INPUT.label}>Status</label>
+                      <select id="ipc-outbreak-status" className={INPUT.select} value={form.outbreak.status}
                         onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, status: e.target.value } })}>
                         <option value="">Select...</option>
                         {OUTBREAK_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Start Date</label>
-                      <input type="date" className={INPUT.base} value={form.outbreak.start_date}
+                      <label htmlFor="ipc-outbreak-start-date" className={INPUT.label}>Start Date</label>
+                      <input id="ipc-outbreak-start-date" type="date" className={INPUT.base} value={form.outbreak.start_date}
                         onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, start_date: e.target.value } })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>End Date</label>
-                      <input type="date" className={INPUT.base} value={form.outbreak.end_date}
+                      <label htmlFor="ipc-outbreak-end-date" className={INPUT.label}>End Date</label>
+                      <input id="ipc-outbreak-end-date" type="date" className={INPUT.base} value={form.outbreak.end_date}
                         onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, end_date: e.target.value } })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Affected Staff</label>
-                      <input type="number" min="0" className={INPUT.base} value={form.outbreak.affected_staff}
+                      <label htmlFor="ipc-outbreak-affected-staff" className={INPUT.label}>Affected Staff</label>
+                      <input id="ipc-outbreak-affected-staff" type="number" min="0" className={INPUT.base} value={form.outbreak.affected_staff}
                         onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, affected_staff: Number(e.target.value) || 0 } })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Affected Residents</label>
-                      <input type="number" min="0" className={INPUT.base} value={form.outbreak.affected_residents}
+                      <label htmlFor="ipc-outbreak-affected-residents" className={INPUT.label}>Affected Residents</label>
+                      <input id="ipc-outbreak-affected-residents" type="number" min="0" className={INPUT.base} value={form.outbreak.affected_residents}
                         onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, affected_residents: Number(e.target.value) || 0 } })} />
                     </div>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Control Measures</label>
-                    <textarea className={`${INPUT.base} h-20`} placeholder="Measures taken to contain outbreak..."
+                    <label htmlFor="ipc-outbreak-measures" className={INPUT.label}>Control Measures</label>
+                    <textarea id="ipc-outbreak-measures" className={`${INPUT.base} h-20`} placeholder="Measures taken to contain outbreak..."
                       value={form.outbreak.measures}
                       onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, measures: e.target.value } })} />
                   </div>
@@ -528,12 +579,12 @@ export default function IpcAuditTracker() {
         {/* Footer */}
         <div className={MODAL.footer}>
           {editingId && canEdit && (
-            <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+            <button type="button" onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
           {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
-          <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+          <button type="button" onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
           {canEdit && (
-            <button onClick={handleSave} className={BTN.primary}>
+            <button type="button" onClick={handleSave} disabled={!form.audit_type || !form.audit_date} className={BTN.primary}>
               {editingId ? 'Update' : 'Save'}
             </button>
           )}

@@ -73,6 +73,25 @@ describe('IPC: create and read', () => {
     const found = await ipcRepo.findById(auditId, homeB);
     expect(found).toBeNull();
   });
+
+  it('bumps version when upsert touches an existing audit', async () => {
+    const created = await ipcRepo.upsert(homeA, {
+      audit_date: '2026-02-16',
+      audit_type: 'hand_hygiene',
+      auditor: 'IPC Version Tester',
+    });
+    ids.push(created.id);
+
+    const updated = await ipcRepo.upsert(homeA, {
+      id: created.id,
+      audit_date: '2026-02-16',
+      audit_type: 'hand_hygiene',
+      auditor: 'IPC Version Tester Updated',
+    });
+
+    expect(updated.version).toBe(created.version + 1);
+    expect(updated.auditor).toBe('IPC Version Tester Updated');
+  });
 });
 
 // ── JSONB Fields ─────────────────────────────────────────────────────────────

@@ -76,9 +76,9 @@ const MOCK_RESPONSE = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function renderAdmin() {
+function renderAdmin(options = {}) {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
-  return renderWithProviders(<IpcAuditTracker />, { user: { username: 'admin', role: 'admin' } });
+  return renderWithProviders(<IpcAuditTracker />, { user: { username: 'admin', role: 'admin' }, ...options });
 }
 
 function renderViewer() {
@@ -89,7 +89,9 @@ function renderViewer() {
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getIpcAudits.mockResolvedValue(MOCK_RESPONSE);
 });
 
@@ -130,6 +132,23 @@ describe('IpcAuditTracker', () => {
     expect(screen.getByText('Audits This Quarter')).toBeInTheDocument();
     expect(screen.getByText('Active Outbreaks')).toBeInTheDocument();
     expect(screen.getByText('Action Completion')).toBeInTheDocument();
+  });
+
+  it('loads the active home instead of a stale stored home', async () => {
+    api.getCurrentHome.mockReturnValue('old-home');
+    renderAdmin({ activeHome: 'new-home' });
+    await waitFor(() => {
+      expect(api.getIpcAudits).toHaveBeenCalledWith('new-home');
+    });
+  });
+
+  it('shows a no-home state instead of hanging on the loading screen', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderAdmin({ activeHome: '' });
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+    });
+    expect(api.getIpcAudits).not.toHaveBeenCalled();
   });
 
   it('renders audit rows in the table', async () => {
@@ -207,7 +226,7 @@ describe('IpcAuditTracker', () => {
     });
 
     // Filter to PPE only
-    const typeSelect = screen.getByDisplayValue('All Types');
+    const typeSelect = screen.getByLabelText('Filter IPC audits by type');
     await user.selectOptions(typeSelect, 'ppe');
 
     await waitFor(() => {
@@ -248,5 +267,26 @@ describe('IpcAuditTracker', () => {
     });
 
     expect(api.updateIpcAudit.mock.calls[0][2].outbreak.status).toBe('suspected');
+  });
+
+  it('falls back to default audit types when the home has no IPC type config', async () => {
+    const user = userEvent.setup();
+    api.getIpcAudits.mockResolvedValue({ audits: [], auditTypes: [], legacyActionFreeze: false });
+    renderAdmin();
+    const addButtons = await screen.findAllByRole('button', { name: /\+ New Audit/i });
+    await user.click(addButtons[0]);
+
+    expect(screen.getByLabelText('Audit Type *')).toHaveTextContent('Hand Hygiene');
+  });
+
+  it('hides legacy corrective-action writes when the V1 action freeze is enabled', async () => {
+    const user = userEvent.setup();
+    api.getIpcAudits.mockResolvedValue({ audits: [], auditTypes: MOCK_AUDIT_TYPES, legacyActionFreeze: true });
+    renderAdmin();
+    const addButtons = await screen.findAllByRole('button', { name: /\+ New Audit/i });
+    await user.click(addButtons[0]);
+
+    expect(screen.getByText(/Legacy corrective actions are read-only/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /\+ Add Action/i })).not.toBeInTheDocument();
   });
 });
