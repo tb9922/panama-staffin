@@ -294,6 +294,25 @@ describe('Whistleblowing: optimistic locking', () => {
     );
     expect(result).toBeNull();
   });
+
+  it('bumps version when upsert touches an existing concern', async () => {
+    const created = await whistleblowingRepo.upsert(homeA, {
+      date_raised: '2026-03-05',
+      category: 'other',
+      status: 'registered',
+    });
+    ids.push(created.id);
+
+    const updated = await whistleblowingRepo.upsert(homeA, {
+      id: created.id,
+      date_raised: '2026-03-05',
+      category: 'safety',
+      status: 'registered',
+    });
+
+    expect(updated.version).toBe(created.version + 1);
+    expect(updated.category).toBe('safety');
+  });
 });
 
 // ── Pagination ───────────────────────────────────────────────────────────────
@@ -333,5 +352,31 @@ describe('Whistleblowing: soft delete', () => {
 
     const byId = await whistleblowingRepo.findById(concernId, homeA);
     expect(byId).toBeNull();
+  });
+});
+
+describe('Whistleblowing: sync safety', () => {
+  it('does not soft-delete concerns omitted from a partial sync payload', async () => {
+    const kept = await whistleblowingRepo.upsert(homeA, {
+      date_raised: '2026-04-10',
+      category: 'safety',
+      severity: 'high',
+      status: 'registered',
+    });
+    const omitted = await whistleblowingRepo.upsert(homeA, {
+      date_raised: '2026-04-11',
+      category: 'compliance',
+      severity: 'medium',
+      status: 'registered',
+    });
+    ids.push(kept.id, omitted.id);
+
+    await whistleblowingRepo.sync(homeA, [{
+      ...kept,
+      category: 'malpractice',
+    }]);
+
+    expect(await whistleblowingRepo.findById(kept.id, homeA)).not.toBeNull();
+    expect(await whistleblowingRepo.findById(omitted.id, homeA)).not.toBeNull();
   });
 });

@@ -86,10 +86,11 @@ const MOCK_RESPONSE = { concerns: [MOCK_CONCERN] };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function renderAdmin() {
+function renderAdmin(options = {}) {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<WhistleblowingTracker />, {
     user: { username: 'admin', role: 'admin' },
+    ...options,
   });
 }
 
@@ -103,7 +104,9 @@ function renderViewer() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.clearAllMocks();
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getCurrentHome.mockReturnValue('test-home');
   api.getWhistleblowingConcerns.mockResolvedValue(MOCK_RESPONSE);
 });
 
@@ -140,6 +143,23 @@ describe('WhistleblowingTracker', () => {
     await waitFor(() => {
       expect(screen.getByText('Whistleblowing / Freedom to Speak Up')).toBeInTheDocument();
     });
+  });
+
+  it('loads the active home instead of a stale stored home', async () => {
+    api.getCurrentHome.mockReturnValue('old-home');
+    renderAdmin({ activeHome: 'new-home' });
+    await waitFor(() => {
+      expect(api.getWhistleblowingConcerns).toHaveBeenCalledWith('new-home');
+    });
+  });
+
+  it('shows a no-home state instead of hanging on the loading screen', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderAdmin({ activeHome: '' });
+    await waitFor(() => {
+      expect(screen.getByText('No home selected')).toBeInTheDocument();
+    });
+    expect(api.getWhistleblowingConcerns).not.toHaveBeenCalled();
   });
 
   it('displays KPI stat cards', async () => {
@@ -242,12 +262,43 @@ describe('WhistleblowingTracker', () => {
       expect(screen.getByText('2026-02-01')).toBeInTheDocument();
     });
 
-    const statusSelect = screen.getByDisplayValue('All Statuses');
+    const statusSelect = screen.getByLabelText('Filter whistleblowing concerns by status');
     await user.selectOptions(statusSelect, 'registered');
 
     await waitFor(() => {
       expect(screen.getByText('2026-03-01')).toBeInTheDocument();
       expect(screen.queryByText('2026-02-01')).not.toBeInTheDocument();
     });
+  });
+
+  it('opens labelled fields and keeps save disabled until required fields are set', async () => {
+    const user = userEvent.setup();
+    api.getWhistleblowingConcerns.mockResolvedValue(EMPTY_RESPONSE);
+    renderAdmin();
+
+    await user.click(await screen.findByRole('button', { name: /\+ New Concern/i }));
+
+    expect(screen.getByLabelText('Date Raised *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Category *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Severity *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Description')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Date Raised *'));
+    expect(screen.getByRole('button', { name: /^Save$/i })).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Date Raised *'), '2026-03-08');
+    await user.selectOptions(screen.getByLabelText('Category *'), 'safety');
+    expect(screen.getByRole('button', { name: /^Save$/i })).toBeEnabled();
+  });
+
+  it('locks anonymous status on existing concerns', async () => {
+    const user = userEvent.setup();
+    api.getWhistleblowingConcerns.mockResolvedValue({ concerns: [MOCK_ANON_CONCERN] });
+    renderAdmin();
+
+    await user.click(await screen.findByRole('button', { name: /Open whistleblowing concern WB-002/i }));
+
+    expect(screen.getByLabelText('Anonymous concern')).toBeDisabled();
+    expect(screen.getByText(/Anonymous status is locked after creation/i)).toBeInTheDocument();
   });
 });

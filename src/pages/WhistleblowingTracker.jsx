@@ -40,16 +40,16 @@ const EMPTY_FORM = {
 };
 
 export default function WhistleblowingTracker() {
-  const { canWrite } = useData();
+  const { canWrite, activeHome } = useData();
   const canEdit = canWrite('governance');
   const { confirm, ConfirmDialog } = useConfirm();
   const [concerns, setConcerns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  useDirtyGuard(showModal);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formBaseline, setFormBaseline] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
@@ -58,12 +58,21 @@ export default function WhistleblowingTracker() {
   const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const today = useLiveDate();
-  const homeSlug = getCurrentHome();
+  const isDirty = showModal && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
+
+  const storedHome = getCurrentHome();
+  const homeSlug = activeHome || storedHome;
 
   const load = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug) {
+      setConcerns([]);
+      setLoading(false);
+      return;
+    }
     try {
       setError(null);
+      setLoading(true);
       const result = await getWhistleblowingConcerns(homeSlug);
       setConcerns(result.concerns || []);
     } catch (err) {
@@ -102,7 +111,9 @@ export default function WhistleblowingTracker() {
 
   function openAdd() {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM, date_raised: today });
+    const nextForm = { ...EMPTY_FORM, date_raised: today };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -110,7 +121,7 @@ export default function WhistleblowingTracker() {
 
   function openEdit(concern) {
     setEditingId(concern.id);
-    setForm({
+    const nextForm = {
       date_raised: concern.date_raised || '',
       raised_by_role: concern.raised_by_role || '',
       anonymous: !!concern.anonymous,
@@ -131,14 +142,28 @@ export default function WhistleblowingTracker() {
       resolution_date: concern.resolution_date || '',
       lessons_learned: concern.lessons_learned || '',
       _version: concern.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
   }
 
+  function closeModal() {
+    setShowModal(false);
+    setFormBaseline(null);
+  }
+
   async function handleSave() {
-    if (!form.date_raised || !form.category || !form.severity) return;
+    if (!homeSlug) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (!form.date_raised || !form.category || !form.severity) {
+      setSaveError(`Missing: ${missingRequired.join(', ')}`);
+      return;
+    }
     setSaveError(null);
     try {
       if (editingId) {
@@ -148,7 +173,7 @@ export default function WhistleblowingTracker() {
         await createWhistleblowingConcern(homeSlug, form);
         showNotice('Concern recorded.');
       }
-      setShowModal(false);
+      closeModal();
       await load();
     } catch (err) {
       setSaveError('Failed to save: ' + err.message);
@@ -161,7 +186,7 @@ export default function WhistleblowingTracker() {
     setSaveError(null);
     try {
       await deleteWhistleblowingConcern(homeSlug, editingId);
-      setShowModal(false);
+      closeModal();
       showNotice('Concern deleted.');
       await load();
     } catch (err) {
@@ -221,6 +246,16 @@ export default function WhistleblowingTracker() {
   if (error) {
     return <div className={PAGE.container}><ErrorState title="Unable to load whistleblowing concerns" message={error} onRetry={load} /></div>;
   }
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening whistleblowing concerns."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -236,9 +271,9 @@ export default function WhistleblowingTracker() {
           <h1 className={PAGE.title}>Whistleblowing / Freedom to Speak Up</h1>
           <p className={PAGE.subtitle}>CQC Regulation 17 — QS29</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Concern</button>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={openAdd} className={BTN.primary}>+ New Concern</button>}
         </div>
       </div>
 
@@ -268,15 +303,15 @@ export default function WhistleblowingTracker() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <select className={`${INPUT.select} w-auto`} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+        <select aria-label="Filter whistleblowing concerns by category" className={`${INPUT.select} w-auto`} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
           <option value="">All Categories</option>
           {CONCERN_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
+        <select aria-label="Filter whistleblowing concerns by severity" className={`${INPUT.select} w-auto`} value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
           <option value="">All Severities</option>
           {CONCERN_SEVERITIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select aria-label="Filter whistleblowing concerns by status" className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">All Statuses</option>
           {CONCERN_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -344,7 +379,7 @@ export default function WhistleblowingTracker() {
       </div>
 
       {/* Add/Edit Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Concern' : 'New Concern'} size="lg">
+      <Modal isOpen={showModal} onClose={closeModal} title={editingId ? 'Edit Concern' : 'New Concern'} size="lg">
           <div className="max-h-[75vh] overflow-y-auto">
             {/* Tabs */}
             <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
@@ -352,53 +387,54 @@ export default function WhistleblowingTracker() {
             {/* Concern Details Tab */}
             {activeTab === 'details' && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={INPUT.label}>Date Raised *</label>
-                    <input type="date" className={INPUT.base} value={form.date_raised} onChange={e => setForm({ ...form, date_raised: e.target.value })} />
+                    <label htmlFor="wb-date-raised" className={INPUT.label}>Date Raised *</label>
+                    <input id="wb-date-raised" type="date" className={INPUT.base} value={form.date_raised} onChange={e => setForm({ ...form, date_raised: e.target.value })} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Acknowledgement Date</label>
-                    <input type="date" className={INPUT.base} value={form.acknowledgement_date} onChange={e => setForm({ ...form, acknowledgement_date: e.target.value })} />
+                    <label htmlFor="wb-acknowledgement-date" className={INPUT.label}>Acknowledgement Date</label>
+                    <input id="wb-acknowledgement-date" type="date" className={INPUT.base} value={form.acknowledgement_date} onChange={e => setForm({ ...form, acknowledgement_date: e.target.value })} />
                   </div>
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer mb-2">
-                    <input type="checkbox" checked={form.anonymous} onChange={e => setForm({ ...form, anonymous: e.target.checked })} className="accent-blue-600" />
+                  <label className={`flex items-center gap-2 text-sm text-gray-700 mb-2 ${editingId ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                    <input type="checkbox" checked={form.anonymous} disabled={Boolean(editingId)} onChange={e => setForm({ ...form, anonymous: e.target.checked })} className="accent-blue-600" />
                     Anonymous concern
                   </label>
+                  {editingId && <p className="text-xs text-gray-500">Anonymous status is locked after creation to protect the reporter.</p>}
                 </div>
 
                 {!form.anonymous && (
                   <div>
-                    <label className={INPUT.label}>Reporter Role</label>
-                    <select className={INPUT.select} value={form.raised_by_role} onChange={e => setForm({ ...form, raised_by_role: e.target.value })}>
+                    <label htmlFor="wb-reporter-role" className={INPUT.label}>Reporter Role</label>
+                    <select id="wb-reporter-role" className={INPUT.select} value={form.raised_by_role} onChange={e => setForm({ ...form, raised_by_role: e.target.value })}>
                       <option value="">Select...</option>
                       {REPORTER_ROLES.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={INPUT.label}>Category *</label>
-                    <select className={INPUT.select} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                    <label htmlFor="wb-category" className={INPUT.label}>Category *</label>
+                    <select id="wb-category" className={INPUT.select} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
                       <option value="">Select...</option>
                       {CONCERN_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Severity *</label>
-                    <select className={INPUT.select} value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
+                    <label htmlFor="wb-severity" className={INPUT.label}>Severity *</label>
+                    <select id="wb-severity" className={INPUT.select} value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
                       {CONCERN_SEVERITIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className={INPUT.label}>Description</label>
-                  <textarea className={`${INPUT.base} h-24`} placeholder="Describe the concern in detail..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+                  <label htmlFor="wb-description" className={INPUT.label}>Description</label>
+                  <textarea id="wb-description" className={`${INPUT.base} h-24`} placeholder="Describe the concern in detail..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
                 </div>
               </div>
             )}
@@ -406,46 +442,46 @@ export default function WhistleblowingTracker() {
             {/* Investigation & Outcome Tab */}
             {activeTab === 'investigation' && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={INPUT.label}>Status</label>
-                    <select className={INPUT.select} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                    <label htmlFor="wb-status" className={INPUT.label}>Status</label>
+                    <select id="wb-status" className={INPUT.select} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
                       {CONCERN_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Investigator</label>
-                    <input type="text" className={INPUT.base} placeholder="Name" value={form.investigator} onChange={e => setForm({ ...form, investigator: e.target.value })} />
+                    <label htmlFor="wb-investigator" className={INPUT.label}>Investigator</label>
+                    <input id="wb-investigator" type="text" className={INPUT.base} placeholder="Name" value={form.investigator} onChange={e => setForm({ ...form, investigator: e.target.value })} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={INPUT.label}>Investigation Start Date</label>
-                    <input type="date" className={INPUT.base} value={form.investigation_start_date} onChange={e => setForm({ ...form, investigation_start_date: e.target.value })} />
+                    <label htmlFor="wb-investigation-start-date" className={INPUT.label}>Investigation Start Date</label>
+                    <input id="wb-investigation-start-date" type="date" className={INPUT.base} value={form.investigation_start_date} onChange={e => setForm({ ...form, investigation_start_date: e.target.value })} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Resolution Date</label>
-                    <input type="date" className={INPUT.base} value={form.resolution_date} onChange={e => setForm({ ...form, resolution_date: e.target.value })} />
+                    <label htmlFor="wb-resolution-date" className={INPUT.label}>Resolution Date</label>
+                    <input id="wb-resolution-date" type="date" className={INPUT.base} value={form.resolution_date} onChange={e => setForm({ ...form, resolution_date: e.target.value })} />
                   </div>
                 </div>
 
                 <div>
-                  <label className={INPUT.label}>Findings</label>
-                  <textarea className={`${INPUT.base} h-20`} placeholder="Investigation findings..." value={form.findings} onChange={e => setForm({ ...form, findings: e.target.value })} />
+                  <label htmlFor="wb-findings" className={INPUT.label}>Findings</label>
+                  <textarea id="wb-findings" className={`${INPUT.base} h-20`} placeholder="Investigation findings..." value={form.findings} onChange={e => setForm({ ...form, findings: e.target.value })} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={INPUT.label}>Outcome</label>
-                    <select className={INPUT.select} value={form.outcome} onChange={e => setForm({ ...form, outcome: e.target.value })}>
+                    <label htmlFor="wb-outcome" className={INPUT.label}>Outcome</label>
+                    <select id="wb-outcome" className={INPUT.select} value={form.outcome} onChange={e => setForm({ ...form, outcome: e.target.value })}>
                       <option value="">Select...</option>
                       {CONCERN_OUTCOMES.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Outcome Details</label>
-                    <input type="text" className={INPUT.base} placeholder="Details..." value={form.outcome_details} onChange={e => setForm({ ...form, outcome_details: e.target.value })} />
+                    <label htmlFor="wb-outcome-details" className={INPUT.label}>Outcome Details</label>
+                    <input id="wb-outcome-details" type="text" className={INPUT.base} placeholder="Details..." value={form.outcome_details} onChange={e => setForm({ ...form, outcome_details: e.target.value })} />
                   </div>
                 </div>
 
@@ -458,8 +494,8 @@ export default function WhistleblowingTracker() {
                   </label>
                   {form.reporter_protected && (
                     <div>
-                      <label className={INPUT.label}>Protection Details</label>
-                      <textarea className={`${INPUT.base} h-14`} placeholder="Describe protection measures..." value={form.protection_details} onChange={e => setForm({ ...form, protection_details: e.target.value })} />
+                      <label htmlFor="wb-protection-details" className={INPUT.label}>Protection Details</label>
+                      <textarea id="wb-protection-details" className={`${INPUT.base} h-14`} placeholder="Describe protection measures..." value={form.protection_details} onChange={e => setForm({ ...form, protection_details: e.target.value })} />
                     </div>
                   )}
                 </div>
@@ -467,10 +503,10 @@ export default function WhistleblowingTracker() {
                 {/* Follow-up */}
                 <div className="border-t border-gray-100 pt-3">
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Follow-Up</div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={INPUT.label}>Follow-Up Date</label>
-                      <input type="date" className={INPUT.base} value={form.follow_up_date} onChange={e => setForm({ ...form, follow_up_date: e.target.value })} />
+                      <label htmlFor="wb-follow-up-date" className={INPUT.label}>Follow-Up Date</label>
+                      <input id="wb-follow-up-date" type="date" className={INPUT.base} value={form.follow_up_date} onChange={e => setForm({ ...form, follow_up_date: e.target.value })} />
                     </div>
                     <div className="flex items-end pb-2">
                       <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -482,8 +518,8 @@ export default function WhistleblowingTracker() {
                 </div>
 
                 <div>
-                  <label className={INPUT.label}>Lessons Learned</label>
-                  <textarea className={`${INPUT.base} h-16`} placeholder="Key learnings..." value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })} />
+                  <label htmlFor="wb-lessons-learned" className={INPUT.label}>Lessons Learned</label>
+                  <textarea id="wb-lessons-learned" className={`${INPUT.base} h-16`} placeholder="Key learnings..." value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })} />
                 </div>
               </div>
             )}
@@ -492,15 +528,15 @@ export default function WhistleblowingTracker() {
             {/* Footer */}
             <div className={MODAL.footer}>
               {editingId && canEdit && (
-                <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                <button type="button" onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               {missingRequired.length > 0 && (
                 <p className="text-sm text-amber-700 mr-auto">Missing: {missingRequired.join(', ')}</p>
               )}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+              <button type="button" onClick={closeModal} className={BTN.ghost}>Cancel</button>
               {canEdit && (
-                <button onClick={handleSave} disabled={!form.date_raised || !form.category || !form.severity} className={BTN.primary}>
+                <button type="button" onClick={handleSave} disabled={!form.date_raised || !form.category || !form.severity} className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>
               )}

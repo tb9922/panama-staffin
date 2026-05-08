@@ -34,7 +34,6 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 export async function sync(homeId, arr, client) {
   const conn = client || pool;
   if (!arr || arr.length === 0) return;
-  const incomingIds = arr.map(c => c.id);
 
   const COLS_PER_ROW = 22;
   const CHUNK = Math.floor(65000 / COLS_PER_ROW);
@@ -86,10 +85,7 @@ export async function sync(homeId, arr, client) {
     );
   }
 
-  await conn.query(
-    `UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-    [homeId, incomingIds]
-  );
+  // Legacy sync payloads can be partial/capped. Deletions go through softDelete().
 }
 
 // ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
