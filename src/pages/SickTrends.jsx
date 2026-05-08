@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useId } from 'react';
 import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
@@ -49,7 +49,7 @@ export default function SickTrends() {
     if (!homeSlug) return;
     // SickTrends shows 6 months back — request wider override window
     const now = new Date();
-    const from = startOfLocalMonthISO(now, -6);
+    const from = startOfLocalMonthISO(now, -5);
     const to = endOfLocalMonthISO(now, 0);
     getSchedulingData(homeSlug, { from, to })
       .then(setSchedData)
@@ -67,6 +67,7 @@ export default function SickTrends() {
           onRetry={() => {
             setError(null);
             setSchedData(null);
+            setLoading(true);
             setRefreshKey((current) => current + 1);
           }}
         />
@@ -84,6 +85,8 @@ function SickTrendsInner({ schedData, canEdit }) {
   const activeStaff = useMemo(() => schedData.staff.filter(s => s.active !== false && isCareRole(s.role)), [schedData.staff]);
   const [filterStaff, setFilterStaff] = useState('All');
   const [filterMonth, setFilterMonth] = useState('All');
+  const staffFilterId = useId();
+  const monthFilterId = useId();
 
   // Anonymise staff names for non-admin viewers
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -193,12 +196,12 @@ function SickTrendsInner({ schedData, canEdit }) {
         <p className="text-xs text-gray-500">Last {MONTHS_BACK} months | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-6 print:hidden">
+      <div className="mb-6 flex flex-col gap-3 print:hidden sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sick Trend Analytics</h1>
           <p className="text-sm text-gray-500">Last {MONTHS_BACK} months — {activeStaff.length} staff monitored</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => {
             const summaryHeaders = ['Staff', 'Team', 'Role', ...months.map(m => m.fullLabel), 'Total', 'Trend'];
             const summaryRows = sickData.map(s => [
@@ -212,8 +215,8 @@ function SickTrendsInner({ schedData, canEdit }) {
               { name: 'Monthly Summary', headers: summaryHeaders, rows: summaryRows },
               { name: 'Sick Log', headers: logHeaders, rows: logRows },
             ]);
-          }} className={BTN.secondary}>Export Excel</button>
-          <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
+          }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          <button onClick={() => window.print()} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
         </div>
       </div>
 
@@ -386,21 +389,27 @@ function SickTrendsInner({ schedData, canEdit }) {
 
       {/* Detailed Sick Log — exact dates */}
       <div className={`${CARD.flush} mt-6`}>
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-sm font-semibold text-gray-500 uppercase">Sick Day Log — Exact Dates</h2>
-          <div className="flex gap-2">
-            <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} className={`${INPUT.sm} w-auto`}>
-              <option value="All">All Staff</option>
-              {staffWithSick.map(s => <option key={s.id} value={s.id}>{staffLabel(s)}</option>)}
-            </select>
-            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className={`${INPUT.sm} w-auto`}>
-              <option value="All">All Months</option>
-              {uniqueMonths.map(m => {
-                const [y, mo] = m.split('-');
-                const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-                return <option key={m} value={m}>{label}</option>;
-              })}
-            </select>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <label htmlFor={staffFilterId} className="sr-only">Filter sick log by staff</label>
+              <select id={staffFilterId} value={filterStaff} onChange={e => setFilterStaff(e.target.value)} className={`${INPUT.sm} w-full sm:w-auto`}>
+                <option value="All">All Staff</option>
+                {staffWithSick.map(s => <option key={s.id} value={s.id}>{staffLabel(s)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={monthFilterId} className="sr-only">Filter sick log by month</label>
+              <select id={monthFilterId} value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className={`${INPUT.sm} w-full sm:w-auto`}>
+                <option value="All">All Months</option>
+                {uniqueMonths.map(m => {
+                  const [y, mo] = m.split('-');
+                  const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                  return <option key={m} value={m}>{label}</option>;
+                })}
+              </select>
+            </div>
           </div>
         </div>
         {filteredLog.length === 0 ? (
@@ -414,38 +423,40 @@ function SickTrendsInner({ schedData, canEdit }) {
             />
           </div>
         ) : (
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Date</th>
-                <th scope="col" className={TABLE.th}>Day</th>
-                <th scope="col" className={TABLE.th}>Staff</th>
-                <th scope="col" className={TABLE.th}>Team</th>
-                <th scope="col" className={TABLE.th}>Role</th>
-                <th scope="col" className={TABLE.th}>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLog.map((entry, _i) => (
-                <tr key={`${entry.date}-${entry.staffId}`} className={TABLE.tr}>
-                  <td className={TABLE.tdMono}>{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</td>
-                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.dayOfWeek}</td>
-                  <td className={`${TABLE.td} font-medium`}>{canEdit ? entry.staffName : (staffLabel({ id: entry.staffId }))}</td>
-                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.team}</td>
-                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.role}</td>
-                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.reason || '—'}</td>
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Date</th>
+                  <th scope="col" className={TABLE.th}>Day</th>
+                  <th scope="col" className={TABLE.th}>Staff</th>
+                  <th scope="col" className={TABLE.th}>Team</th>
+                  <th scope="col" className={TABLE.th}>Role</th>
+                  <th scope="col" className={TABLE.th}>Reason</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 border-t-2">
-                <td className={`${TABLE.td} font-bold text-xs`} colSpan={2}>Total: {filteredLog.length} sick day{filteredLog.length !== 1 ? 's' : ''}</td>
-                <td className={`${TABLE.td} text-xs text-gray-500`} colSpan={4}>
-                  {new Set(filteredLog.map(e => e.staffId)).size} staff member{new Set(filteredLog.map(e => e.staffId)).size !== 1 ? 's' : ''}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {filteredLog.map((entry, _i) => (
+                  <tr key={`${entry.date}-${entry.staffId}`} className={TABLE.tr}>
+                    <td className={TABLE.tdMono}>{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</td>
+                    <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.dayOfWeek}</td>
+                    <td className={`${TABLE.td} font-medium`}>{canEdit ? entry.staffName : (staffLabel({ id: entry.staffId }))}</td>
+                    <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.team}</td>
+                    <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.role}</td>
+                    <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.reason || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-100 border-t-2">
+                  <td className={`${TABLE.td} font-bold text-xs`} colSpan={2}>Total: {filteredLog.length} sick day{filteredLog.length !== 1 ? 's' : ''}</td>
+                  <td className={`${TABLE.td} text-xs text-gray-500`} colSpan={4}>
+                    {new Set(filteredLog.map(e => e.staffId)).size} staff member{new Set(filteredLog.map(e => e.staffId)).size !== 1 ? 's' : ''}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         )}
       </div>
 
