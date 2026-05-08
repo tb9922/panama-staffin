@@ -11,6 +11,7 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { checkNLWViolation } from '../services/validationService.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
+import { getMinimumWageRate } from '../shared/nmw.js';
 import {
   canManageSensitiveStaffFields as roleCanManageSensitiveStaffFields,
   listChangedSensitiveStaffFields,
@@ -67,9 +68,12 @@ const overrideRequestDecisionSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
 });
 
-function normalizeStaffPayload(payload) {
+function normalizeStaffPayload(payload, { config = null, defaultHourlyRate = false } = {}) {
   const normalized = { ...payload };
   if (typeof normalized.name === 'string') normalized.name = normalized.name.trim().replace(/\s+/g, ' ');
+  if (defaultHourlyRate && normalized.hourly_rate == null) {
+    normalized.hourly_rate = getMinimumWageRate(normalized.date_of_birth, config).rate;
+  }
   return normalized;
 }
 
@@ -123,7 +127,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (createAccessError) return createAccessError;
     const fieldAccessError = assertSensitiveStaffFieldAccess(req, res, parsed.data);
     if (fieldAccessError) return fieldAccessError;
-    const data = normalizeStaffPayload(parsed.data);
+    const data = normalizeStaffPayload(parsed.data, { config: req.home.config, defaultHourlyRate: true });
     const staff = await withTransaction(async (client) => {
       if (!data.id) {
         data.id = await staffRepo.nextId(req.home.id, client);

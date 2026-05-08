@@ -13,6 +13,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
 import { todayLocalISO } from '../../lib/dateOnly.js';
+import { DEFAULT_NLW_RATE } from '../../shared/nmw.js';
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -146,9 +147,10 @@ describe('POST /api/staff — create', () => {
   afterAll(async () => {
     // Clean up created staff for this block
     await pool.query(
-      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004', 'ST005')`,
+      `DELETE FROM staff WHERE home_id = $1 AND id IN ('S001', 'ST001', 'ST002', 'ST003', 'ST004', 'ST005')`,
       [homeAId]
     );
+    await pool.query('DELETE FROM staff_id_counters WHERE home_id = $1', [homeAId]);
   });
 
   it('admin can create a staff member', async () => {
@@ -166,6 +168,25 @@ describe('POST /api/staff — create', () => {
     expect(res.body.hourly_rate).toBe(14.5);
     expect(res.body.ni_number).toBe('AB123456C');
     expect(res.body.version).toBe(1);
+  });
+
+  it('auto-generates the first staff ID for a new home without an existing counter', async () => {
+    await pool.query('DELETE FROM staff_id_counters WHERE home_id = $1', [homeAId]);
+
+    const res = await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Auto Numbered Staff',
+        role: 'Carer',
+        team: 'Day A',
+      })
+      .expect(201);
+
+    expect(res.body.id).toBe('S001');
+    expect(res.body.name).toBe('Auto Numbered Staff');
+    expect(res.body.hourly_rate).toBe(DEFAULT_NLW_RATE);
   });
 
   it('rejects missing required fields', async () => {

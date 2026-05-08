@@ -76,24 +76,19 @@ export async function nextId(homeId, client) {
        SELECT COALESCE(MAX(substring(id FROM 2)::int), 0) AS max_num
        FROM staff
        WHERE home_id = $1 AND id ~ '^S[0-9]+$'
-     ),
-     seed AS (
-       INSERT INTO staff_id_counters (home_id, next_value)
-       SELECT $1, max_num + 1
-       FROM current_max
-       ON CONFLICT (home_id) DO NOTHING
-     ),
-     bump AS (
-       UPDATE staff_id_counters counter
-       SET next_value = GREATEST(counter.next_value, current_max.max_num + 1) + 1,
-           updated_at = NOW()
-       FROM current_max
-       WHERE counter.home_id = $1
-       RETURNING counter.next_value - 1 AS allocated
      )
-     SELECT allocated FROM bump`,
+     INSERT INTO staff_id_counters (home_id, next_value)
+     SELECT $1, max_num + 2
+     FROM current_max
+     ON CONFLICT (home_id) DO UPDATE
+     SET next_value = GREATEST(staff_id_counters.next_value, EXCLUDED.next_value - 1) + 1,
+         updated_at = NOW()
+     RETURNING next_value - 1 AS allocated`,
     [homeId]
   );
+  if (!rows[0]?.allocated) {
+    throw new Error(`Unable to allocate staff ID for home ${homeId}`);
+  }
   return 'S' + String(rows[0].allocated).padStart(3, '0');
 }
 
