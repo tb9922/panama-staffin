@@ -671,7 +671,7 @@ export default function DolsTracker() {
                 {form.restrictions.length === 0 && <p className="text-xs text-gray-400">No restrictions recorded</p>}
                 {form.restrictions.map((r, i) => (
                   <div key={i} className="flex gap-2 mb-1.5">
-                    <input id={`dols-restriction-${i}`} aria-label={`Restriction ${i + 1}`} type="text" className={`${INPUT.sm} flex-1`} placeholder="Restriction detail..."
+                    <input id={`dols-restriction-${i}`} aria-label={`Restriction detail ${i + 1}`} type="text" className={`${INPUT.sm} flex-1`} placeholder="Restriction detail..."
                       value={r}
                       onChange={e => { const arr = [...form.restrictions]; arr[i] = e.target.value; setForm({ ...form, restrictions: arr }); }} />
                     <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
