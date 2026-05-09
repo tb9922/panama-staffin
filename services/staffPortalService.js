@@ -208,16 +208,22 @@ export async function updateOwnProfile({ homeId, staffId, patch, actorUsername }
     const existing = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!existing || existing.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-    const safePatch = Object.fromEntries(
-      Object.entries(patch || {}).filter(([key]) => PROFILE_ALLOWLIST.has(key)),
-    );
+    const safePatch = {};
+    for (const [key, rawValue] of Object.entries(patch || {})) {
+      if (!PROFILE_ALLOWLIST.has(key)) continue;
+      const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+      if ((value || '') !== (existing[key] || '')) {
+        safePatch[key] = value || '';
+      }
+    }
     if (Object.keys(safePatch).length === 0) {
       return shapeOwnProfile(existing);
     }
+    const changedFields = Object.keys(safePatch);
     const updated = await staffRepo.updateOne(homeId, staffId, safePatch, undefined, client);
     await auditService.log('staff_profile_updated_by_self', home.slug, actorUsername || existing.name, {
       staff_id: staffId,
-      changed_fields: Object.keys(safePatch),
+      changed_fields: changedFields,
     }, client);
     return shapeOwnProfile(updated);
   });

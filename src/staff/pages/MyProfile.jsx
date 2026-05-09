@@ -19,17 +19,15 @@ export default function MyProfile() {
     confirmPassword: '',
   });
 
-  // Dirty if profile fields differ from server snapshot OR password form has any input.
-  const dirty = Boolean(
-    (profile && loadedProfile && (
+  const profileDirty = Boolean(
+    profile && loadedProfile && (
       (profile.phone || '') !== (loadedProfile.phone || '')
       || (profile.address || '') !== (loadedProfile.address || '')
       || (profile.emergency_contact || '') !== (loadedProfile.emergency_contact || '')
-    ))
-    || passwordForm.currentPassword
-    || passwordForm.newPassword
-    || passwordForm.confirmPassword,
+    ),
   );
+  const passwordDirty = Boolean(passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword);
+  const dirty = profileDirty || passwordDirty;
   useDirtyGuard(dirty);
 
   async function load() {
@@ -52,6 +50,7 @@ export default function MyProfile() {
 
   async function handleSave(event) {
     event.preventDefault();
+    if (saving || !profileDirty) return;
     setSaving(true);
     setError('');
     setMessage('');
@@ -73,8 +72,13 @@ export default function MyProfile() {
 
   async function handlePasswordChange(event) {
     event.preventDefault();
+    if (passwordSaving) return;
     setError('');
     setMessage('');
+    if (!passwordForm.currentPassword) {
+      setError('Enter your current password.');
+      return;
+    }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setError('New password and confirmation do not match.');
       return;
@@ -116,19 +120,19 @@ export default function MyProfile() {
           </div>
           <div>
             <label htmlFor="profile-phone" className={INPUT.label}>Phone</label>
-            <input id="profile-phone" className={INPUT.base} value={profile?.phone || ''} onChange={(e) => setProfile((current) => ({ ...current, phone: e.target.value }))} />
+            <input id="profile-phone" className={INPUT.base} value={profile?.phone || ''} onChange={(e) => setProfile((current) => ({ ...current, phone: e.target.value }))} maxLength={20} />
           </div>
           <div>
             <label htmlFor="profile-emergency" className={INPUT.label}>Emergency contact</label>
-            <input id="profile-emergency" className={INPUT.base} value={profile?.emergency_contact || ''} onChange={(e) => setProfile((current) => ({ ...current, emergency_contact: e.target.value }))} />
+            <input id="profile-emergency" className={INPUT.base} value={profile?.emergency_contact || ''} onChange={(e) => setProfile((current) => ({ ...current, emergency_contact: e.target.value }))} maxLength={200} />
           </div>
           <div className="md:col-span-2">
             <label htmlFor="profile-address" className={INPUT.label}>Address</label>
-            <textarea id="profile-address" className={INPUT.base} rows={4} value={profile?.address || ''} onChange={(e) => setProfile((current) => ({ ...current, address: e.target.value }))} />
+            <textarea id="profile-address" className={INPUT.base} rows={4} value={profile?.address || ''} onChange={(e) => setProfile((current) => ({ ...current, address: e.target.value }))} maxLength={500} />
           </div>
         </div>
         <div className="mt-5 flex justify-end">
-          <button type="submit" className={BTN.primary} disabled={saving}>
+          <button type="submit" className={BTN.primary} disabled={saving || !profileDirty}>
             {saving ? 'Saving...' : 'Save profile'}
           </button>
         </div>
@@ -141,6 +145,7 @@ export default function MyProfile() {
             <label htmlFor="profile-current-password" className={INPUT.label}>Current password</label>
             <input id="profile-current-password" type="password" className={INPUT.base}
               autoComplete="current-password"
+              required
               value={passwordForm.currentPassword}
               onChange={(e) => setPasswordForm((current) => ({ ...current, currentPassword: e.target.value }))} />
           </div>
@@ -148,6 +153,7 @@ export default function MyProfile() {
             <label htmlFor="profile-new-password" className={INPUT.label}>New password</label>
             <input id="profile-new-password" type="password" className={INPUT.base}
               autoComplete="new-password" minLength={10}
+              required
               value={passwordForm.newPassword}
               onChange={(e) => setPasswordForm((current) => ({ ...current, newPassword: e.target.value }))} />
             <p className="mt-1 text-xs text-slate-500">At least 10 characters.</p>
@@ -156,12 +162,13 @@ export default function MyProfile() {
             <label htmlFor="profile-confirm-password" className={INPUT.label}>Confirm new password</label>
             <input id="profile-confirm-password" type="password" className={INPUT.base}
               autoComplete="new-password"
+              required
               value={passwordForm.confirmPassword}
               onChange={(e) => setPasswordForm((current) => ({ ...current, confirmPassword: e.target.value }))} />
           </div>
         </div>
         <div className="mt-5 flex justify-end">
-          <button type="submit" className={BTN.secondary} disabled={passwordSaving}>
+          <button type="submit" className={BTN.secondary} disabled={passwordSaving || !passwordDirty}>
             {passwordSaving ? 'Updating...' : 'Change password'}
           </button>
         </div>

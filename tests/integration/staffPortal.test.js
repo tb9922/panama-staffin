@@ -456,6 +456,39 @@ describe('Profile (own data only)', () => {
     );
     expect(parseFloat(rows[0].hourly_rate)).toBe(13.00);
   });
+
+  it('PATCH skips audit when submitted profile fields are unchanged', async () => {
+    const existing = await staffPortalService.getOwnProfile({ homeId, staffId: STAFF_A });
+    const { rows: [before] } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM audit_log
+        WHERE action = 'staff_profile_updated_by_self'
+          AND home_slug = $1
+          AND details::jsonb @> $2::jsonb`,
+      [HOME_SLUG, JSON.stringify({ staff_id: STAFF_A })],
+    );
+
+    await staffPortalService.updateOwnProfile({
+      homeId,
+      staffId: STAFF_A,
+      patch: {
+        phone: existing.phone,
+        address: existing.address,
+        emergency_contact: existing.emergency_contact,
+      },
+      actorUsername: STAFF_A_USER,
+    });
+
+    const { rows: [after] } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM audit_log
+        WHERE action = 'staff_profile_updated_by_self'
+          AND home_slug = $1
+          AND details::jsonb @> $2::jsonb`,
+      [HOME_SLUG, JSON.stringify({ staff_id: STAFF_A })],
+    );
+    expect(after.count - before.count).toBe(0);
+  });
 });
 
 describe('Payslips (own only, approved/exported only)', () => {
