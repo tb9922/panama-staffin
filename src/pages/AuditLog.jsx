@@ -7,6 +7,13 @@ import EmptyState from '../components/EmptyState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 
+function formatTimestamp(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-GB');
+}
+
 function formatValue(value) {
   if (value == null || value === '') return 'empty';
   if (typeof value === 'boolean') return value ? 'yes' : 'no';
@@ -48,6 +55,7 @@ export default function AuditLog() {
 
   async function handleExport() {
     setExporting(true);
+    setError(null);
     try {
       const all = await loadAuditLog(10000);
       const { downloadXLSX } = await import('../lib/excel.js');
@@ -55,7 +63,7 @@ export default function AuditLog() {
         name: 'Audit',
         headers: ['Time', 'Action', 'Home', 'User', 'Details'],
         rows: all.map(e => [
-          new Date(e.ts).toLocaleString('en-GB'),
+          formatTimestamp(e.ts),
           e.action,
           e.home_slug || e.home || '',
           e.user_name || e.user || '',
@@ -117,13 +125,13 @@ export default function AuditLog() {
               <tr><td colSpan={5} className={TABLE.empty}><EmptyState title="No audit entries yet" description="Recent activity will appear here as people use the system." compact /></td></tr>
             ) : log.map((entry, i) => (
               <tr key={entry.id ?? `${entry.ts}-${i}`} className={TABLE.tr}>
-                <td className={`${TABLE.td} text-xs font-mono text-[var(--ink-3)]`}>{new Date(entry.ts).toLocaleString('en-GB')}</td>
+                <td className={`${TABLE.td} text-xs font-mono text-[var(--ink-3)]`}>{formatTimestamp(entry.ts)}</td>
                 <td className={TABLE.td}>
                   <span className={entry.action === 'login' ? BADGE.blue : BADGE.green}>{entry.action}</span>
                 </td>
                 <td className={`${TABLE.td} text-xs`}>{entry.home_slug || entry.home || ''}</td>
                 <td className={`${TABLE.td} text-xs font-medium`}>{entry.user_name || entry.user || ''}</td>
-                <td className={`${TABLE.td} max-w-[32rem] text-xs text-[var(--ink-3)]`}>{formatAuditDetails(entry.details)}</td>
+                <td className={`${TABLE.td} max-w-[32rem] break-words text-xs text-[var(--ink-3)]`}>{formatAuditDetails(entry.details)}</td>
               </tr>
             ))}
           </tbody>

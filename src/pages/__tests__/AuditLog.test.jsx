@@ -54,6 +54,16 @@ describe('AuditLog', () => {
     expect(screen.getByText('Set AL for S001')).toBeInTheDocument();
   });
 
+  it('does not render raw Invalid Date for malformed audit timestamps', async () => {
+    api.loadAuditLog.mockResolvedValue([
+      { ts: 'not-a-date', action: 'login', home_slug: 'test-home', user_name: 'admin', details: 'Malformed timestamp' },
+    ]);
+    renderWithProviders(<AuditLog />);
+
+    await waitFor(() => expect(screen.getByText('Malformed timestamp')).toBeInTheDocument());
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+  });
+
   it('shows user name and home slug columns', async () => {
     renderWithProviders(<AuditLog />);
     await waitFor(() => expect(screen.getAllByText('admin').length).toBeGreaterThan(0));
@@ -80,5 +90,22 @@ describe('AuditLog', () => {
       expect(api.loadAuditLog).toHaveBeenCalledTimes(2);
       expect(api.loadAuditLog).toHaveBeenCalledWith(10000);
     });
+  });
+
+  it('exports malformed audit timestamps as a dash', async () => {
+    const user = userEvent.setup();
+    const { downloadXLSX } = await import('../../lib/excel.js');
+    api.loadAuditLog
+      .mockResolvedValueOnce(MOCK_LOG)
+      .mockResolvedValueOnce([
+        { ts: 'not-a-date', action: 'login', home_slug: 'test-home', user_name: 'admin', details: 'Malformed timestamp' },
+      ]);
+
+    renderWithProviders(<AuditLog />);
+    await waitFor(() => expect(screen.getByText('login')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /export excel/i }));
+
+    await waitFor(() => expect(downloadXLSX).toHaveBeenCalled());
+    expect(downloadXLSX.mock.calls[0][1][0].rows[0][0]).toBe('-');
   });
 });
