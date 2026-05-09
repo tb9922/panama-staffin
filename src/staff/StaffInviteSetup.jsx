@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { BTN, CARD, INPUT } from '../lib/design.js';
 import { consumeStaffInvite, getStaffInvite, getLoggedInUser } from '../lib/api.js';
@@ -14,6 +14,7 @@ export default function StaffInviteSetup({ onLogin }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [form, setForm] = useState({
     username: '',
     password: '',
@@ -36,15 +37,21 @@ export default function StaffInviteSetup({ onLogin }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (submittingRef.current) return;
     setError('');
     if (!form.username.trim()) {
       setError('Username is required.');
+      return;
+    }
+    if (form.password.length < 10) {
+      setError('Password must be at least 10 characters.');
       return;
     }
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const user = await consumeStaffInvite({
@@ -57,6 +64,7 @@ export default function StaffInviteSetup({ onLogin }) {
     } catch (err) {
       setError(err.message);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -81,7 +89,7 @@ export default function StaffInviteSetup({ onLogin }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-blue-50 flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className={`${CARD.padded} w-full max-w-lg space-y-5`}>
+      <form onSubmit={handleSubmit} className={`${CARD.padded} w-full max-w-lg space-y-5`} noValidate>
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Staff setup</p>
           <h1 className="mt-2 text-2xl font-bold text-slate-900">Set up your sign-in</h1>
@@ -101,6 +109,9 @@ export default function StaffInviteSetup({ onLogin }) {
               value={form.username}
               onChange={(e) => setForm((current) => ({ ...current, username: e.target.value }))}
               autoComplete="username"
+              required
+              minLength={3}
+              maxLength={100}
               autoFocus
             />
           </div>
@@ -113,6 +124,9 @@ export default function StaffInviteSetup({ onLogin }) {
               value={form.password}
               onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
               autoComplete="new-password"
+              required
+              minLength={10}
+              maxLength={200}
             />
           </div>
           <div>
@@ -124,6 +138,9 @@ export default function StaffInviteSetup({ onLogin }) {
               value={form.confirmPassword}
               onChange={(e) => setForm((current) => ({ ...current, confirmPassword: e.target.value }))}
               autoComplete="new-password"
+              required
+              minLength={10}
+              maxLength={200}
             />
             <p className="mt-1 text-xs text-slate-500">Use at least 10 characters.</p>
           </div>

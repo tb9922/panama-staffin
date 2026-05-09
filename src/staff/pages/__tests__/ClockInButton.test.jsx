@@ -96,6 +96,29 @@ describe('ClockInButton', () => {
     });
   });
 
+  it('ignores duplicate clock clicks while the first location request is in flight', async () => {
+    let resolvePosition;
+    stubGeolocation((resolve) => {
+      resolvePosition = resolve;
+    });
+    renderWithProviders(<ClockInButton />, {
+      user: { username: 'staff', role: 'staff_member', displayName: 'Staff User' },
+    });
+
+    expect(await screen.findByText('Ready to clock in?')).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Clock in' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(navigator.geolocation.getCurrentPosition).toHaveBeenCalledTimes(1);
+    resolvePosition({
+      coords: { latitude: 51.501, longitude: -0.141, accuracy: 12 },
+    });
+    await waitFor(() => {
+      expect(recordClockIn).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('shows specific message when location permission is denied', async () => {
     stubGeoError(1);  // PERMISSION_DENIED
     renderWithProviders(<ClockInButton />, {

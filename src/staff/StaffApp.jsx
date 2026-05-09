@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import StaffLayout from './StaffLayout.jsx';
 import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import RouteErrorBoundary from '../components/RouteErrorBoundary.jsx';
 
 const MyDashboard = lazy(() => import('./pages/MyDashboard.jsx'));
@@ -24,6 +25,7 @@ export default function StaffApp() {
           <Route path="training" element={<RouteErrorBoundary><MyTraining /></RouteErrorBoundary>} />
           <Route path="report-sick" element={<RouteErrorBoundary><ReportSick /></RouteErrorBoundary>} />
           <Route path="profile" element={<RouteErrorBoundary><MyProfile /></RouteErrorBoundary>} />
+          <Route path="*" element={<RouteErrorBoundary><ErrorState title="Staff page not found" message="Choose a staff portal section from the navigation." className="p-6" /></RouteErrorBoundary>} />
         </Route>
       </Routes>
     </Suspense>
