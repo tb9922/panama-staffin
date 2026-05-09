@@ -90,7 +90,11 @@ describe('EvidenceHub page', () => {
       expect(api.searchEvidenceHub).toHaveBeenCalled();
     });
 
-    await user.click(screen.getByRole('button', { name: 'HR Cases' }));
+    const hrFilter = screen.getByRole('button', { name: 'HR Cases' });
+    expect(hrFilter).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(hrFilter);
+    expect(hrFilter).toHaveAttribute('aria-pressed', 'true');
 
     await waitFor(() => {
       expect(api.searchEvidenceHub).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -118,5 +122,26 @@ describe('EvidenceHub page', () => {
     await waitFor(() => {
       expect(api.deleteEvidenceHubAttachment).toHaveBeenCalledWith('hr', 91);
     });
+  });
+
+  it('falls back cleanly for malformed dates and sizes', async () => {
+    api.searchEvidenceHub.mockResolvedValue({
+      rows: [{
+        ...HUB_ROWS[0],
+        createdAt: 'not-a-date',
+        sizeBytes: -1,
+      }],
+      total: 1,
+    });
+
+    renderWithProviders(<EvidenceHub />, {
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('hr-evidence-note.pdf')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+    expect(screen.getByText('0 B')).toBeInTheDocument();
   });
 });

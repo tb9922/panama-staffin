@@ -20,14 +20,18 @@ import { useData } from '../contexts/DataContext.jsx';
 const PAGE_SIZE = 50;
 
 function formatBytes(sizeBytes) {
-  if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${sizeBytes || 0} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  const value = Number(sizeBytes);
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  if (value < 1024) return `${Math.round(value)} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatDateTime(value) {
   if (!value) return '-';
-  return new Date(value).toLocaleString('en-GB', {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-GB', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -208,8 +212,8 @@ export default function EvidenceHub() {
           <p className={PAGE.subtitle}>Search uploaded evidence across every source your role can already read, including HR, CQC, onboarding, training, and operational records.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className={BTN.secondary} onClick={clearFilters} disabled={loading}>Clear Filters</button>
-          <button className={BTN.primary} onClick={handleExport} disabled={loading || exporting || total === 0}>
+          <button type="button" className={BTN.secondary} onClick={clearFilters} disabled={loading}>Clear Filters</button>
+          <button type="button" className={BTN.primary} onClick={handleExport} disabled={loading || exporting || total === 0}>
             {exporting ? 'Exporting...' : 'Export XLSX'}
           </button>
         </div>
@@ -273,6 +277,7 @@ export default function EvidenceHub() {
                   key={source.id}
                   type="button"
                   className={selected ? BADGE.blue : BADGE.gray}
+                  aria-pressed={selected}
                   onClick={() => toggleModule(source.id)}
                 >
                   {source.label}
@@ -327,7 +332,7 @@ export default function EvidenceHub() {
                 {rows.map((row) => (
                   <tr key={`${row.sourceModule}-${row.attachmentId}`} className={TABLE.tr}>
                     <td className={TABLE.td}>
-                      <a href={getEvidenceHubDownloadUrl(row.sourceModule, row.attachmentId)} className="text-blue-600 hover:text-blue-700 hover:underline font-medium">
+                      <a href={getEvidenceHubDownloadUrl(row.sourceModule, row.attachmentId)} className="break-words font-medium text-blue-600 hover:text-blue-700 hover:underline">
                         {row.originalName}
                       </a>
                       {row.description && (
