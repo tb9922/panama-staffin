@@ -35,6 +35,10 @@ const HOME_CONFIG = {
     N: { hours: 10, start: '21:30', end: '07:30' },
   },
   leave_year_start: '04-01',
+  training_types: [
+    { id: 'fire-safety', name: 'Fire Safety', category: 'statutory', active: true, roles: null },
+    { id: 'senior-only', name: 'Senior Only', category: 'mandatory', active: true, roles: ['Senior Carer'] },
+  ],
 };
 
 let homeId;
@@ -68,6 +72,7 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM sick_periods WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
+  await pool.query(`DELETE FROM training_records WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
@@ -101,6 +106,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM sick_periods WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM training_records WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]);
@@ -112,6 +118,7 @@ beforeEach(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM sick_periods WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM training_records WHERE home_id = $1`, [homeId]);
 });
 
 describe('AL request flow', () => {
@@ -318,6 +325,54 @@ describe('Sick self-report', () => {
       date: addDaysLocalISO(todayLocalISO(), 2),
       actorUsername: STAFF_A_USER,
     })).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+describe('Training self-service', () => {
+  it('shows only role-applicable training and acknowledges current completed records', async () => {
+    await pool.query(
+      `INSERT INTO training_records (home_id, staff_id, training_type_id, completed, expiry, updated_at)
+       VALUES
+        ($1, $2, 'fire-safety', $3, $4, NOW()),
+        ($1, $2, 'senior-only', $3, $4, NOW())`,
+      [homeId, STAFF_A, todayLocalISO(), addDaysLocalISO(todayLocalISO(), 365)],
+    );
+
+    const training = await staffPortalService.getStaffTrainingStatus({ homeId, staffId: STAFF_A });
+    expect(training.items.map((item) => item.id)).toEqual(['fire-safety']);
+
+    await staffPortalService.acknowledgeTrainingByStaff({ homeId, staffId: STAFF_A, typeId: 'fire-safety' });
+
+    const { rows: [record] } = await pool.query(
+      `SELECT acknowledged_by_staff, acknowledged_at
+         FROM training_records
+        WHERE home_id = $1 AND staff_id = $2 AND training_type_id = 'fire-safety'`,
+      [homeId, STAFF_A],
+    );
+    expect(record.acknowledged_by_staff).toBe(true);
+    expect(record.acknowledged_at).toBeTruthy();
+  });
+
+  it('rejects direct acknowledgement of expired or non-role training', async () => {
+    await pool.query(
+      `INSERT INTO training_records (home_id, staff_id, training_type_id, completed, expiry, updated_at)
+       VALUES
+        ($1, $2, 'fire-safety', '2026-01-01', '2026-02-01', NOW()),
+        ($1, $2, 'senior-only', $3, $4, NOW())`,
+      [homeId, STAFF_A, todayLocalISO(), addDaysLocalISO(todayLocalISO(), 365)],
+    );
+
+    await expect(staffPortalService.acknowledgeTrainingByStaff({
+      homeId,
+      staffId: STAFF_A,
+      typeId: 'fire-safety',
+    })).rejects.toMatchObject({ statusCode: 400, code: 'TRAINING_NOT_CURRENT' });
+
+    await expect(staffPortalService.acknowledgeTrainingByStaff({
+      homeId,
+      staffId: STAFF_A,
+      typeId: 'senior-only',
+    })).rejects.toMatchObject({ statusCode: 404, code: 'TRAINING_NOT_FOUND' });
   });
 });
 

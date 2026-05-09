@@ -223,8 +223,15 @@ export async function removeRecord(homeId, staffId, typeId, client) {
   return rowCount > 0;
 }
 
-export async function acknowledgeByStaff(homeId, staffId, typeId, client) {
+export async function acknowledgeByStaff(homeId, staffId, typeId, { asOfDate } = {}, client) {
   const conn = client || pool;
+  const params = [homeId, staffId, typeId];
+  let currentClause = '';
+  if (asOfDate) {
+    params.push(asOfDate);
+    currentClause = ` AND completed IS NOT NULL
+        AND (expiry IS NULL OR expiry >= $${params.length}::date)`;
+  }
   const { rows } = await conn.query(
     `UPDATE training_records
         SET acknowledged_at = NOW(),
@@ -234,8 +241,9 @@ export async function acknowledgeByStaff(homeId, staffId, typeId, client) {
         AND staff_id = $2
         AND training_type_id = $3
         AND deleted_at IS NULL
+        ${currentClause}
       RETURNING id`,
-    [homeId, staffId, typeId],
+    params,
   );
   return rows.length > 0;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BADGE, BTN } from '../../lib/design.js';
 import { acknowledgeMyTraining, getMyTraining } from '../../lib/api.js';
 import LoadingState from '../../components/LoadingState.jsx';
@@ -9,8 +9,9 @@ export default function MyTraining() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [acknowledgingId, setAcknowledgingId] = useState('');
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -20,27 +21,33 @@ export default function MyTraining() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function handleAcknowledge(typeId) {
+    if (acknowledgingId) return;
+    setAcknowledgingId(typeId);
+    setError('');
     try {
       await acknowledgeMyTraining(typeId);
       await load();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setAcknowledgingId('');
     }
   }
 
-  if (loading) return <LoadingState message="Loading training..." className="p-6" />;
+  if (loading && !data) return <LoadingState message="Loading training..." className="p-6" />;
   if (error && !data) return <div className="p-6"><ErrorState title="Unable to load training" message={error} onRetry={() => void load()} /></div>;
 
   return (
     <div className="space-y-6 p-6">
       {error && <ErrorState title="Training update failed" message={error} onRetry={() => void load()} />}
+      {loading && data && <LoadingState message="Refreshing training..." compact />}
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-2xl font-bold text-slate-900">My Training</h2>
         <p className="mt-2 text-sm text-slate-600">Check what's complete, expiring, or still missing.</p>
@@ -62,8 +69,13 @@ export default function MyTraining() {
                 </p>
               </div>
               {item.status === 'complete' && !item.acknowledgedByStaff && (
-                <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => void handleAcknowledge(item.id)}>
-                  Acknowledge
+                <button
+                  type="button"
+                  className={`${BTN.secondary} ${BTN.sm}`}
+                  onClick={() => void handleAcknowledge(item.id)}
+                  disabled={acknowledgingId === item.id}
+                >
+                  {acknowledgingId === item.id ? 'Acknowledging...' : 'Acknowledge'}
                 </button>
               )}
             </div>

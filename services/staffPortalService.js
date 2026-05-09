@@ -26,6 +26,10 @@ import { calculateAccrual } from '../src/lib/accrual.js';
 const PROFILE_ALLOWLIST = new Set(['phone', 'address', 'emergency_contact']);
 const FINAL_PAYROLL_RUN_STATUSES = ['approved', 'exported', 'locked'];
 
+function trainingTypeAppliesToRole(type, role) {
+  return type?.active !== false && (!Array.isArray(type.roles) || type.roles.includes(role));
+}
+
 function shapeOwnProfile(staff) {
   return {
     id: staff.id,
@@ -143,8 +147,7 @@ export async function getStaffTrainingStatus({ homeId, staffId }) {
   const recordMap = new Map(records.map((record) => [record.training_type_id, record]));
   const today = todayLocalISO();
   const items = getTrainingTypes(home.config || {})
-    .filter((type) => type.active !== false)
-    .filter((type) => !type.roles || type.roles.includes(staff.role))
+    .filter((type) => trainingTypeAppliesToRole(type, staff.role))
     .map((type) => {
       const record = recordMap.get(type.id);
       let status = 'missing';
@@ -173,8 +176,17 @@ export async function acknowledgeTrainingByStaff({ homeId, staffId, typeId }) {
     const home = await homeRepo.findById(homeId, client);
     const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
-    if (!staff) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-    const ok = await trainingRepo.acknowledgeByStaff(homeId, staffId, typeId, client);
+    if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
+    const type = getTrainingTypes(home.config || {})
+      .find((candidate) => candidate.id === typeId && trainingTypeAppliesToRole(candidate, staff.role));
+    if (!type) throw new AppError('Training record not found', 404, 'TRAINING_NOT_FOUND');
+    const today = todayLocalISO();
+    const records = await trainingRepo.findByStaff(homeId, staffId, client);
+    const record = records.find((item) => item.training_type_id === typeId);
+    if (!record?.completed || (record.expiry && record.expiry < today)) {
+      throw new AppError('Only current completed training can be acknowledged', 400, 'TRAINING_NOT_CURRENT');
+    }
+    const ok = await trainingRepo.acknowledgeByStaff(homeId, staffId, typeId, { asOfDate: today }, client);
     if (!ok) throw new AppError('Training record not found', 404, 'TRAINING_NOT_FOUND');
     await auditService.log('training_acknowledged_by_staff', home.slug, staff.name, {
       staff_id: staffId,
