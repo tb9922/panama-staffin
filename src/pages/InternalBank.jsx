@@ -22,6 +22,11 @@ function trainingBadge(status) {
   return BADGE.gray;
 }
 
+function isValidHours(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0.5 && numeric <= 24;
+}
+
 export default function InternalBank() {
   const ids = {
     role: useId(),
@@ -45,6 +50,14 @@ export default function InternalBank() {
   }
 
   const runSearch = useCallback(async () => {
+    if (!activeHome) {
+      setError('Select a home before searching the internal bank.');
+      return;
+    }
+    if (!filters.shift_date || !filters.shift_code || !isValidHours(filters.hours)) {
+      setError('Enter a valid date, shift and hours value before searching.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -58,6 +71,18 @@ export default function InternalBank() {
   }, [activeHome, filters]);
 
   const candidates = payload?.candidates || [];
+  const canSearch = Boolean(activeHome && filters.shift_date && filters.shift_code && isValidHours(filters.hours));
+
+  if (!activeHome) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before searching the internal bank."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -91,12 +116,20 @@ export default function InternalBank() {
             <input id={ids.hours} type="number" min="0.5" step="0.5" inputMode="decimal" className={INPUT.base} value={filters.hours} onChange={e => setFilter('hours', e.target.value)} />
           </div>
           <div className="flex items-end">
-            <button type="button" className={BTN.primary} onClick={runSearch} disabled={loading || !activeHome}>
+            <button type="button" className={BTN.primary} onClick={runSearch} disabled={loading || !canSearch}>
               {loading ? 'Searching...' : 'Search'}
             </button>
           </div>
         </div>
       </div>
+
+      {payload && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">Candidates</p><p className="mt-2 text-2xl font-semibold text-[var(--ink)]">{payload.total ?? candidates.length}</p></div>
+          <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">Viable</p><p className="mt-2 text-2xl font-semibold text-[var(--ok)]">{payload.viable_count ?? candidates.filter(candidate => candidate.viable).length}</p></div>
+          <div className={CARD.padded}><p className="text-sm text-[var(--ink-3)]">Blocked</p><p className="mt-2 text-2xl font-semibold text-[var(--warn)]">{Math.max((payload.total ?? candidates.length) - (payload.viable_count ?? 0), 0)}</p></div>
+        </div>
+      )}
 
       {error && <ErrorState title="Internal bank unavailable" message={error} onRetry={runSearch} />}
       {loading && <LoadingState message="Checking internal bank..." />}
