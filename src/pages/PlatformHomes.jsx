@@ -14,12 +14,17 @@ import {
 } from '../lib/api.js';
 
 function formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 function generateSlug(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 100).replace(/[_-]+$/g, '');
+}
+
+function isValidBeds(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 200;
 }
 
 export default function PlatformHomes() {
@@ -34,7 +39,6 @@ export default function PlatformHomes() {
   const [addOpen, setAddOpen] = useState(false);
   const [editHome, setEditHome] = useState(null);
   const [deleteHome, setDeleteHome] = useState(null);
-  useDirtyGuard(addOpen || !!editHome || !!deleteHome);
 
   const refresh = useCallback(async () => {
     try {
@@ -126,8 +130,8 @@ export default function PlatformHomes() {
               <tr key={home.id} className={TABLE.tr}>
                 <td className={TABLE.td}>{home.name}</td>
                 <td className={`${TABLE.tdMono} text-xs`}>{home.slug}</td>
-                <td className={TABLE.td}>{home.beds ?? '—'}</td>
-                <td className={TABLE.td}>{home.careType || '—'}</td>
+                <td className={TABLE.td}>{home.beds ?? '-'}</td>
+                <td className={TABLE.td}>{home.careType || '-'}</td>
                 <td className={TABLE.td}>{home.staffCount}</td>
                 <td className={TABLE.td}>{home.userCount}</td>
                 <td className={TABLE.td}>{formatDate(home.updatedAt)}</td>
@@ -154,21 +158,24 @@ export default function PlatformHomes() {
 
 function CreateHomeModal({ onClose, onSuccess }) {
   const [name, setName] = useState('');
-  const [beds, setBeds] = useState(30);
+  const [beds, setBeds] = useState('30');
   const [careType, setCareType] = useState('residential');
   const [cycleStartDate, setCycleStartDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
   const slug = generateSlug(name);
+  const isDirty = name !== '' || beds !== '30' || careType !== 'residential' || cycleStartDate !== '';
+  const isInvalid = !name.trim() || slug.length < 2 || !cycleStartDate || !isValidBeds(beds);
+  useDirtyGuard(isDirty);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!name.trim() || !cycleStartDate) return;
+    if (isInvalid) return;
     setSaving(true);
     setErr(null);
     try {
-      await createPlatformHome({ name: name.trim(), registered_beds: beds, care_type: careType, cycle_start_date: cycleStartDate });
+      await createPlatformHome({ name: name.trim(), slug, registered_beds: Number(beds), care_type: careType, cycle_start_date: cycleStartDate });
       onSuccess(`Home "${name.trim()}" created`);
       onClose();
     } catch (err) {
@@ -185,7 +192,7 @@ function CreateHomeModal({ onClose, onSuccess }) {
 
         <div>
           <label htmlFor="home-create-name" className={INPUT.label}>Home Name *</label>
-          <input id="home-create-name" className={INPUT.base} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Oakwood Care Home" required />
+          <input id="home-create-name" className={INPUT.base} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Oakwood Care Home" required maxLength={200} />
         </div>
 
         <div>
@@ -196,7 +203,7 @@ function CreateHomeModal({ onClose, onSuccess }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="home-create-beds" className={INPUT.label}>Registered Beds</label>
-            <input id="home-create-beds" className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(parseInt(e.target.value) || 30)} />
+            <input id="home-create-beds" className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(e.target.value)} />
           </div>
           <div>
             <label htmlFor="home-create-care-type" className={INPUT.label}>Care Type</label>
@@ -218,7 +225,7 @@ function CreateHomeModal({ onClose, onSuccess }) {
 
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button type="submit" className={BTN.primary} disabled={saving || !name.trim() || !cycleStartDate}>
+          <button type="submit" className={BTN.primary} disabled={saving || isInvalid}>
             {saving ? 'Creating...' : 'Create Home'}
           </button>
         </div>
@@ -229,18 +236,26 @@ function CreateHomeModal({ onClose, onSuccess }) {
 
 function EditHomeModal({ home, onClose, onSuccess }) {
   const [name, setName] = useState(home.name || '');
-  const [beds, setBeds] = useState(home.beds || 30);
+  const [beds, setBeds] = useState(String(home.beds || 30));
   const [careType, setCareType] = useState(home.careType || 'residential');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const baseline = {
+    name: home.name || '',
+    beds: String(home.beds || 30),
+    careType: home.careType || 'residential',
+  };
+  const isDirty = name !== baseline.name || beds !== baseline.beds || careType !== baseline.careType;
+  const isInvalid = !name.trim() || !isValidBeds(beds);
+  useDirtyGuard(isDirty);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (isInvalid) return;
     setSaving(true);
     setErr(null);
     try {
-      await updatePlatformHome(home.id, { name: name.trim(), registered_beds: beds, care_type: careType });
+      await updatePlatformHome(home.id, { name: name.trim(), registered_beds: Number(beds), care_type: careType });
       onSuccess(`Home "${name.trim()}" updated`);
       onClose();
     } catch (err) {
@@ -262,13 +277,13 @@ function EditHomeModal({ home, onClose, onSuccess }) {
 
         <div>
           <label htmlFor="home-edit-name" className={INPUT.label}>Home Name *</label>
-          <input id="home-edit-name" className={INPUT.base} value={name} onChange={e => setName(e.target.value)} required />
+          <input id="home-edit-name" className={INPUT.base} value={name} onChange={e => setName(e.target.value)} required maxLength={200} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="home-edit-beds" className={INPUT.label}>Registered Beds</label>
-            <input id="home-edit-beds" className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(parseInt(e.target.value) || 30)} />
+            <input id="home-edit-beds" className={INPUT.base} type="number" min={1} max={200} value={beds} onChange={e => setBeds(e.target.value)} />
           </div>
           <div>
             <label htmlFor="home-edit-care-type" className={INPUT.label}>Care Type</label>
@@ -284,7 +299,7 @@ function EditHomeModal({ home, onClose, onSuccess }) {
 
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button type="submit" className={BTN.primary} disabled={saving || !name.trim()}>
+          <button type="submit" className={BTN.primary} disabled={saving || isInvalid}>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
@@ -321,12 +336,12 @@ function DeleteHomeModal({ home, onClose, onSuccess }) {
         {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
         <div className="rounded-lg border border-[var(--alert)] bg-[var(--alert-soft)] p-4">
-          <p className="text-red-800 text-sm font-medium">This will soft-delete the home and revoke access for all users.</p>
-          <p className="text-red-700 text-xs mt-1">Staff, scheduling, and financial data will be preserved for audit purposes but the home will no longer be accessible.</p>
+          <p className="text-sm font-medium text-[var(--alert)]">This will soft-delete the home and revoke access for all users.</p>
+          <p className="mt-1 text-xs text-[var(--alert)]">Staff, scheduling, and financial data will be preserved for audit purposes but the home will no longer be accessible.</p>
         </div>
 
         <div>
-          <label htmlFor="home-delete-confirm" className="mb-2 block text-sm text-gray-600">Type <strong>{home.name}</strong> to confirm:</label>
+          <label htmlFor="home-delete-confirm" className={INPUT.label}>Type <strong>{home.name}</strong> to confirm:</label>
           <input id="home-delete-confirm" className={INPUT.base} value={confirmName} onChange={e => setConfirmName(e.target.value)} placeholder={home.name} />
         </div>
 

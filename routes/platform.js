@@ -16,17 +16,17 @@ const router = Router();
 const idSchema = z.coerce.number().int().positive();
 
 const createHomeSchema = z.object({
-  name: z.string().min(1).max(200),
+  name: z.string().trim().min(1).max(200),
   slug: z.string().min(2).max(100).regex(/^[a-z0-9][a-z0-9_-]*$/, 'Slug must be lowercase alphanumeric with _ or -').optional(),
   registered_beds: z.coerce.number().int().min(1).max(200).default(30),
-  care_type: z.string().max(100).default('residential'),
+  care_type: z.string().trim().max(100).default('residential'),
   cycle_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD'),
 });
 
 const updateHomeSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   registered_beds: z.coerce.number().int().min(1).max(200).optional(),
-  care_type: z.string().max(100).optional(),
+  care_type: z.string().trim().max(100).optional(),
 });
 
 function buildDefaultConfig(name, beds, careType, cycleStartDate) {
@@ -57,7 +57,7 @@ function buildDefaultConfig(name, beds, careType, cycleStartDate) {
 }
 
 function generateSlug(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 100).replace(/[_-]+$/g, '');
 }
 
 // GET /api/platform/homes — list all homes with stats

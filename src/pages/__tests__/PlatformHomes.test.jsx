@@ -106,6 +106,41 @@ describe('PlatformHomes', () => {
     expect(screen.getByText('Slug (auto-generated)')).toBeInTheDocument();
   });
 
+  it('creates homes with trimmed names, numeric beds and bounded slugs', async () => {
+    const user = userEvent.setup();
+    const longName = `${'A'.repeat(150)} Care Home`;
+    renderWithProviders(<PlatformHomes />);
+
+    await user.click(await screen.findByRole('button', { name: /add home/i }));
+    await user.type(screen.getByLabelText('Home Name *'), `  ${longName}  `);
+    await user.clear(screen.getByLabelText('Registered Beds'));
+    await user.type(screen.getByLabelText('Registered Beds'), '45');
+    await user.type(screen.getByLabelText('Cycle Start Date *'), '2026-05-04');
+    await user.click(screen.getByRole('button', { name: 'Create Home' }));
+
+    await waitFor(() => {
+      expect(api.createPlatformHome).toHaveBeenCalledWith(expect.objectContaining({
+        name: longName,
+        registered_beds: 45,
+        cycle_start_date: '2026-05-04',
+        slug: 'a'.repeat(100),
+      }));
+    });
+  });
+
+  it('blocks invalid edit beds before calling the API', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformHomes />);
+
+    await waitFor(() => expect(screen.getByText('Oakwood Care Home')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await user.clear(screen.getByLabelText('Registered Beds'));
+    await user.type(screen.getByLabelText('Registered Beds'), '0');
+
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    expect(api.updatePlatformHome).not.toHaveBeenCalled();
+  });
+
   it('shows error banner on API failure', async () => {
     api.listPlatformHomes.mockRejectedValue(new Error('Forbidden'));
     renderWithProviders(<PlatformHomes />);
