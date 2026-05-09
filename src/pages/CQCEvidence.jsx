@@ -20,6 +20,7 @@ import {
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
   getCqcNarratives, getCqcReadiness, upsertCqcNarrative, getCqcEvidenceLinks,
+  isAbortLikeError,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -317,31 +318,41 @@ function CQCEvidenceInner({ data, partialLoadErrors = [], onRefresh }) {
 
   useEffect(() => { loadEvidence(); }, [loadEvidence]);
 
-  const loadEvidenceLinks = useCallback(async () => {
+  const loadEvidenceLinks = useCallback(async (signal) => {
     try {
       const home = getCurrentHome();
-      const result = await getCqcEvidenceLinks(home);
-      if (isMounted.current) setEvidenceLinks(result.rows || []);
+      const result = await getCqcEvidenceLinks(home, {}, { signal });
+      if (isMounted.current && !signal?.aborted) setEvidenceLinks(result.rows || []);
     } catch (err) {
-      if (isMounted.current) console.error('Failed to load CQC evidence links:', err);
+      if (isAbortLikeError(err, signal)) return;
+      if (isMounted.current) console.warn('Failed to load CQC evidence links:', err);
     }
   }, []);
 
-  useEffect(() => { loadEvidenceLinks(); }, [loadEvidenceLinks]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadEvidenceLinks(controller.signal);
+    return () => controller.abort();
+  }, [loadEvidenceLinks]);
 
-  const loadNarratives = useCallback(async () => {
+  const loadNarratives = useCallback(async (signal) => {
     try {
       const home = getCurrentHome();
-      const rows = await getCqcNarratives(home);
-      if (isMounted.current) setNarratives(Array.isArray(rows) ? rows : []);
+      const rows = await getCqcNarratives(home, { signal });
+      if (isMounted.current && !signal?.aborted) setNarratives(Array.isArray(rows) ? rows : []);
     } catch (err) {
-      if (isMounted.current) console.error('Failed to load CQC narratives:', err);
+      if (isAbortLikeError(err, signal)) return;
+      if (isMounted.current) console.warn('Failed to load CQC narratives:', err);
     } finally {
-      if (isMounted.current) setNarrativesLoading(false);
+      if (isMounted.current && !signal?.aborted) setNarrativesLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadNarratives(); }, [loadNarratives]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadNarratives(controller.signal);
+    return () => controller.abort();
+  }, [loadNarratives]);
 
   const loadReadiness = useCallback(async (signal) => {
     const home = getCurrentHome();

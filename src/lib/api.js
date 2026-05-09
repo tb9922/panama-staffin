@@ -77,12 +77,12 @@ async function apiFetch(url, options = {}) {
   return parseBody();
 }
 
-async function fetchAllPaged(buildUrl, rowKeys, { limit = 500 } = {}) {
+async function fetchAllPaged(buildUrl, rowKeys, { limit = 500, signal } = {}) {
   let offset = 0;
   let total = Infinity;
   let combined = null;
   while (offset < total) {
-    const page = await apiFetch(buildUrl({ limit, offset }), { headers: authHeaders() });
+    const page = await apiFetch(buildUrl({ limit, offset }), { headers: authHeaders(), signal });
     if (!combined) {
       combined = { ...page };
       for (const key of rowKeys) combined[key] = [];
@@ -944,11 +944,12 @@ export async function getCqcEvidence(homeSlug, filters = {}) {
   return apiFetch(`${API_BASE}/cqc-evidence?${params}`, { headers: authHeaders() });
 }
 
-export async function getCqcEvidenceLinks(homeSlug, filters = {}) {
+export async function getCqcEvidenceLinks(homeSlug, filters = {}, { signal } = {}) {
   if (!filters.limit && !filters.offset && filters.all !== false) {
     return fetchAllPaged(
       ({ limit, offset }) => `${API_BASE}/cqc-evidence-links?home=${h(homeSlug)}&limit=${limit}&offset=${offset}`,
-      ['rows']
+      ['rows'],
+      { signal }
     );
   }
   const params = new URLSearchParams({ home: homeSlug });
@@ -957,7 +958,7 @@ export async function getCqcEvidenceLinks(homeSlug, filters = {}) {
   if (filters.statement) params.set('statement', filters.statement);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
   if (filters.dateTo) params.set('dateTo', filters.dateTo);
-  return apiFetch(`${API_BASE}/cqc-evidence-links?${params}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/cqc-evidence-links?${params}`, { headers: authHeaders(), signal });
 }
 
 export async function createCqcEvidence(homeSlug, data) {
@@ -978,8 +979,8 @@ export async function deleteCqcEvidence(homeSlug, id) {
   });
 }
 
-export async function getCqcNarratives(homeSlug) {
-  return apiFetch(`${API_BASE}/cqc-evidence/narratives?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getCqcNarratives(homeSlug, { signal } = {}) {
+  return apiFetch(`${API_BASE}/cqc-evidence/narratives?home=${h(homeSlug)}`, { headers: authHeaders(), signal });
 }
 
 export async function getCqcReadiness(homeSlug, dateRange = 28, signal) {
