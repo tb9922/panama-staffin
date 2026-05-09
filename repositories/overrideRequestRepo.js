@@ -2,6 +2,8 @@ import { pool, toDateStr } from '../db.js';
 
 const COLS = `id, home_id, staff_id, request_type, date, requested_shift, al_hours,
   swap_with_staff, reason, status, submitted_at, decided_by, decided_at, decision_note, version`;
+const SELECT_COLS = `o.id, o.home_id, o.staff_id, o.request_type, o.date, o.requested_shift, o.al_hours,
+  o.swap_with_staff, o.reason, o.status, o.submitted_at, o.decided_by, o.decided_at, o.decision_note, o.version`;
 
 function shape(row) {
   if (!row) return null;
@@ -21,6 +23,7 @@ function shape(row) {
     decidedAt: row.decided_at instanceof Date ? row.decided_at.toISOString() : row.decided_at,
     decisionNote: row.decision_note,
     version: Number.parseInt(row.version, 10) || 0,
+    staffName: row.staff_name || null,
   };
 }
 
@@ -65,10 +68,11 @@ export async function findByStaff(homeId, staffId, { limit = 100 } = {}, client 
 
 export async function findPending(homeId, { limit = 200 } = {}, client = pool) {
   const { rows } = await client.query(
-    `SELECT ${COLS}
-       FROM override_requests
-      WHERE home_id = $1 AND status = 'pending'
-      ORDER BY submitted_at ASC
+    `SELECT ${SELECT_COLS}, s.name AS staff_name
+       FROM override_requests o
+       LEFT JOIN staff s ON s.home_id = o.home_id AND s.id = o.staff_id
+      WHERE o.home_id = $1 AND o.status = 'pending'
+      ORDER BY o.submitted_at ASC, o.id ASC
       LIMIT $2`,
     [homeId, limit],
   );

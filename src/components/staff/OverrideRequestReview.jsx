@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { BADGE, BTN, INPUT } from '../../lib/design.js';
 import { decideOverrideRequest, getPendingOverrideRequests, getCurrentHome } from '../../lib/api.js';
 import LoadingState from '../LoadingState.jsx';
@@ -11,8 +11,9 @@ export default function OverrideRequestReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
-  const [decisionNotes, setDecisionNotes] = useState({});  // { [requestId]: note }
+  const [decisionNotes, setDecisionNotes] = useState({}); // { [requestId]: note }
   const [busyId, setBusyId] = useState(null);
+  const noteIdPrefix = useId();
 
   const load = useCallback(async () => {
     try {
@@ -27,7 +28,13 @@ export default function OverrideRequestReview() {
   }, [homeSlug]);
 
   useEffect(() => {
-    if (homeSlug) void load();
+    if (homeSlug) {
+      void load();
+      return;
+    }
+    setRows([]);
+    setError('');
+    setLoading(false);
   }, [homeSlug, load]);
 
   async function handleDecision(item, status) {
@@ -39,7 +46,6 @@ export default function OverrideRequestReview() {
         expectedVersion: item.version,
         decisionNote: decisionNotes[item.id] || '',
       });
-      // Clean up local state for this request
       setDecisionNotes((current) => {
         const next = { ...current };
         delete next[item.id];
@@ -68,9 +74,18 @@ export default function OverrideRequestReview() {
         {loading && <LoadingState message="Refreshing..." compact />}
       </div>
 
-      {error && <ErrorState title="Unable to load requests" message={error} className="mt-4" />}
+      {error && (
+        <ErrorState
+          title="Unable to load requests"
+          message={error}
+          onRetry={homeSlug ? () => void load() : undefined}
+          className="mt-4"
+        />
+      )}
 
-      {loading && rows.length === 0 ? (
+      {!homeSlug ? (
+        <EmptyState compact title="Select a home" description="Choose a home before reviewing staff leave requests." className="mt-4" />
+      ) : loading && rows.length === 0 ? (
         <LoadingState message="Loading requests..." className="mt-4" />
       ) : rows.length === 0 ? (
         <EmptyState compact title="Nothing waiting" description="New leave requests will appear here." className="mt-4" />
@@ -87,7 +102,9 @@ export default function OverrideRequestReview() {
                       <p className="font-medium text-slate-900">{item.date}</p>
                       <span className={BADGE.amber}>{item.requestType}</span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">Staff ID: {item.staffId}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {item.staffName ? `${item.staffName} (${item.staffId})` : `Staff ID: ${item.staffId}`}
+                    </p>
                     <p className="mt-1 text-sm text-slate-500">{item.reason || 'No reason provided'}</p>
                   </div>
                   <div className="flex gap-2">
@@ -104,20 +121,20 @@ export default function OverrideRequestReview() {
                 {expanded && (
                   <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
                     <div>
-                      <label htmlFor={`note-${item.id}`} className={INPUT.label}>
-                        Decision note (shown to staff — required for rejection)
+                      <label htmlFor={`${noteIdPrefix}-note-${item.id}`} className={INPUT.label}>
+                        Decision note (shown to staff - required for rejection)
                       </label>
                       <textarea
-                        id={`note-${item.id}`}
+                        id={`${noteIdPrefix}-note-${item.id}`}
                         rows={2}
                         maxLength={500}
                         value={note}
                         onChange={(e) => setNote(item.id, e.target.value)}
                         className={INPUT.base}
-                        placeholder="e.g. 'Coverage gap — try a different week' or 'Approved, enjoy.'"
+                        placeholder="e.g. 'Coverage gap - try a different week' or 'Approved, enjoy.'"
                       />
                     </div>
-                    <div className="flex gap-2 justify-end">
+                    <div className="flex justify-end gap-2">
                       <button
                         type="button"
                         className={`${BTN.danger} ${BTN.sm}`}

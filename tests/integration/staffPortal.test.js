@@ -399,5 +399,9 @@ describe('Pending requests query', () => {
     const subset = pending.filter((r) => r.staffId === STAFF_A || r.staffId === STAFF_B);
     expect(subset.length).toBeGreaterThanOrEqual(1);
     subset.forEach((r) => expect(r.status).toBe('pending'));
+    subset.forEach((r) => {
+      if (r.staffId === STAFF_A) expect(r.staffName).toBe(STAFF_A_NAME);
+      if (r.staffId === STAFF_B) expect(r.staffName).toBe(STAFF_B_NAME);
+    });
   });
 });

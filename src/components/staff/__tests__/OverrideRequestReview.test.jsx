@@ -13,11 +13,12 @@ vi.mock('../../../lib/api.js', async (importActual) => {
   };
 });
 
-import { getPendingOverrideRequests, decideOverrideRequest } from '../../../lib/api.js';
+import { getCurrentHome, getPendingOverrideRequests, decideOverrideRequest } from '../../../lib/api.js';
 
 describe('OverrideRequestReview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getCurrentHome.mockReturnValue('amberwood');
     getPendingOverrideRequests.mockResolvedValue([
       {
         id: 11,
@@ -25,6 +26,7 @@ describe('OverrideRequestReview', () => {
         requestType: 'AL',
         reason: 'Wedding',
         staffId: 'S009',
+        staffName: 'Sam Nurse',
         version: 2,
       },
     ]);
@@ -37,7 +39,31 @@ describe('OverrideRequestReview', () => {
     expect(await screen.findByText('Pending leave requests')).toBeInTheDocument();
     expect(screen.getByText('2026-04-22')).toBeInTheDocument();
     expect(screen.getByText('Wedding')).toBeInTheDocument();
-    expect(screen.getByText('Staff ID: S009')).toBeInTheDocument();
+    expect(screen.getByText('Sam Nurse (S009)')).toBeInTheDocument();
+  });
+
+  it('does not spin forever when no home is selected', async () => {
+    getCurrentHome.mockReturnValue('');
+
+    renderWithProviders(<OverrideRequestReview />);
+
+    expect(await screen.findByText('Select a home')).toBeInTheDocument();
+    expect(screen.queryByText('Loading requests...')).not.toBeInTheDocument();
+    expect(getPendingOverrideRequests).not.toHaveBeenCalled();
+  });
+
+  it('offers retry after a load failure', async () => {
+    getPendingOverrideRequests.mockRejectedValueOnce(new Error('Network down')).mockResolvedValueOnce([]);
+
+    renderWithProviders(<OverrideRequestReview />);
+
+    expect(await screen.findByText('Unable to load requests')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(getPendingOverrideRequests).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('Nothing waiting')).toBeInTheDocument();
   });
 
   it('approves a request with the expected optimistic version and decision note', async () => {
