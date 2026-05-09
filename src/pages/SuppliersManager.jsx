@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { PAGE, CARD, TABLE, BTN, INPUT, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
@@ -23,6 +23,18 @@ export default function SuppliersManager() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [mergeSourceId, setMergeSourceId] = useState('');
   const [mergeTargetId, setMergeTargetId] = useState('');
+  const [formError, setFormError] = useState(null);
+  const [mergeError, setMergeError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const searchInputId = useId();
+  const mergeSourceInputId = useId();
+  const mergeTargetInputId = useId();
+  const nameInputId = useId();
+  const vatInputId = useId();
+  const categoryInputId = useId();
+  const aliasesInputId = useId();
+  const activeInputId = useId();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,11 +59,13 @@ export default function SuppliersManager() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setFormError(null);
     setShowModal(true);
   }
 
   function openEdit(row) {
     setEditing(row);
+    setFormError(null);
     setForm({
       name: row.name || '',
       vat_number: row.vat_number || '',
@@ -64,11 +78,19 @@ export default function SuppliersManager() {
   }
 
   async function handleSave() {
+    const supplierName = form.name.trim();
+    if (!supplierName) {
+      setFormError('Supplier name is required.');
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    setError(null);
     try {
       const payload = {
-        name: form.name,
-        vat_number: form.vat_number || null,
-        default_category: form.default_category || null,
+        name: supplierName,
+        vat_number: form.vat_number.trim() || null,
+        default_category: form.default_category.trim() || null,
         aliases: form.aliasesText.split('\n').map((value) => value.trim()).filter(Boolean),
         active: form.active,
       };
@@ -82,12 +104,21 @@ export default function SuppliersManager() {
       setShowModal(false);
       await load();
     } catch (err) {
-      setError(err.message || 'Failed to save supplier');
+      setFormError(err.message || 'Failed to save supplier');
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleMerge() {
     if (!mergeSourceId || !mergeTargetId) return;
+    if (mergeSourceId === mergeTargetId) {
+      setMergeError('Choose two different suppliers to merge.');
+      return;
+    }
+    setMerging(true);
+    setMergeError(null);
+    setError(null);
     try {
       await mergeSuppliers(home, Number(mergeSourceId), Number(mergeTargetId));
       showToast({ title: 'Suppliers merged' });
@@ -95,7 +126,9 @@ export default function SuppliersManager() {
       setMergeTargetId('');
       await load();
     } catch (err) {
-      setError(err.message || 'Failed to merge suppliers');
+      setMergeError(err.message || 'Failed to merge suppliers');
+    } finally {
+      setMerging(false);
     }
   }
 
@@ -109,7 +142,7 @@ export default function SuppliersManager() {
           <h1 className={PAGE.title}>Suppliers</h1>
           <p className={PAGE.subtitle}>Manage AP supplier names, aliases, VAT numbers, and defaults for OCR-assisted filing.</p>
         </div>
-        {canEdit && <button onClick={openCreate} className={BTN.primary}>Add Supplier</button>}
+        {canEdit && <button type="button" onClick={openCreate} className={BTN.primary}>Add Supplier</button>}
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -122,31 +155,32 @@ export default function SuppliersManager() {
 
       <div className={`${CARD.padded} flex flex-wrap items-end gap-3`}>
         <div className="min-w-56 flex-1">
-          <label className={INPUT.label}>Search</label>
-          <input className={INPUT.base} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Supplier name or alias" />
+          <label htmlFor={searchInputId} className={INPUT.label}>Search</label>
+          <input id={searchInputId} className={INPUT.base} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Supplier name or alias" />
         </div>
-        <button onClick={() => load()} className={`${BTN.secondary} ${BTN.sm}`}>Refresh</button>
+        <button type="button" onClick={() => load()} className={`${BTN.secondary} ${BTN.sm}`}>Refresh</button>
       </div>
 
       {canEdit && (
         <div className={CARD.padded}>
           <div className="mb-3 text-sm font-semibold text-gray-900">Merge duplicates</div>
+          {mergeError && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{mergeError}</div>}
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-56 flex-1">
-              <label className={INPUT.label}>Source supplier</label>
-              <select value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)} className={INPUT.select}>
+              <label htmlFor={mergeSourceInputId} className={INPUT.label}>Source supplier</label>
+              <select id={mergeSourceInputId} value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)} className={INPUT.select}>
                 <option value="">Select source</option>
                 {rows.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
               </select>
             </div>
             <div className="min-w-56 flex-1">
-              <label className={INPUT.label}>Target supplier</label>
-              <select value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)} className={INPUT.select}>
+              <label htmlFor={mergeTargetInputId} className={INPUT.label}>Target supplier</label>
+              <select id={mergeTargetInputId} value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)} className={INPUT.select}>
                 <option value="">Select target</option>
                 {rows.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
               </select>
             </div>
-            <button onClick={handleMerge} className={`${BTN.primary} ${BTN.sm}`} disabled={!mergeSourceId || !mergeTargetId}>Merge</button>
+            <button type="button" onClick={handleMerge} className={`${BTN.primary} ${BTN.sm}`} disabled={!mergeSourceId || !mergeTargetId || mergeSourceId === mergeTargetId || merging}>{merging ? 'Merging...' : 'Merge'}</button>
           </div>
         </div>
       )}
@@ -156,14 +190,17 @@ export default function SuppliersManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}><tr><th className={TABLE.th}>Name</th><th className={TABLE.th}>VAT</th><th className={TABLE.th}>Default Category</th><th className={TABLE.th}>Aliases</th><th className={TABLE.th}>Status</th><th className={TABLE.th}></th></tr></thead>
             <tbody>
+              {rows.length === 0 && (
+                <tr><td className={TABLE.empty} colSpan={6}>No suppliers found.</td></tr>
+              )}
               {rows.map((row) => (
                 <tr key={row.id} className={TABLE.tr}>
                   <td className={TABLE.td}>{row.name}</td>
-                  <td className={TABLE.td}>{row.vat_number || '—'}</td>
-                  <td className={TABLE.td}>{row.default_category || '—'}</td>
-                  <td className={TABLE.td}>{(row.aliases || []).join(', ') || '—'}</td>
+                  <td className={TABLE.td}>{row.vat_number || '-'}</td>
+                  <td className={TABLE.td}>{row.default_category || '-'}</td>
+                  <td className={TABLE.td}>{(row.aliases || []).join(', ') || '-'}</td>
                   <td className={TABLE.td}>{row.active ? 'Active' : 'Inactive'}</td>
-                  <td className={TABLE.td}>{canEdit && <button onClick={() => openEdit(row)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}</td>
+                  <td className={TABLE.td}>{canEdit && <button type="button" onClick={() => openEdit(row)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -173,15 +210,16 @@ export default function SuppliersManager() {
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Edit Supplier' : 'Add Supplier'}>
         <div className="space-y-3">
-          <div><label className={INPUT.label}>Name</label><input className={INPUT.base} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} /></div>
-          <div><label className={INPUT.label}>VAT Number</label><input className={INPUT.base} value={form.vat_number} onChange={(e) => setForm((current) => ({ ...current, vat_number: e.target.value }))} /></div>
-          <div><label className={INPUT.label}>Default Category</label><input className={INPUT.base} value={form.default_category} onChange={(e) => setForm((current) => ({ ...current, default_category: e.target.value }))} /></div>
-          <div><label className={INPUT.label}>Aliases</label><textarea rows={4} className={INPUT.base} value={form.aliasesText} onChange={(e) => setForm((current) => ({ ...current, aliasesText: e.target.value }))} placeholder="One alias per line" /></div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm((current) => ({ ...current, active: e.target.checked }))} />Active supplier</label>
+          {formError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</div>}
+          <div><label htmlFor={nameInputId} className={INPUT.label}>Name</label><input id={nameInputId} className={INPUT.base} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} maxLength={200} required /></div>
+          <div><label htmlFor={vatInputId} className={INPUT.label}>VAT Number</label><input id={vatInputId} className={INPUT.base} value={form.vat_number} onChange={(e) => setForm((current) => ({ ...current, vat_number: e.target.value }))} maxLength={32} /></div>
+          <div><label htmlFor={categoryInputId} className={INPUT.label}>Default Category</label><input id={categoryInputId} className={INPUT.base} value={form.default_category} onChange={(e) => setForm((current) => ({ ...current, default_category: e.target.value }))} maxLength={50} /></div>
+          <div><label htmlFor={aliasesInputId} className={INPUT.label}>Aliases</label><textarea id={aliasesInputId} rows={4} className={INPUT.base} value={form.aliasesText} onChange={(e) => setForm((current) => ({ ...current, aliasesText: e.target.value }))} placeholder="One alias per line" maxLength={2000} /></div>
+          <label htmlFor={activeInputId} className="flex items-center gap-2 text-sm"><input id={activeInputId} type="checkbox" checked={form.active} onChange={(e) => setForm((current) => ({ ...current, active: e.target.checked }))} />Active supplier</label>
         </div>
         <div className={MODAL.footer}>
-          <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-          <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Supplier'}</button>
+          <button type="button" onClick={() => setShowModal(false)} className={BTN.secondary} disabled={saving}>Cancel</button>
+          <button type="button" onClick={handleSave} className={BTN.primary} disabled={saving || !form.name.trim()}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Supplier'}</button>
         </div>
       </Modal>
     </div>

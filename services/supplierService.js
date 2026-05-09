@@ -24,6 +24,24 @@ export function normalizeAliases(aliases = []) {
   return result;
 }
 
+async function assertNoSupplierNameOrAliasConflict(homeId, values, currentSupplierId = null) {
+  const seen = new Set();
+  for (const value of values) {
+    const normalized = normalizeSupplierName(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    const existing = await supplierRepo.findByNormalizedNameOrAlias(homeId, normalized);
+    if (existing && existing.id !== currentSupplierId) {
+      throw Object.assign(new Error('A supplier with that name or alias already exists'), { statusCode: 409 });
+    }
+  }
+}
+
+function removeSelfAlias(name, aliases) {
+  const normalizedName = normalizeSupplierName(name);
+  return aliases.filter((alias) => normalizeSupplierName(alias) !== normalizedName);
+}
+
 export async function listSuppliers(homeId, filters) {
   return supplierRepo.listByHome(homeId, filters);
 }
@@ -37,15 +55,13 @@ export async function createSupplier(homeId, data, createdBy) {
   if (!normalizedName) {
     throw Object.assign(new Error('Supplier name is required'), { statusCode: 400 });
   }
-  const existing = await supplierRepo.findByNormalizedNameOrAlias(homeId, normalizedName);
-  if (existing) {
-    throw Object.assign(new Error('A supplier with that name or alias already exists'), { statusCode: 409 });
-  }
+  const aliases = removeSelfAlias(data.name, normalizeAliases(data.aliases));
+  await assertNoSupplierNameOrAliasConflict(homeId, [data.name, ...aliases]);
   return supplierRepo.create(homeId, {
     name: String(data.name).trim().replace(/\s+/g, ' '),
     vat_number: normalizeVatNumber(data.vat_number),
     default_category: data.default_category || null,
-    aliases: normalizeAliases(data.aliases),
+    aliases,
     active: data.active ?? true,
     created_by: createdBy,
   });
@@ -58,10 +74,6 @@ export async function updateSupplier(id, homeId, data, version) {
     if (!normalizedName) {
       throw Object.assign(new Error('Supplier name is required'), { statusCode: 400 });
     }
-    const existing = await supplierRepo.findByNormalizedNameOrAlias(homeId, normalizedName);
-    if (existing && existing.id !== id) {
-      throw Object.assign(new Error('A supplier with that name or alias already exists'), { statusCode: 409 });
-    }
     payload.name = String(payload.name).trim().replace(/\s+/g, ' ');
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'vat_number')) {
@@ -69,6 +81,16 @@ export async function updateSupplier(id, homeId, data, version) {
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'aliases')) {
     payload.aliases = normalizeAliases(payload.aliases);
+  }
+  const conflictCandidates = [];
+  if (Object.prototype.hasOwnProperty.call(payload, 'name')) conflictCandidates.push(payload.name);
+  if (Object.prototype.hasOwnProperty.call(payload, 'aliases')) {
+    const nameForSelfAlias = payload.name ?? (await supplierRepo.findById(id, homeId))?.name ?? '';
+    payload.aliases = removeSelfAlias(nameForSelfAlias, payload.aliases);
+    conflictCandidates.push(...payload.aliases);
+  }
+  if (conflictCandidates.length) {
+    await assertNoSupplierNameOrAliasConflict(homeId, conflictCandidates, id);
   }
   return supplierRepo.update(id, homeId, payload, null, version);
 }
@@ -110,12 +132,12 @@ export async function mergeSuppliers(homeId, sourceId, targetId, username) {
       ...source.aliases,
     ]);
     await supplierRepo.repointFinanceRows(homeId, sourceId, targetId, client);
+    await supplierRepo.softDelete(sourceId, homeId, client);
     const updatedTarget = await supplierRepo.update(targetId, homeId, {
       aliases: mergedAliases,
       default_category: target.default_category || source.default_category || null,
       vat_number: target.vat_number || source.vat_number || null,
     }, client, target.version);
-    await supplierRepo.softDelete(sourceId, homeId, client);
     return {
       target: updatedTarget,
       sourceId,

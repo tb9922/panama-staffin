@@ -101,8 +101,10 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid supplier ID' });
+    const existing = await supplierService.findSupplierById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Supplier not found' });
     const supplier = await supplierService.updateSupplier(idParsed.data, req.home.id, { active: false }, null);
-    if (supplier === null) {
+    if (!supplier) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
     await auditService.log('supplier_deactivate', req.home.slug, req.user.username, { supplierId: idParsed.data });
