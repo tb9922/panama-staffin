@@ -276,6 +276,50 @@ describe('Sick self-report', () => {
     expect(rows[0].shift).toBe('SICK');
   });
 
+  it('keeps duplicate same-day self-reports idempotent under concurrency', async () => {
+    const date = todayLocalISO();
+    const auditFilter = JSON.stringify({ staff_id: STAFF_A, date });
+    const { rows: [auditBefore] } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM audit_log
+        WHERE action = 'sick_self_reported'
+          AND home_slug = $1
+          AND details::jsonb @> $2::jsonb`,
+      [HOME_SLUG, auditFilter],
+    );
+
+    await Promise.all([
+      staffPortalService.reportSick({
+        homeId, staffId: STAFF_A, date, reason: 'Flu',
+        actorUsername: STAFF_A_USER,
+      }),
+      staffPortalService.reportSick({
+        homeId, staffId: STAFF_A, date, reason: 'Flu',
+        actorUsername: STAFF_A_USER,
+      }),
+    ]);
+
+    const { rows: [periods] } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM sick_periods
+        WHERE home_id = $1
+          AND staff_id = $2
+          AND start_date = $3`,
+      [homeId, STAFF_A, date],
+    );
+    expect(periods.count).toBe(1);
+
+    const { rows: [audit] } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM audit_log
+        WHERE action = 'sick_self_reported'
+          AND home_slug = $1
+          AND details::jsonb @> $2::jsonb`,
+      [HOME_SLUG, auditFilter],
+    );
+    expect(audit.count - auditBefore.count).toBe(1);
+  });
+
   it('writes audit event', async () => {
     const date = addDaysLocalISO(todayLocalISO(), 1);
     await staffPortalService.reportSick({

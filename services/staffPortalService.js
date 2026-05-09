@@ -235,6 +235,8 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
       throw new AppError('Self-reported sickness can only be recorded for today or tomorrow', 400, 'SICK_SELF_REPORT_DATE_RANGE');
     }
 
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1)::bigint)', [`sick-self-report:${homeId}:${staffId}:${date}`]);
+
     // Idempotency guard: if SICK is already recorded for this date, return early
     // without re-emitting webhook + audit. Otherwise repeated submits (double-click,
     // network retry, second-tab) would double-count and confuse downstream listeners.
