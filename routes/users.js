@@ -18,16 +18,16 @@ const router = Router();
 const usernameRegex = /^[a-zA-Z0-9._-]+$/;
 
 const createUserSchema = z.object({
-  username: z.string().min(3).max(100).regex(usernameRegex, 'Username must be alphanumeric with . _ -'),
+  username: z.string().trim().min(3).max(100).regex(usernameRegex, 'Username must be alphanumeric with . _ -'),
   password: z.string().min(10).max(200),
   role: z.enum(['viewer']),
-  displayName: z.string().max(200).optional().default(''),
+  displayName: z.string().trim().max(200).optional().default(''),
   homeRoleId: z.enum(USER_MANAGEMENT_ROLE_IDS).optional(),
 });
 
 const updateUserSchema = z.object({
   role: z.enum(['viewer']).optional(),
-  displayName: z.string().max(200).optional(),
+  displayName: z.string().trim().max(200).optional(),
   active: z.boolean().optional(),
 });
 

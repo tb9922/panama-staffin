@@ -62,6 +62,7 @@ const MOCK_HOMES = [{ id: 1, name: 'Test Care Home' }];
 describe('UserManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCurrentHome.mockReturnValue('test-home');
     api.listUsersForHome.mockResolvedValue(MOCK_USERS);
     api.listAllHomesForAccess.mockResolvedValue(MOCK_HOMES);
     api.getUserHomeRole.mockResolvedValue({ role: 'home_manager' });
@@ -76,6 +77,13 @@ describe('UserManagement', () => {
   it('renders the page heading after load', async () => {
     renderWithProviders(<UserManagement />);
     await waitFor(() => expect(screen.getByText('User Management')).toBeInTheDocument());
+  });
+
+  it('shows a no-home state instead of loading forever', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<UserManagement />, { activeHome: null });
+    expect(await screen.findByText('Select a home to manage users')).toBeInTheDocument();
+    expect(api.listUsersForHome).not.toHaveBeenCalled();
   });
 
   it('displays users in the table', async () => {
@@ -113,6 +121,33 @@ describe('UserManagement', () => {
     expect(screen.getByText('Confirm Password')).toBeInTheDocument();
     // Cancel + Create User buttons appear in modal footer
     expect(screen.getByRole('button', { name: /create user/i })).toBeInTheDocument();
+  });
+
+  it('trims add-user values and blocks invalid passwords before save', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<UserManagement />);
+    await user.click(await screen.findByRole('button', { name: /add user/i }));
+
+    const createButton = screen.getByRole('button', { name: /create user/i });
+    expect(createButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Username'), '  new.user  ');
+    await user.type(screen.getByLabelText('Display Name'), '  New User  ');
+    await user.type(screen.getByLabelText('Password'), 'StrongPass123');
+    await user.type(screen.getByLabelText('Confirm Password'), 'Mismatch123');
+    expect(createButton).toBeDisabled();
+
+    await user.clear(screen.getByLabelText('Confirm Password'));
+    await user.type(screen.getByLabelText('Confirm Password'), 'StrongPass123');
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
+
+    await waitFor(() => {
+      expect(api.createUser).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        username: 'new.user',
+        displayName: 'New User',
+      }));
+    });
   });
 
   it('hides reset password action for non-platform admins', async () => {

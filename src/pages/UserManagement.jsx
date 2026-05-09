@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
@@ -35,11 +35,16 @@ const ROLE_GROUPS = [
   { key: 'staff', label: 'Staff', roles: ['staff_member'] },
 ];
 
+const USERNAME_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+function serializeRoleMap(roleMap) {
+  return JSON.stringify(Object.entries(roleMap).sort(([a], [b]) => Number(a) - Number(b)));
+}
 
 
 export default function UserManagement() {
   const { isPlatformAdmin } = useAuth();
-  const { homeRole } = useData();
+  const { homeRole, activeHome } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
@@ -47,17 +52,22 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
-  const homeSlug = getCurrentHome();
+  const homeSlug = activeHome || getCurrentHome();
 
   // Modal state
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [resetPwUser, setResetPwUser] = useState(null);
   const [rolesUser, setRolesUser] = useState(null);
-  useDirtyGuard(!!(addOpen || editUser || resetPwUser || rolesUser));
 
   const refresh = useCallback(async () => {
-    if (!homeSlug) return;
+    setLoading(true);
+    setError(null);
+    if (!homeSlug) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
     try {
       const u = await listUsersForHome(homeSlug);
       setUsers(u);
@@ -93,6 +103,20 @@ export default function UserManagement() {
   })).filter(g => g.users.length > 0);
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading users and access roles..." /></div>;
+
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <div className={CARD.padded}>
+          <EmptyState
+            title="Select a home to manage users"
+            description="User access is assigned per home, so choose a home before adding or editing users."
+            compact
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -232,27 +256,39 @@ function AddUserModal({ homeSlug, onClose, onSuccess }) {
   const [form, setForm] = useState({ username: '', password: '', confirmPassword: '', displayName: '', homeRoleId: '' });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const usernameId = useId();
+  const displayNameId = useId();
+  const roleId = useId();
+  const passwordId = useId();
+  const confirmPasswordId = useId();
 
   function set(key, val) { setForm(prev => ({ ...prev, [key]: val })); }
 
   const availableRoles = isPlatformAdmin ? USER_MANAGEMENT_ROLE_IDS : USER_MANAGEMENT_ROLE_IDS.filter(r => r !== 'home_manager');
+  const username = form.username.trim();
+  const displayName = form.displayName.trim();
+  const usernameValid = username.length >= 3 && username.length <= 100 && USERNAME_PATTERN.test(username);
+  const isDirty = Object.values(form).some((value) => String(value || '').length > 0);
+  const isInvalid = !usernameValid || form.password.length < 10 || form.password !== form.confirmPassword;
+  useDirtyGuard(isDirty);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setLocalError(null);
+    if (!usernameValid) { setLocalError('Username must be 3-100 letters, numbers, dots, underscores, or hyphens'); return; }
     if (form.password !== form.confirmPassword) { setLocalError('Passwords do not match'); return; }
     if (form.password.length < 10) { setLocalError('Password must be at least 10 characters'); return; }
     setSaving(true);
     try {
       const data = {
-        username: form.username,
+        username,
         password: form.password,
         role: 'viewer',
-        displayName: form.displayName,
+        displayName,
       };
       if (form.homeRoleId) data.homeRoleId = form.homeRoleId;
       await createUser(homeSlug, data);
-      onSuccess(`User "${form.username}" created and assigned to this home`);
+      onSuccess(`User "${username}" created and assigned to this home`);
       onClose();
     } catch (err) {
       setLocalError(err.message);
@@ -267,16 +303,16 @@ function AddUserModal({ homeSlug, onClose, onSuccess }) {
         {localError && <InlineNotice variant="error" className="mb-4" role="alert">{localError}</InlineNotice>}
         <div className="space-y-3">
           <div>
-            <label className={INPUT.label}>Username</label>
-            <input className={INPUT.base} value={form.username} onChange={e => set('username', e.target.value)} required minLength={3} maxLength={100} pattern="[a-zA-Z0-9._\-]+" title="Letters, numbers, dots, underscores, hyphens" autoFocus />
+            <label className={INPUT.label} htmlFor={usernameId}>Username</label>
+            <input id={usernameId} className={INPUT.base} value={form.username} onChange={e => set('username', e.target.value)} required minLength={3} maxLength={100} title="Letters, numbers, dots, underscores, hyphens" autoFocus autoComplete="username" />
           </div>
           <div>
-            <label className={INPUT.label}>Display Name</label>
-            <input className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} placeholder="Optional" />
+            <label className={INPUT.label} htmlFor={displayNameId}>Display Name</label>
+            <input id={displayNameId} className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} placeholder="Optional" autoComplete="name" />
           </div>
           <div>
-            <label className={INPUT.label}>Role at This Home</label>
-            <select className={INPUT.select} value={form.homeRoleId} onChange={e => set('homeRoleId', e.target.value)}>
+            <label className={INPUT.label} htmlFor={roleId}>Role at This Home</label>
+            <select id={roleId} className={INPUT.select} value={form.homeRoleId} onChange={e => set('homeRoleId', e.target.value)}>
               <option value="">Select role...</option>
               {availableRoles.map(rid => (
                 <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
@@ -284,18 +320,18 @@ function AddUserModal({ homeSlug, onClose, onSuccess }) {
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Password</label>
-            <input className={INPUT.base} type="password" value={form.password} onChange={e => set('password', e.target.value)} required minLength={10} maxLength={200} />
+            <label className={INPUT.label} htmlFor={passwordId}>Password</label>
+            <input id={passwordId} className={INPUT.base} type="password" value={form.password} onChange={e => set('password', e.target.value)} required minLength={10} maxLength={200} autoComplete="new-password" />
             <p className="text-xs text-gray-400 mt-1">Minimum 10 characters</p>
           </div>
           <div>
-            <label className={INPUT.label}>Confirm Password</label>
-            <input className={INPUT.base} type="password" value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} required />
+            <label className={INPUT.label} htmlFor={confirmPasswordId}>Confirm Password</label>
+            <input id={confirmPasswordId} className={INPUT.base} type="password" value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} required minLength={10} maxLength={200} autoComplete="new-password" />
           </div>
         </div>
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button type="submit" className={BTN.primary} disabled={saving}>{saving ? 'Creating...' : 'Create User'}</button>
+          <button type="submit" className={BTN.primary} disabled={saving || isInvalid}>{saving ? 'Creating...' : 'Create User'}</button>
         </div>
       </form>
     </Modal>
@@ -309,15 +345,21 @@ function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
   const [form, setForm] = useState({ displayName: user.display_name || '', active: user.active });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const displayNameId = useId();
+  const activeId = useId();
 
   function set(key, val) { setForm(prev => ({ ...prev, [key]: val })); }
+  const baselineDisplayName = user.display_name || '';
+  const baselineActive = Boolean(user.active);
+  const isDirty = form.displayName !== baselineDisplayName || Boolean(form.active) !== baselineActive;
+  useDirtyGuard(isDirty);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setLocalError(null);
     setSaving(true);
     try {
-      const payload = { displayName: form.displayName };
+      const payload = { displayName: form.displayName.trim() };
       if (isPlatformAdmin) payload.active = form.active;
       await updateUser(homeSlug, user.id, payload);
       onSuccess(`User "${user.username}" updated`);
@@ -335,14 +377,14 @@ function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
         {localError && <InlineNotice variant="error" className="mb-4" role="alert">{localError}</InlineNotice>}
         <div className="space-y-3">
           <div>
-            <label className={INPUT.label}>Display Name</label>
-            <input className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} autoFocus />
+            <label className={INPUT.label} htmlFor={displayNameId}>Display Name</label>
+            <input id={displayNameId} className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} autoFocus autoComplete="name" />
           </div>
           {isPlatformAdmin ? (
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="user-active" checked={form.active} onChange={e => set('active', e.target.checked)}
+              <input type="checkbox" id={activeId} checked={form.active} onChange={e => set('active', e.target.checked)}
                 className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              <label htmlFor="user-active" className="text-sm text-gray-700">Active</label>
+              <label htmlFor={activeId} className="text-sm text-gray-700">Active</label>
             </div>
           ) : (
             <p className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
@@ -357,7 +399,7 @@ function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
         </div>
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button type="submit" className={BTN.primary} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
+          <button type="submit" className={BTN.primary} disabled={saving || !isDirty}>{saving ? 'Saving...' : 'Save Changes'}</button>
         </div>
       </form>
     </Modal>
@@ -371,6 +413,11 @@ function ResetPasswordModal({ user, homeSlug, onClose, onSuccess }) {
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const passwordId = useId();
+  const confirmId = useId();
+  const isDirty = password.length > 0 || confirm.length > 0;
+  const isInvalid = password.length < 10 || password !== confirm;
+  useDirtyGuard(isDirty);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -396,18 +443,18 @@ function ResetPasswordModal({ user, homeSlug, onClose, onSuccess }) {
         <p className="text-xs text-gray-500 mb-3">This will revoke all active sessions for this user.</p>
         <div className="space-y-3">
           <div>
-            <label className={INPUT.label}>New Password</label>
-            <input className={INPUT.base} type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={10} maxLength={200} autoFocus />
+            <label className={INPUT.label} htmlFor={passwordId}>New Password</label>
+            <input id={passwordId} className={INPUT.base} type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={10} maxLength={200} autoFocus autoComplete="new-password" />
             <p className="text-xs text-gray-400 mt-1">Minimum 10 characters</p>
           </div>
           <div>
-            <label className={INPUT.label}>Confirm Password</label>
-            <input className={INPUT.base} type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+            <label className={INPUT.label} htmlFor={confirmId}>Confirm Password</label>
+            <input id={confirmId} className={INPUT.base} type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required minLength={10} maxLength={200} autoComplete="new-password" />
           </div>
         </div>
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button type="submit" className={BTN.danger} disabled={saving}>{saving ? 'Resetting...' : 'Reset Password'}</button>
+          <button type="submit" className={BTN.danger} disabled={saving || isInvalid}>{saving ? 'Resetting...' : 'Reset Password'}</button>
         </div>
       </form>
     </Modal>
@@ -422,6 +469,9 @@ function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
   const [roleId, setRoleId] = useState(user.role_id || '');
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const roleSelectId = useId();
+  const isDirty = roleId !== (user.role_id || '');
+  useDirtyGuard(isDirty);
 
   async function handleSave() {
     if (!roleId) { setLocalError('Please select a role'); return; }
@@ -442,7 +492,8 @@ function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
     <Modal isOpen={true} onClose={onClose} title={`Role \u2014 ${user.username}`} size="sm">
       {localError && <InlineNotice variant="error" className="mb-4" role="alert">{localError}</InlineNotice>}
       <p className="text-xs text-gray-500 mb-3">Set the role for this user at the current home.</p>
-      <select className={INPUT.select} value={roleId} onChange={e => setRoleId(e.target.value)}>
+      <label className={INPUT.label} htmlFor={roleSelectId}>Role at This Home</label>
+      <select id={roleSelectId} className={INPUT.select} value={roleId} onChange={e => setRoleId(e.target.value)}>
         <option value="">Select role...</option>
         {ASSIGNABLE_ROLES.map(rid => (
           <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
@@ -450,7 +501,7 @@ function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
       </select>
       <div className={MODAL.footer}>
         <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-        <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || !roleId}>
+        <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || !roleId || !isDirty}>
           {saving ? 'Saving...' : 'Save Role'}
         </button>
       </div>
@@ -462,10 +513,13 @@ function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
 
 function PlatformRolesModal({ user, onClose, onSuccess }) {
   const [roleMap, setRoleMap] = useState({});
+  const [baselineRoleMap, setBaselineRoleMap] = useState({});
   const [allHomes, setAllHomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const isDirty = serializeRoleMap(roleMap) !== serializeRoleMap(baselineRoleMap);
+  useDirtyGuard(isDirty);
 
   useEffect(() => {
     Promise.all([
@@ -476,6 +530,7 @@ function PlatformRolesModal({ user, onClose, onSuccess }) {
       const map = {};
       for (const r of (rolesData.roles || [])) map[r.home_id] = r.role_id;
       setRoleMap(map);
+      setBaselineRoleMap(map);
     }).catch(err => {
       setLocalError(err.message);
     }).finally(() => setLoading(false));
@@ -526,10 +581,12 @@ function PlatformRolesModal({ user, onClose, onSuccess }) {
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {allHomes.map(home => {
               const currentRole = roleMap[home.id] || '';
+              const selectId = `platform-role-${user.id}-${home.id}`;
               return (
                 <div key={home.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-                  <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{home.name}</span>
+                  <label htmlFor={selectId} className="text-sm text-gray-700 flex-1 min-w-0 truncate">{home.name}</label>
                   <select
+                    id={selectId}
                     className={`${INPUT.sm} w-48`}
                     value={currentRole}
                     onChange={e => setRole(home.id, e.target.value)}
@@ -552,7 +609,7 @@ function PlatformRolesModal({ user, onClose, onSuccess }) {
       )}
       <div className={MODAL.footer}>
         <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-        <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || loading}>
+        <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || loading || !isDirty}>
           {saving ? 'Saving...' : 'Save Roles'}
         </button>
       </div>
