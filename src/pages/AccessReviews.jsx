@@ -23,6 +23,8 @@ const STATUS_OPTIONS = [
   { value: 'revoked_requested', label: 'Revoke requested' },
 ];
 
+const DETAIL_PAGE_SIZE = 500;
+
 function reviewStatusBadge(status) {
   if (status === 'completed') return BADGE.green;
   return BADGE.blue;
@@ -125,7 +127,7 @@ function ExceptionFlags({ flags }) {
   );
 }
 
-function AssignmentRows({ assignments, onStatusChange }) {
+function AssignmentRows({ assignments, onStatusChange, readOnly = false }) {
   if (assignments.length === 0) {
     return <div className={TABLE.empty}>No assignments match this filter.</div>;
   }
@@ -164,6 +166,7 @@ function AssignmentRows({ assignments, onStatusChange }) {
                     className={INPUT.inlineSelect}
                     value={item.status}
                     aria-label={`Decision for ${item.username}`}
+                    disabled={readOnly}
                     onChange={event => onStatusChange(item, event.target.value, item.notes || '')}
                   >
                     {STATUS_OPTIONS.map(option => (
@@ -177,6 +180,7 @@ function AssignmentRows({ assignments, onStatusChange }) {
                   className={INPUT.inline}
                   aria-label={`Notes for ${item.username}`}
                   defaultValue={item.notes || ''}
+                  disabled={readOnly}
                   onBlur={event => {
                     if (event.target.value !== (item.notes || '')) {
                       onStatusChange(item, item.status, event.target.value);
@@ -229,12 +233,29 @@ export default function AccessReviews() {
     }
     setDetailLoading(true);
     try {
-      const payload = await getAccessReview(reviewId, {
+      const firstPage = await getAccessReview(reviewId, {
         status: statusFilter,
         exception_only: exceptionOnly,
-        limit: 250,
+        limit: DETAIL_PAGE_SIZE,
+        offset: 0,
       }, { signal });
-      setDetail(payload || null);
+      const assignments = Array.isArray(firstPage?.assignments) ? [...firstPage.assignments] : [];
+      const total = Number(firstPage?._total ?? assignments.length);
+      let offset = assignments.length;
+      while (!signal?.aborted && offset < total) {
+        const page = await getAccessReview(reviewId, {
+          status: statusFilter,
+          exception_only: exceptionOnly,
+          limit: DETAIL_PAGE_SIZE,
+          offset,
+        }, { signal });
+        const rows = Array.isArray(page?.assignments) ? page.assignments : [];
+        if (rows.length === 0) break;
+        assignments.push(...rows);
+        offset += rows.length;
+      }
+      if (signal?.aborted) return;
+      setDetail(firstPage ? { ...firstPage, assignments, _total: total } : null);
       setError(null);
     } catch (err) {
       if (!signal?.aborted) setError(err.message || 'Failed to load access review');
@@ -258,6 +279,12 @@ export default function AccessReviews() {
   const snapshot = detail?.review?.snapshot || {};
   const counts = snapshot.counts || {};
   const assignments = useMemo(() => (Array.isArray(detail?.assignments) ? detail.assignments : []), [detail]);
+  const assignmentCounts = detail?.review?.assignment_counts || {};
+  const unresolvedAssignments =
+    Number(assignmentCounts.pending || 0)
+    + Number(assignmentCounts.needs_change || 0)
+    + Number(assignmentCounts.revoked_requested || 0);
+  const reviewReadOnly = detail?.review?.status === 'completed';
 
   async function handleStartReview() {
     setBusy(true);
@@ -275,6 +302,7 @@ export default function AccessReviews() {
   }
 
   async function handleStatusChange(item, status, notes) {
+    if (!detail?.review?.id || reviewReadOnly) return;
     const previous = detail;
     setDetail(current => ({
       ...current,
@@ -314,6 +342,7 @@ export default function AccessReviews() {
 
   async function handleCompleteReview() {
     if (!detail?.review?.id) return;
+    if (reviewReadOnly || unresolvedAssignments > 0) return;
     setBusy(true);
     try {
       await completeAccessReview(detail.review.id);
@@ -388,7 +417,7 @@ export default function AccessReviews() {
                         type="button"
                         className={`${BTN.primary} ${BTN.sm}`}
                         onClick={handleCompleteReview}
-                        disabled={busy || detail.review.status === 'completed' || Number(detail.review.assignment_counts?.pending || 0) > 0}
+                        disabled={busy || reviewReadOnly || unresolvedAssignments > 0}
                       >
                         Complete review
                       </button>
@@ -411,7 +440,7 @@ export default function AccessReviews() {
                       </select>
                     </div>
                   </div>
-                  <AssignmentRows assignments={assignments} onStatusChange={handleStatusChange} />
+                  <AssignmentRows assignments={assignments} onStatusChange={handleStatusChange} readOnly={reviewReadOnly || busy} />
                 </div>
               </div>
             ) : (

@@ -9,9 +9,11 @@ vi.mock('../../lib/accessReviewApi.js', () => ({
   startAccessReview: vi.fn(),
   getAccessReview: vi.fn(),
   updateAccessReviewAssignment: vi.fn(),
+  completeAccessReview: vi.fn(),
 }));
 
 import {
+  completeAccessReview,
   getAccessReview,
   listAccessReviews,
   startAccessReview,
@@ -87,6 +89,7 @@ describe('AccessReviews', () => {
     listAccessReviews.mockResolvedValue({ reviews: [REVIEW], _total: 1 });
     getAccessReview.mockResolvedValue(DETAIL);
     startAccessReview.mockResolvedValue({ review: { ...REVIEW, id: 100 } });
+    completeAccessReview.mockResolvedValue({ ...REVIEW, status: 'completed' });
     updateAccessReviewAssignment.mockImplementation(async (_reviewId, assignmentId, payload) => ({
       ...DETAIL.assignments.find(row => row.id === assignmentId),
       ...payload,
@@ -147,7 +150,7 @@ describe('AccessReviews', () => {
 
     await waitFor(() => expect(getAccessReview).toHaveBeenCalledWith(
       99,
-      { status: '', exception_only: true, limit: 250 },
+      { status: '', exception_only: true, limit: 500, offset: 0 },
       expect.any(Object),
     ));
 
@@ -156,7 +159,7 @@ describe('AccessReviews', () => {
 
     await waitFor(() => expect(getAccessReview).toHaveBeenLastCalledWith(
       99,
-      { status: 'needs_change', exception_only: false, limit: 250 },
+      { status: 'needs_change', exception_only: false, limit: 500, offset: 0 },
       expect.any(Object),
     ));
   });
@@ -170,5 +173,65 @@ describe('AccessReviews', () => {
     await waitFor(() => expect(screen.getByText('No Home')).toBeInTheDocument());
     const row = screen.getByText('No Home').closest('tr');
     expect(within(row).getByLabelText('Notes for no.home')).toHaveValue('Assign or deactivate');
+  });
+
+  it('loads all assignment pages instead of silently capping the review', async () => {
+    const pageOneAssignments = Array.from({ length: 500 }, (_, index) => ({
+      ...DETAIL.assignments[0],
+      id: 1000 + index,
+      username: `user.${index}`,
+      display_name: `User ${index}`,
+    }));
+    getAccessReview
+      .mockResolvedValueOnce({ ...DETAIL, assignments: pageOneAssignments, _total: 501 })
+      .mockResolvedValueOnce({
+        ...DETAIL,
+        assignments: [{ ...DETAIL.assignments[1], id: 2001, username: 'last.user', display_name: 'Last User' }],
+        _total: 501,
+      });
+
+    renderWithProviders(<AccessReviews />, {
+      route: '/access-reviews',
+      user: { username: 'platform.admin', role: 'admin', isPlatformAdmin: true },
+    });
+
+    await waitFor(() => expect(getAccessReview).toHaveBeenCalledWith(
+      99,
+      { status: '', exception_only: true, limit: 500, offset: 500 },
+      expect.any(Object),
+    ));
+    expect(await screen.findByText('Last User')).toBeInTheDocument();
+  });
+
+  it('locks completed reviews and keeps unresolved reviews from completing', async () => {
+    getAccessReview.mockResolvedValue({
+      ...DETAIL,
+      review: {
+        ...DETAIL.review,
+        status: 'completed',
+        assignment_counts: { pending: 0, reviewed: 2, needs_change: 0, revoked_requested: 0 },
+      },
+    });
+
+    renderWithProviders(<AccessReviews />, {
+      route: '/access-reviews',
+      user: { username: 'platform.admin', role: 'admin', isPlatformAdmin: true },
+    });
+
+    await waitFor(() => expect(screen.getByText('Platform Admin')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Complete review' })).toBeDisabled();
+    expect(screen.getByLabelText('Decision for platform.admin')).toBeDisabled();
+    expect(screen.getByLabelText('Notes for platform.admin')).toBeDisabled();
+  });
+
+  it('disables completion while any access decisions remain unresolved', async () => {
+    renderWithProviders(<AccessReviews />, {
+      route: '/access-reviews',
+      user: { username: 'platform.admin', role: 'admin', isPlatformAdmin: true },
+    });
+
+    await waitFor(() => expect(screen.getByText('Platform Admin')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Complete review' })).toBeDisabled();
+    expect(completeAccessReview).not.toHaveBeenCalled();
   });
 });
