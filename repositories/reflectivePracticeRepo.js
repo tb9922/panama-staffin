@@ -126,12 +126,23 @@ export async function update(id, homeId, data, version = null, actorId = null, c
   return shapeRow(rows[0]);
 }
 
-export async function softDelete(id, homeId, actorId = null, client = pool) {
+export async function softDelete(id, homeId, version = null, actorId = null, client = pool) {
+  const params = [id, homeId, actorId];
+  let sql = `
+      UPDATE reflective_practice
+         SET deleted_at = NOW(),
+             updated_at = NOW(),
+             updated_by = $3,
+             version = version + 1
+       WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+  `;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
   const { rowCount } = await client.query(
-    `UPDATE reflective_practice
-        SET deleted_at = NOW(), updated_at = NOW(), updated_by = $3
-      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
-    [id, homeId, actorId],
+    sql,
+    params,
   );
   return rowCount > 0;
 }

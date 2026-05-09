@@ -35,17 +35,27 @@ function titleCase(value) {
   return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function trimOrNull(value) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || null;
+}
+
 function entryPayload(form) {
   return {
     ...form,
-    staff_id: form.staff_id || null,
-    facilitator: form.facilitator || null,
-    reflection: form.reflection || null,
-    learning_outcome: form.learning_outcome || null,
-    wellbeing_notes: form.wellbeing_notes || null,
-    action_summary: form.action_summary || null,
+    staff_id: trimOrNull(form.staff_id),
+    facilitator: trimOrNull(form.facilitator),
+    topic: String(form.topic || '').trim(),
+    reflection: trimOrNull(form.reflection),
+    learning_outcome: trimOrNull(form.learning_outcome),
+    wellbeing_notes: trimOrNull(form.wellbeing_notes),
+    action_summary: trimOrNull(form.action_summary),
     _version: form._version,
   };
+}
+
+function isEntryInvalid(form) {
+  return !String(form.topic || '').trim() || !form.practice_date;
 }
 
 function EntryModal({ isOpen, entry, form, setForm, saveError, canEdit, onClose, onSave, onDelete }) {
@@ -67,7 +77,7 @@ function EntryModal({ isOpen, entry, form, setForm, saveError, canEdit, onClose,
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label htmlFor={topicId} className={INPUT.label}>Topic</label>
-          <input id={topicId} className={INPUT.base} value={form.topic} onChange={e => setField('topic', e.target.value)} disabled={!canEdit} />
+          <input id={topicId} className={INPUT.base} value={form.topic} onChange={e => setField('topic', e.target.value)} disabled={!canEdit} maxLength={300} />
         </div>
         <div>
           <label htmlFor={dateId} className={INPUT.label}>Date</label>
@@ -75,11 +85,11 @@ function EntryModal({ isOpen, entry, form, setForm, saveError, canEdit, onClose,
         </div>
         <div>
           <label htmlFor={staffId} className={INPUT.label}>Staff ID</label>
-          <input id={staffId} className={INPUT.base} value={form.staff_id} onChange={e => setField('staff_id', e.target.value)} disabled={!canEdit} />
+          <input id={staffId} className={INPUT.base} value={form.staff_id} onChange={e => setField('staff_id', e.target.value)} disabled={!canEdit} maxLength={20} />
         </div>
         <div>
           <label htmlFor={facilitatorId} className={INPUT.label}>Facilitator</label>
-          <input id={facilitatorId} className={INPUT.base} value={form.facilitator} onChange={e => setField('facilitator', e.target.value)} disabled={!canEdit} />
+          <input id={facilitatorId} className={INPUT.base} value={form.facilitator} onChange={e => setField('facilitator', e.target.value)} disabled={!canEdit} maxLength={200} />
         </div>
         <div className="md:col-span-2">
           <label htmlFor={categoryId} className={INPUT.label}>Category</label>
@@ -89,25 +99,25 @@ function EntryModal({ isOpen, entry, form, setForm, saveError, canEdit, onClose,
         </div>
         <div className="md:col-span-2">
           <label htmlFor={reflectionId} className={INPUT.label}>Reflection</label>
-          <textarea id={reflectionId} className={`${INPUT.base} min-h-24`} value={form.reflection} onChange={e => setField('reflection', e.target.value)} disabled={!canEdit} />
+          <textarea id={reflectionId} className={`${INPUT.base} min-h-24`} value={form.reflection} onChange={e => setField('reflection', e.target.value)} disabled={!canEdit} maxLength={5000} />
         </div>
         <div className="md:col-span-2">
           <label htmlFor={learningId} className={INPUT.label}>Learning outcome</label>
-          <textarea id={learningId} className={`${INPUT.base} min-h-20`} value={form.learning_outcome} onChange={e => setField('learning_outcome', e.target.value)} disabled={!canEdit} />
+          <textarea id={learningId} className={`${INPUT.base} min-h-20`} value={form.learning_outcome} onChange={e => setField('learning_outcome', e.target.value)} disabled={!canEdit} maxLength={5000} />
         </div>
         <div className="md:col-span-2">
           <label htmlFor={wellbeingId} className={INPUT.label}>Wellbeing notes</label>
-          <textarea id={wellbeingId} className={`${INPUT.base} min-h-20`} value={form.wellbeing_notes} onChange={e => setField('wellbeing_notes', e.target.value)} disabled={!canEdit} />
+          <textarea id={wellbeingId} className={`${INPUT.base} min-h-20`} value={form.wellbeing_notes} onChange={e => setField('wellbeing_notes', e.target.value)} disabled={!canEdit} maxLength={5000} />
         </div>
         <div className="md:col-span-2">
           <label htmlFor={actionId} className={INPUT.label}>Action summary</label>
-          <textarea id={actionId} className={`${INPUT.base} min-h-20`} value={form.action_summary} onChange={e => setField('action_summary', e.target.value)} disabled={!canEdit} />
+          <textarea id={actionId} className={`${INPUT.base} min-h-20`} value={form.action_summary} onChange={e => setField('action_summary', e.target.value)} disabled={!canEdit} maxLength={5000} />
         </div>
       </div>
       <div className={MODAL.footer}>
         {entry && canEdit && <button type="button" className={`${BTN.danger} mr-auto`} onClick={onDelete}>Delete</button>}
         <button type="button" className={BTN.secondary} onClick={onClose}>Close</button>
-        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={!form.topic || !form.practice_date}>Save</button>}
+        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={isEntryInvalid(form)}>Save</button>}
       </div>
     </Modal>
   );
@@ -126,10 +136,18 @@ export default function ReflectivePractice() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_ENTRY });
-  useDirtyGuard(modalOpen);
+  const [formBaseline, setFormBaseline] = useState(null);
+  const isDirty = modalOpen && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
   const load = useCallback(async () => {
-    if (!activeHome) return;
+    if (!activeHome) {
+      setEntries([]);
+      setTotal(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const result = await getReflectivePractice(activeHome);
@@ -147,14 +165,16 @@ export default function ReflectivePractice() {
 
   function openNew() {
     setEditing(null);
-    setForm({ ...EMPTY_ENTRY, practice_date: todayLocalISO() });
+    const nextForm = { ...EMPTY_ENTRY, practice_date: todayLocalISO() };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
   function openEdit(entry) {
     setEditing(entry);
-    setForm({
+    const nextForm = {
       ...EMPTY_ENTRY,
       ...entry,
       staff_id: entry.staff_id || '',
@@ -164,16 +184,32 @@ export default function ReflectivePractice() {
       wellbeing_notes: entry.wellbeing_notes || '',
       action_summary: entry.action_summary || '',
       _version: entry.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
+  function closeModal() {
+    setModalOpen(false);
+    setFormBaseline(null);
+    setSaveError(null);
+  }
+
   async function saveEntry() {
+    if (!activeHome) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (isEntryInvalid(form)) {
+      setSaveError('Topic and date are required.');
+      return;
+    }
     try {
       if (editing) await updateReflectivePractice(activeHome, editing.id, entryPayload(form));
       else await createReflectivePractice(activeHome, entryPayload(form));
-      setModalOpen(false);
+      closeModal();
       showNotice(editing ? 'Reflection updated.' : 'Reflection saved.');
       await load();
     } catch (e) {
@@ -186,13 +222,24 @@ export default function ReflectivePractice() {
     const ok = await confirm({ title: 'Delete Reflection', message: 'Delete this reflective-practice entry?', confirmLabel: 'Delete', variant: 'danger' });
     if (!ok) return;
     try {
-      await deleteReflectivePractice(activeHome, editing.id);
-      setModalOpen(false);
+      await deleteReflectivePractice(activeHome, editing.id, form._version ?? editing.version);
+      closeModal();
       showNotice('Reflection deleted.');
       await load();
     } catch (e) {
       setSaveError(e.message || 'Unable to delete reflection');
     }
+  }
+
+  if (!activeHome) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening reflective practice."
+        />
+      </div>
+    );
   }
 
   return (
@@ -254,7 +301,7 @@ export default function ReflectivePractice() {
         setForm={setForm}
         saveError={saveError}
         canEdit={canEdit}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         onSave={saveEntry}
         onDelete={removeEntry}
       />

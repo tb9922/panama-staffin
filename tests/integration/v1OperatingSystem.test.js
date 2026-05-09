@@ -317,7 +317,13 @@ describe('V1 operating-system API foundations', () => {
 
     expect(updated.body.topic).toBe('Falls learning review');
 
-    await authed('delete', `/api/reflective-practice/${created.body.id}?home=${HOME_A}`).expect(200);
+    await authed('delete', `/api/reflective-practice/${created.body.id}?home=${HOME_A}`)
+      .send({ _version: created.body.version })
+      .expect(409);
+
+    await authed('delete', `/api/reflective-practice/${created.body.id}?home=${HOME_A}`)
+      .send({ _version: updated.body.version })
+      .expect(200);
     const afterDelete = await authed('get', `/api/reflective-practice?home=${HOME_A}`).expect(200);
     expect(afterDelete.body.entries.some(entry => entry.id === created.body.id)).toBe(false);
   });

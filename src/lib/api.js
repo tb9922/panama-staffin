@@ -805,9 +805,11 @@ export async function updateReflectivePractice(homeSlug, id, data) {
   });
 }
 
-export async function deleteReflectivePractice(homeSlug, id) {
+export async function deleteReflectivePractice(homeSlug, id, version = undefined) {
   return apiFetch(`${API_BASE}/reflective-practice/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
-    method: 'DELETE', headers: authHeaders(),
+    method: 'DELETE',
+    headers: authHeaders(),
+    ...(version === undefined ? {} : { body: JSON.stringify({ _version: version }) }),
   });
 }
 

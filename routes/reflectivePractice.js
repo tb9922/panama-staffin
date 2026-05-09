@@ -27,6 +27,9 @@ const reflectivePracticeSchema = z.object({
 const reflectivePracticeUpdateSchema = reflectivePracticeSchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
+const deleteSchema = z.object({
+  _version: z.number().int().nonnegative().optional(),
+}).optional().default({});
 
 const listSchema = paginationSchema.extend({
   staff_id: z.string().trim().max(20).optional(),
@@ -78,8 +81,12 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid reflective practice ID' });
-    const deleted = await reflectivePracticeRepo.softDelete(idParsed.data, req.home.id, actorId(req));
-    if (!deleted) return res.status(404).json({ error: 'Reflective practice entry not found' });
+    const parsed = deleteSchema.safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed);
+    const existing = await reflectivePracticeRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Reflective practice entry not found' });
+    const deleted = await reflectivePracticeRepo.softDelete(idParsed.data, req.home.id, parsed.data._version, actorId(req));
+    if (!deleted) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('reflective_practice_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
