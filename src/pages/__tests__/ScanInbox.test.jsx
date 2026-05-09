@@ -63,6 +63,26 @@ describe('ScanInbox contextual launch', () => {
     expect(screen.getByRole('link', { name: 'Back to previous page' })).toHaveAttribute('href', '/incidents');
   });
 
+  it('wires upload labels and avoids raw invalid timestamp text', async () => {
+    api.listScanIntake.mockResolvedValue({
+      rows: [{
+        id: 7,
+        original_name: 'incident-note.pdf',
+        classification_target: null,
+        classification_confidence: null,
+        status: 'ready_for_review',
+        created_at: 'not-a-date',
+      }],
+      total: 1,
+    });
+
+    renderWithProviders(<ScanInbox />, { route: '/scan-inbox', path: '/scan-inbox' });
+
+    await waitFor(() => expect(screen.getAllByText('incident-note.pdf').length).toBeGreaterThan(0));
+    expect(screen.getByLabelText('Upload scanned document')).toBeInTheDocument();
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+  });
+
   it('prefills handover launch fields from the scan link context', async () => {
     renderWithProviders(<ScanInbox />, {
       route: '/scan-inbox?launchTarget=handover&entryDate=2026-04-16&shift=L&category=operational&priority=action',
@@ -85,6 +105,7 @@ describe('ScanInbox contextual launch', () => {
 
     await waitFor(() => expect(screen.getAllByText('incident-note.pdf').length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getByLabelText('Destination')).toHaveValue('cqc'));
+    expect(screen.getByLabelText('Statement')).toHaveValue('S4');
     expect(screen.getByDisplayValue('S4')).toBeInTheDocument();
   });
 
