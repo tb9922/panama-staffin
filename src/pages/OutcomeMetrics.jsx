@@ -55,6 +55,21 @@ function asOptionalNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function isInvalidNumberInput(value) {
+  if (value === '' || value == null) return false;
+  const numeric = Number(value);
+  return !Number.isFinite(numeric) || numeric < 0;
+}
+
+function isMetricFormInvalid(form) {
+  return !form.metric_key
+    || !form.period_start
+    || !form.period_end
+    || form.period_end < form.period_start
+    || isInvalidNumberInput(form.numerator)
+    || isInvalidNumberInput(form.denominator);
+}
+
 function metricPayload(form) {
   return {
     metric_key: form.metric_key,
@@ -62,7 +77,7 @@ function metricPayload(form) {
     period_end: form.period_end,
     numerator: asOptionalNumber(form.numerator),
     denominator: asOptionalNumber(form.denominator),
-    notes: form.notes || null,
+    notes: form.notes?.trim() || null,
     _version: form._version,
   };
 }
@@ -122,7 +137,7 @@ function MetricModal({ isOpen, metric, form, setForm, saveError, canEdit, onClos
       <div className={MODAL.footer}>
         {metric && canEdit && <button type="button" className={`${BTN.danger} mr-auto`} onClick={onDelete}>Delete</button>}
         <button type="button" className={BTN.secondary} onClick={onClose}>Close</button>
-        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={!form.metric_key || !form.period_start || !form.period_end}>Save</button>}
+        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={isMetricFormInvalid(form)}>Save</button>}
       </div>
     </Modal>
   );
@@ -180,10 +195,17 @@ export default function OutcomeMetrics() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_METRIC, ...defaultPeriod() });
-  useDirtyGuard(modalOpen);
+  const [formBaseline, setFormBaseline] = useState(null);
+  const isDirty = modalOpen && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
   const load = useCallback(async () => {
-    if (!activeHome) return;
+    if (!activeHome) {
+      setPayload(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       setPayload(await getOutcomeDashboard(activeHome));
@@ -203,31 +225,49 @@ export default function OutcomeMetrics() {
 
   function openNew() {
     setEditing(null);
-    setForm({ ...EMPTY_METRIC, ...defaultPeriod() });
+    const nextForm = { ...EMPTY_METRIC, ...defaultPeriod() };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
   function openEdit(metric) {
     setEditing(metric);
-    setForm({
+    const nextForm = {
       ...EMPTY_METRIC,
       ...metric,
       numerator: metric.numerator ?? '',
       denominator: metric.denominator ?? '',
       notes: metric.notes || '',
       _version: metric.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
+  function closeModal() {
+    setModalOpen(false);
+    setFormBaseline(null);
+    setSaveError(null);
+  }
+
   async function saveMetric() {
+    if (!activeHome) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (isMetricFormInvalid(form)) {
+      setSaveError('Metric, valid period dates, and non-negative values are required.');
+      return;
+    }
     const payloadForSave = metricPayload(form);
     try {
       if (editing) await updateOutcomeMetric(activeHome, editing.id, payloadForSave);
       else await upsertOutcomeMetric(activeHome, payloadForSave);
-      setModalOpen(false);
+      closeModal();
       showNotice(editing ? 'Outcome metric updated.' : 'Outcome metric saved.');
       await load();
     } catch (e) {
@@ -240,13 +280,24 @@ export default function OutcomeMetrics() {
     const ok = await confirm({ title: 'Delete Outcome Metric', message: 'Delete this outcome metric?', confirmLabel: 'Delete', variant: 'danger' });
     if (!ok) return;
     try {
-      await deleteOutcomeMetric(activeHome, editing.id);
-      setModalOpen(false);
+      await deleteOutcomeMetric(activeHome, editing.id, editing.version);
+      closeModal();
       showNotice('Outcome metric deleted.');
       await load();
     } catch (e) {
       setSaveError(e.message || 'Unable to delete outcome metric');
     }
+  }
+
+  if (!activeHome && !loading) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening outcome metrics."
+        />
+      </div>
+    );
   }
 
   return (
@@ -361,7 +412,7 @@ export default function OutcomeMetrics() {
         setForm={setForm}
         saveError={saveError}
         canEdit={canEdit}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         onSave={saveMetric}
         onDelete={removeMetric}
       />

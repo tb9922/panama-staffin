@@ -48,7 +48,7 @@ export async function findManualMetrics(homeId, filters = {}, client = pool) {
     `SELECT ${COLS}
        FROM outcome_metrics
       WHERE ${clauses.join(' AND ')}
-      ORDER BY period_start DESC, metric_key`,
+      ORDER BY period_start DESC, metric_key, id DESC`,
     params,
   );
   return rows.map(shapeRow);
@@ -126,12 +126,18 @@ export async function update(id, homeId, data, version = null, actorId = null, c
   return shapeRow(rows[0]);
 }
 
-export async function softDelete(id, homeId, client = pool) {
-  const { rowCount } = await client.query(
-    `UPDATE outcome_metrics SET deleted_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
-    [id, homeId],
-  );
+export async function softDelete(id, homeId, version = null, client = pool) {
+  const params = [id, homeId];
+  let sql = `
+    UPDATE outcome_metrics
+       SET deleted_at = NOW(), updated_at = NOW(), version = version + 1
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+  `;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  const { rowCount } = await client.query(sql, params);
   return rowCount > 0;
 }
 

@@ -15,8 +15,8 @@ const metricSchema = z.object({
   metric_key: z.string().trim().min(1).max(100),
   period_start: requiredDateInput,
   period_end: requiredDateInput,
-  numerator: z.number().nullable().optional(),
-  denominator: z.number().nullable().optional(),
+  numerator: z.number().nonnegative().nullable().optional(),
+  denominator: z.number().nonnegative().nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
   _version: z.number().int().nonnegative().optional(),
 });
@@ -28,6 +28,10 @@ const metricUpdateSchema = metricSchema.partial().extend({
 const dashboardQuerySchema = z.object({
   from: nullableDateInput.optional(),
   to: nullableDateInput.optional(),
+});
+
+const deleteSchema = z.object({
+  _version: z.number().int().nonnegative().optional(),
 });
 
 function actorId(req) {
@@ -97,9 +101,13 @@ router.delete('/metrics/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid metric ID' });
-    const deleted = await outcomeMetricRepo.softDelete(idParsed.data, req.home.id);
-    if (!deleted) return res.status(404).json({ error: 'Outcome metric not found' });
-    await auditService.log('outcome_metric_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    const parsed = deleteSchema.safeParse(req.body || {});
+    if (!parsed.success) return zodError(res, parsed);
+    const existing = await outcomeMetricRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Outcome metric not found' });
+    const deleted = await outcomeMetricRepo.softDelete(idParsed.data, req.home.id, parsed.data._version);
+    if (!deleted) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    await auditService.log('outcome_metric_delete', req.home.slug, req.user.username, { id: idParsed.data, metric_key: existing.metric_key, period_start: existing.period_start });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

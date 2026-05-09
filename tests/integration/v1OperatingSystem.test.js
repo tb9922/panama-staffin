@@ -250,6 +250,16 @@ describe('V1 operating-system API foundations', () => {
       })
       .expect(409);
 
+    await authed('post', `/api/outcomes/metrics?home=${HOME_A}`)
+      .send({
+        metric_key: 'pressure_sores_new',
+        period_start: '2026-04-01',
+        period_end: '2026-04-30',
+        numerator: -1,
+        denominator: 30,
+      })
+      .expect(400);
+
     const updated = await authed('post', `/api/outcomes/metrics?home=${HOME_A}`)
       .send({
         metric_key: 'prn_antipsychotic_pct',
@@ -273,6 +283,13 @@ describe('V1 operating-system API foundations', () => {
     expect(dashboard.body.derived.trends.incidents.recurrence[0]).toMatchObject({ subject: 'Resident A', category: 'Fall', count: 2 });
     expect(dashboard.body.derived.trends.complaints.by_category[0]).toMatchObject({ label: 'communication', count: 2 });
     expect(dashboard.body.derived.trends.complaints.overdue.acknowledgement_overdue).toBeGreaterThanOrEqual(1);
+
+    await authed('delete', `/api/outcomes/metrics/${created.body.id}?home=${HOME_A}`)
+      .send({ _version: updated.body.version - 1 })
+      .expect(409);
+    await authed('delete', `/api/outcomes/metrics/${created.body.id}?home=${HOME_A}`)
+      .send({ _version: updated.body.version })
+      .expect(200);
   });
 
   it('creates, updates and deletes reflective-practice records', async () => {

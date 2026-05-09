@@ -775,9 +775,11 @@ export async function updateOutcomeMetric(homeSlug, id, data) {
   });
 }
 
-export async function deleteOutcomeMetric(homeSlug, id) {
+export async function deleteOutcomeMetric(homeSlug, id, version = undefined) {
   return apiFetch(`${API_BASE}/outcomes/metrics/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
-    method: 'DELETE', headers: authHeaders(),
+    method: 'DELETE',
+    headers: authHeaders(),
+    ...(version === undefined ? {} : { body: JSON.stringify({ _version: version }) }),
   });
 }
 
