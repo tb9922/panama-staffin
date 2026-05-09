@@ -35,7 +35,11 @@ function labelForType(type) {
 
 function formatDate(value) {
   if (!value) return '-';
-  return String(value).slice(0, 10);
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toISOString().slice(0, 10);
 }
 
 function formatGeneratedAt(value) {
@@ -214,13 +218,13 @@ export default function OperationalReviews() {
             <option value="">All severities</option>
             {SEVERITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <button type="button" className={BTN.secondary} onClick={() => load()}>Refresh</button>
+          <button type="button" className={BTN.secondary} onClick={() => load()} disabled={loading}>Refresh</button>
         </div>
       </div>
 
       {error && !loading && <ErrorState message={error} onRetry={() => load()} className="mb-4" />}
 
-      {!error && (
+      {!loading && !error && (
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryTile label="Total" value={summary.total} />
           <SummaryTile label="Critical" value={summary.by_severity?.critical} tone="critical" />

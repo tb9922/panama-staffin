@@ -95,6 +95,32 @@ describe('OperationalReviews', () => {
     expect(switchHome).toHaveBeenCalledWith('amberwood');
   });
 
+  it('does not show placeholder summary tiles while loading', () => {
+    getOperationalReviews.mockReturnValue(new Promise(() => {}));
+    renderWithProviders(<OperationalReviews />, {
+      route: '/operational-reviews',
+      user: { username: 'manager', role: 'admin' },
+    });
+
+    expect(screen.getByText('Loading operational reviews...')).toBeInTheDocument();
+    expect(screen.queryByText('Total')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+  });
+
+  it('falls back cleanly for malformed review dates', async () => {
+    getOperationalReviews.mockResolvedValue({
+      ...PAYLOAD,
+      items: [{ ...PAYLOAD.items[0], display_date: 'not-a-date' }],
+    });
+    renderWithProviders(<OperationalReviews />, {
+      route: '/operational-reviews',
+      user: { username: 'manager', role: 'admin' },
+    });
+
+    await waitFor(() => expect(screen.getByText('Safeguarding action overdue')).toBeInTheDocument());
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+  });
+
   it('passes filter changes to the API helper', async () => {
     renderWithProviders(<OperationalReviews />, {
       route: '/operational-reviews',
