@@ -8,37 +8,64 @@ import EmptyState from '../components/EmptyState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
 import { todayLocalISO } from '../lib/localDates.js';
 
-const TODAY = todayLocalISO();
+function makeManualDefaults() {
+  return {
+    staffId: '',
+    clockType: 'in',
+    shiftDate: todayLocalISO(),
+    note: '',
+  };
+}
+
+function displayStaff(item) {
+  return item.staffName ? `${item.staffName} (${item.staffId})` : `Staff ${item.staffId}`;
+}
+
+function formatClockTime(value) {
+  if (!value) return 'Unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  return date.toLocaleString('en-GB');
+}
+
+function formatLocation(item) {
+  const parts = [
+    item.withinGeofence == null ? 'Manual / no GPS' : item.withinGeofence ? 'Inside geofence' : 'Outside geofence',
+  ];
+  if (item.distanceM != null) parts.push(`${Math.round(item.distanceM)}m`);
+  if (item.accuracyM != null) parts.push(`+/-${Math.round(item.accuracyM)}m accuracy`);
+  return parts.join(' | ');
+}
 
 export default function ClockInAudit() {
   const { activeHomeObj, canWrite } = useData();
   const canEdit = canWrite('payroll');
   const staffPortalAvailable = activeHomeObj?.staffPortalEnabled !== false;
   const homeSlug = getCurrentHome();
+  const actionsEnabled = Boolean(homeSlug && staffPortalAvailable && canEdit);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState([]);
-  const [date, setDate] = useState(TODAY);
+  const [date, setDate] = useState(() => todayLocalISO());
   const [daily, setDaily] = useState([]);
-  const [manual, setManual] = useState({
-    staffId: '',
-    clockType: 'in',
-    shiftDate: TODAY,
-    note: '',
-  });
+  const [manual, setManual] = useState(makeManualDefaults);
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!homeSlug || !staffPortalAvailable) {
+      setPending([]);
+      setDaily([]);
+      setError('');
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
       setError('');
+      const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayLocalISO();
       const [pendingRows, dailyRows] = await Promise.all([
         getClockInUnapproved(homeSlug),
-        getClockInsByDate(homeSlug, date),
+        getClockInsByDate(homeSlug, safeDate),
       ]);
       setPending(pendingRows);
       setDaily(dailyRows);
@@ -54,7 +81,8 @@ export default function ClockInAudit() {
   }, [load]);
 
   async function handleApprove(item) {
-    if (!canEdit) return;
+    if (!actionsEnabled) return;
+    if (!window.confirm(`Approve clock-in for ${displayStaff(item)}?`)) return;
     try {
       await approveClockIn(homeSlug, item.id);
       await load();
@@ -65,23 +93,22 @@ export default function ClockInAudit() {
 
   async function handleManual(event) {
     event.preventDefault();
-    if (!canEdit) return;
+    if (!actionsEnabled) return;
     setSubmitting(true);
     setError('');
     try {
       await createManualClockIn(homeSlug, manual);
-      setManual({
-        staffId: '',
-        clockType: 'in',
-        shiftDate: todayLocalISO(),
-        note: '',
-      });
+      setManual(makeManualDefaults());
       await load();
     } catch (err) {
       setError(err.message);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function updateDate(value) {
+    setDate(value || todayLocalISO());
   }
 
   if (loading && pending.length === 0 && daily.length === 0) {
@@ -97,7 +124,12 @@ export default function ClockInAudit() {
         </div>
       </div>
 
-      {error && <ErrorState title="Clock-in audit error" message={error} className="mb-4" />}
+      {error && <ErrorState title="Clock-in audit error" message={error} onRetry={() => void load()} className="mb-4" />}
+      {!homeSlug && (
+        <InlineNotice variant="info" className="mb-4">
+          Select a home before reviewing clock-ins.
+        </InlineNotice>
+      )}
       {!staffPortalAvailable && (
         <InlineNotice variant="info" className="mb-4">
           Staff portal is disabled on this server, so clock-in audit data is not available.
@@ -105,7 +137,7 @@ export default function ClockInAudit() {
       )}
       {!canEdit && (
         <InlineNotice variant="info" className="mb-4">
-          Read-only — you do not have payroll write access. Approve and manual clock-in actions are disabled.
+          Read-only - you do not have payroll write access. Approve and manual clock-in actions are disabled.
         </InlineNotice>
       )}
 
@@ -120,17 +152,13 @@ export default function ClockInAudit() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-900">Staff {item.staffId}</p>
+                      <p className="font-medium text-slate-900">{displayStaff(item)}</p>
                       <span className={item.clockType === 'in' ? BADGE.blue : BADGE.purple}>{item.clockType}</span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">{new Date(item.serverTime).toLocaleString('en-GB')}</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {item.withinGeofence == null ? 'Manual / no GPS' : item.withinGeofence ? 'Inside geofence' : 'Outside geofence'}
-                      {item.distanceM != null ? ` • ${Math.round(item.distanceM)}m` : ''}
-                      {item.accuracyM != null ? ` • ±${Math.round(item.accuracyM)}m accuracy` : ''}
-                    </p>
+                    <p className="mt-1 text-sm text-slate-500">{formatClockTime(item.serverTime)}</p>
+                    <p className="mt-1 text-sm text-slate-600">{formatLocation(item)}</p>
                   </div>
-                  {canEdit && (
+                  {actionsEnabled && (
                     <button type="button" className={`${BTN.success} ${BTN.sm}`} onClick={() => void handleApprove(item)}>
                       Approve
                     </button>
@@ -142,28 +170,55 @@ export default function ClockInAudit() {
         </section>
 
         <section className="space-y-6">
-          {canEdit && (
+          {actionsEnabled && (
             <form onSubmit={handleManual} className="rounded-2xl border border-slate-200 bg-white p-5">
               <h2 className="text-lg font-semibold text-slate-900">Manual clock-in</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <label htmlFor="clock-manual-staff-id" className={INPUT.label}>Staff ID</label>
-                  <input id="clock-manual-staff-id" className={INPUT.base} value={manual.staffId} onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))} required />
+                  <input
+                    id="clock-manual-staff-id"
+                    className={INPUT.base}
+                    value={manual.staffId}
+                    onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))}
+                    required
+                    disabled={submitting}
+                  />
                 </div>
                 <div>
                   <label htmlFor="clock-manual-type" className={INPUT.label}>Type</label>
-                  <select id="clock-manual-type" className={INPUT.select} value={manual.clockType} onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}>
+                  <select
+                    id="clock-manual-type"
+                    className={INPUT.select}
+                    value={manual.clockType}
+                    onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}
+                    disabled={submitting}
+                  >
                     <option value="in">Clock in</option>
                     <option value="out">Clock out</option>
                   </select>
                 </div>
                 <div>
                   <label htmlFor="clock-manual-shift-date" className={INPUT.label}>Shift date</label>
-                  <input id="clock-manual-shift-date" type="date" className={INPUT.base} value={manual.shiftDate} onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value }))} required />
+                  <input
+                    id="clock-manual-shift-date"
+                    type="date"
+                    className={INPUT.base}
+                    value={manual.shiftDate}
+                    onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value || todayLocalISO() }))}
+                    required
+                    disabled={submitting}
+                  />
                 </div>
                 <div>
                   <label htmlFor="clock-manual-note" className={INPUT.label}>Note</label>
-                  <input id="clock-manual-note" className={INPUT.base} value={manual.note} onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))} />
+                  <input
+                    id="clock-manual-note"
+                    className={INPUT.base}
+                    value={manual.note}
+                    onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))}
+                    disabled={submitting}
+                  />
                 </div>
               </div>
               <div className="mt-5 flex justify-end">
@@ -178,7 +233,7 @@ export default function ClockInAudit() {
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-900">Clock-ins by date</h2>
               <label htmlFor="clock-daily-date" className="sr-only">Clock-ins date</label>
-              <input id="clock-daily-date" type="date" className={INPUT.sm} value={date} onChange={(e) => setDate(e.target.value)} />
+              <input id="clock-daily-date" type="date" className={INPUT.sm} value={date} onChange={(e) => updateDate(e.target.value)} />
             </div>
             <div className="mt-4 space-y-3">
               {daily.length === 0 ? (
@@ -187,13 +242,9 @@ export default function ClockInAudit() {
                 <div key={item.id} className="rounded-xl border border-slate-200 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-medium text-slate-900">Staff {item.staffId}</p>
-                      <p className="text-sm text-slate-500">{new Date(item.serverTime).toLocaleString('en-GB')}</p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {item.withinGeofence == null ? 'Manual / no GPS' : item.withinGeofence ? 'Inside geofence' : 'Outside geofence'}
-                        {item.distanceM != null ? ` • ${Math.round(item.distanceM)}m` : ''}
-                        {item.accuracyM != null ? ` • ±${Math.round(item.accuracyM)}m accuracy` : ''}
-                      </p>
+                      <p className="font-medium text-slate-900">{displayStaff(item)}</p>
+                      <p className="text-sm text-slate-500">{formatClockTime(item.serverTime)}</p>
+                      <p className="mt-1 text-sm text-slate-600">{formatLocation(item)}</p>
                     </div>
                     <span className={item.approved ? BADGE.green : BADGE.amber}>{item.approved ? 'approved' : 'pending'}</span>
                   </div>

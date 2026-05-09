@@ -3,6 +3,9 @@ import { pool, toDateStr } from '../db.js';
 const COLS = `id, home_id, staff_id, clock_type, server_time, client_time,
   lat, lng, accuracy_m, distance_m, within_geofence, source,
   shift_date, expected_shift, approved, approved_by, approved_at, note, created_at`;
+const SELECT_COLS = `c.id, c.home_id, c.staff_id, c.clock_type, c.server_time, c.client_time,
+  c.lat, c.lng, c.accuracy_m, c.distance_m, c.within_geofence, c.source,
+  c.shift_date, c.expected_shift, c.approved, c.approved_by, c.approved_at, c.note, c.created_at`;
 
 function shape(row) {
   if (!row) return null;
@@ -26,6 +29,7 @@ function shape(row) {
     approvedAt: row.approved_at instanceof Date ? row.approved_at.toISOString() : row.approved_at,
     note: row.note,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    staffName: row.staff_name || null,
   };
 }
 
@@ -112,11 +116,12 @@ export async function findLatestApprovedInBefore(homeId, staffId, shiftDate, bef
 
 export async function findByDate(homeId, shiftDate, client = pool) {
   const { rows } = await client.query(
-    `SELECT ${COLS}
-       FROM clock_ins
-      WHERE home_id = $1
-        AND shift_date = $2
-      ORDER BY server_time ASC`,
+    `SELECT ${SELECT_COLS}, s.name AS staff_name
+       FROM clock_ins c
+       LEFT JOIN staff s ON s.home_id = c.home_id AND s.id = c.staff_id
+      WHERE c.home_id = $1
+        AND c.shift_date = $2
+      ORDER BY c.server_time ASC, c.id ASC`,
     [homeId, shiftDate],
   );
   return rows.map(shape);
@@ -124,11 +129,12 @@ export async function findByDate(homeId, shiftDate, client = pool) {
 
 export async function findUnapproved(homeId, { limit = 200 } = {}, client = pool) {
   const { rows } = await client.query(
-    `SELECT ${COLS}
-       FROM clock_ins
-      WHERE home_id = $1
-        AND approved = FALSE
-      ORDER BY server_time DESC
+    `SELECT ${SELECT_COLS}, s.name AS staff_name
+       FROM clock_ins c
+       LEFT JOIN staff s ON s.home_id = c.home_id AND s.id = c.staff_id
+      WHERE c.home_id = $1
+        AND c.approved = FALSE
+      ORDER BY c.server_time DESC, c.id DESC
       LIMIT $2`,
     [homeId, limit],
   );

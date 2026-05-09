@@ -228,7 +228,7 @@ export async function manualClockIn({ homeId, staffId, clockType, shiftDate, not
     const home = await homeRepo.findById(homeId, client);
     const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
-    if (!staff) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
+    if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
     const record = await clockInRepo.create({
       homeId,
       staffId,

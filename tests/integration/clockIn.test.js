@@ -225,6 +225,32 @@ describe('Manual clock-in (manager-recorded)', () => {
     );
     expect(rows.length).toBe(1);
   });
+
+  it('rejects manual clock-ins for inactive staff', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    await pool.query(`UPDATE staff SET active = false WHERE home_id = $1 AND id = $2`, [homeId, STAFF_ID]);
+    try {
+      await expect(clockInService.manualClockIn({
+        homeId, staffId: STAFF_ID, clockType: 'in', shiftDate: today,
+        note: 'Inactive staff test', actor: 'manager',
+      })).rejects.toMatchObject({ statusCode: 404 });
+    } finally {
+      await pool.query(`UPDATE staff SET active = true WHERE home_id = $1 AND id = $2`, [homeId, STAFF_ID]);
+    }
+  });
+
+  it('includes staff names on manager clock-in lists', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    await clockInService.manualClockIn({
+      homeId, staffId: STAFF_ID, clockType: 'in', shiftDate: today,
+      note: 'Name lookup test', actor: 'manager',
+    });
+
+    const byDate = await clockInService.findByDate({ homeId, date: today });
+    const unapproved = await clockInService.findUnapproved({ homeId });
+    expect(byDate.find((row) => row.staffId === STAFF_ID)?.staffName).toBe(STAFF_NAME);
+    expect(unapproved.find((row) => row.staffId === STAFF_ID)?.staffName).toBe(STAFF_NAME);
+  });
 });
 
 describe('Approve flow', () => {
