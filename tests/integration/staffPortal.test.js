@@ -54,6 +54,16 @@ function getWorkingDate(startDate, offset = 0) {
   throw new Error('Unable to find a working day for the annual leave tests');
 }
 
+function getNonWorkingDate(startDate) {
+  let cursor = parseDate(startDate);
+  for (let i = 0; i < 90; i += 1) {
+    const date = formatDate(cursor);
+    if (getALDeductionHours(staffARecord, date, HOME_CONFIG) <= 0) return date;
+    cursor = addDays(cursor, 1);
+  }
+  throw new Error('Unable to find a non-working day for the annual leave tests');
+}
+
 beforeAll(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
@@ -127,11 +137,17 @@ describe('AL request flow', () => {
   });
 
   it('rejects AL on a non-working day with 400', async () => {
-    // Cycle day 2 (off for Day A) — pick a date 14 days from cycle_start that is OFF
-    const date = '2025-01-08'; // off day
+    const date = getNonWorkingDate('2026-06-22');
     await expect(overrideRequestService.submitALRequest({
       homeId, staffId: STAFF_A, date,
-    })).rejects.toMatchObject({ statusCode: 400 });
+    })).rejects.toMatchObject({ statusCode: 400, code: 'AL_NON_WORKING_DAY' });
+  });
+
+  it('rejects past-dated AL requests from staff self-service', async () => {
+    const date = addDaysLocalISO(todayLocalISO(), -1);
+    await expect(overrideRequestService.submitALRequest({
+      homeId, staffId: STAFF_A, date,
+    })).rejects.toMatchObject({ statusCode: 400, code: 'AL_PAST_DATE' });
   });
 
   it('manager approval writes the AL override atomically', async () => {

@@ -17,6 +17,9 @@ export async function submitALRequest({ homeId, staffId, date, reason }) {
     const staff = await staffRepo.findById(homeId, staffId, client);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
+    if (date < todayLocalISO()) {
+      throw new AppError('Annual leave requests must be for today or a future date', 400, 'AL_PAST_DATE');
+    }
 
     const existing = await overrideRequestRepo.findByStaff(homeId, staffId, { limit: 200 }, client);
     if (existing.some((item) => item.status === 'pending' && item.requestType === 'AL' && item.date === date)) {
