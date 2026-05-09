@@ -7,7 +7,7 @@ const router = Router();
 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
-    res.json(await getMaintenanceDocs(req.home.id));
+    res.json(await getMaintenanceDocs(req.home.id, req.home.config));
   } catch (err) {
     next(err);
   }

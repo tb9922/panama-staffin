@@ -44,4 +44,30 @@ describe('maintenanceDocsService', () => {
     expect(result.byCategory[0]).toMatchObject({ id: 'fire', checks: 3 });
     expect(result.byContractor[0]).toMatchObject({ contractor: 'Acme Ltd', evidence_gap: true });
   });
+
+  it('keeps unknown categories visible and treats not-started checks without documents as evidence gaps', async () => {
+    maintenanceRepo.findByHome.mockResolvedValueOnce({
+      rows: [
+        { id: 'm-unknown', category: 'lift', contractor: '', last_completed: '', next_due: '' },
+      ],
+      total: 1,
+    });
+    recordAttachmentsRepo.findByHome.mockResolvedValueOnce([]);
+
+    const result = await getMaintenanceDocs(10, {
+      maintenance_categories: [{ id: 'fire', name: 'Fire Safety' }],
+    });
+
+    expect(result.checks[0]).toMatchObject({
+      category: 'lift',
+      category_name: 'lift',
+      missing_evidence: true,
+    });
+    expect(result.summary.missing_evidence_count).toBe(1);
+    expect(result.byCategory.find(row => row.id === 'lift')).toMatchObject({
+      name: 'lift',
+      checks: 1,
+      missing_evidence_count: 1,
+    });
+  });
 });

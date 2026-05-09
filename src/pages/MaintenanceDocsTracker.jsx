@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { PAGE, CARD, TABLE, BADGE } from '../lib/design.js';
+import { PAGE, CARD, TABLE, BADGE, BTN } from '../lib/design.js';
 import { getCurrentHome, getMaintenanceDocs } from '../lib/api.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -11,13 +12,20 @@ function SignalBadge({ value, goodLabel = 'OK', badLabel }) {
 }
 
 export default function MaintenanceDocsTracker() {
-  const home = getCurrentHome();
-  const { canWrite, isScanTargetEnabled = () => false } = useData();
+  const storedHome = getCurrentHome();
+  const { canWrite, isScanTargetEnabled = () => false, activeHome } = useData();
+  const home = activeHome || storedHome;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
+    if (!home) {
+      setData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -32,7 +40,27 @@ export default function MaintenanceDocsTracker() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading maintenance documents..." card /></div>;
-  if (error) return <div className={PAGE.container}><ErrorState title="Maintenance documents need attention" message={error} onRetry={load} /></div>;
+  if (error && !data) return <div className={PAGE.container}><ErrorState title="Maintenance documents need attention" message={error} onRetry={load} /></div>;
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening maintenance documents."
+        />
+      </div>
+    );
+  }
+
+  const summary = data?.summary || {
+    total_checks: 0,
+    missing_evidence_count: 0,
+    expiring_count: 0,
+    overdue_count: 0,
+  };
+  const checks = Array.isArray(data?.checks) ? data.checks : [];
+  const byCategory = Array.isArray(data?.byCategory) ? data.byCategory : [];
+  const byContractor = Array.isArray(data?.byContractor) ? data.byContractor : [];
 
   return (
     <div className={PAGE.container}>
@@ -41,14 +69,19 @@ export default function MaintenanceDocsTracker() {
           <h1 className={PAGE.title}>Maintenance Docs Center</h1>
           <p className={PAGE.subtitle}>Certificates, service sheets, contractor evidence, and missing-proof gaps.</p>
         </div>
-        {canWrite('compliance') && isScanTargetEnabled('maintenance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm}`}>Refresh</button>
+          {canWrite('compliance') && isScanTargetEnabled('maintenance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
+        </div>
       </div>
 
+      {error && <ErrorState title="Maintenance documents need attention" message={error} onRetry={() => void load()} className="mb-4" />}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className={CARD.padded}><div className="text-xs text-gray-500">Checks</div><div className="mt-1 text-2xl font-bold">{data.summary.total_checks}</div></div>
-        <div className={CARD.padded}><div className="text-xs text-gray-500">Missing Evidence</div><div className="mt-1 text-2xl font-bold text-red-600">{data.summary.missing_evidence_count}</div></div>
-        <div className={CARD.padded}><div className="text-xs text-gray-500">Certificate Expiring</div><div className="mt-1 text-2xl font-bold text-amber-600">{data.summary.expiring_count}</div></div>
-        <div className={CARD.padded}><div className="text-xs text-gray-500">Overdue</div><div className="mt-1 text-2xl font-bold text-red-600">{data.summary.overdue_count}</div></div>
+        <div className={CARD.padded}><div className="text-xs text-gray-500">Checks</div><div className="mt-1 text-2xl font-bold">{summary.total_checks}</div></div>
+        <div className={CARD.padded}><div className="text-xs text-gray-500">Missing Evidence</div><div className="mt-1 text-2xl font-bold text-red-600">{summary.missing_evidence_count}</div></div>
+        <div className={CARD.padded}><div className="text-xs text-gray-500">Certificate Expiring</div><div className="mt-1 text-2xl font-bold text-amber-600">{summary.expiring_count}</div></div>
+        <div className={CARD.padded}><div className="text-xs text-gray-500">Overdue</div><div className="mt-1 text-2xl font-bold text-red-600">{summary.overdue_count}</div></div>
       </div>
 
       <div className={CARD.flush}>
@@ -65,13 +98,20 @@ export default function MaintenanceDocsTracker() {
               </tr>
             </thead>
             <tbody>
-              {data.checks.map((check) => (
+              {checks.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={TABLE.empty}>
+                    <EmptyState compact title="No maintenance checks found" description="Maintenance checks will appear here once they have been recorded." />
+                  </td>
+                </tr>
+              )}
+              {checks.map((check) => (
                 <tr key={check.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
                     <div className="font-medium">{check.category_name}</div>
                     <div className="text-xs text-gray-500">{check.description || 'No description'}</div>
                   </td>
-                  <td className={TABLE.td}>{check.contractor || '—'}</td>
+                  <td className={TABLE.td}>{check.contractor || '-'}</td>
                   <td className={TABLE.td}><span className={BADGE[check.status.status === 'overdue' ? 'red' : check.status.status === 'due_soon' ? 'amber' : 'green']}>{check.status.label}</span></td>
                   <td className={TABLE.td}>{check.attachment_count}</td>
                   <td className={TABLE.td}>
@@ -95,7 +135,14 @@ export default function MaintenanceDocsTracker() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}><tr><th className={TABLE.th}>Category</th><th className={TABLE.th}>Checks</th><th className={TABLE.th}>Docs</th><th className={TABLE.th}>Signals</th></tr></thead>
               <tbody>
-                {data.byCategory.map((row) => (
+                {byCategory.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className={TABLE.empty}>
+                      <EmptyState compact title="No category evidence yet" description="Category coverage appears once maintenance checks are recorded." />
+                    </td>
+                  </tr>
+                )}
+                {byCategory.map((row) => (
                   <tr key={row.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{row.name}</td>
                     <td className={TABLE.td}>{row.checks}</td>
@@ -119,7 +166,14 @@ export default function MaintenanceDocsTracker() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}><tr><th className={TABLE.th}>Contractor</th><th className={TABLE.th}>Checks</th><th className={TABLE.th}>Docs</th><th className={TABLE.th}>Coverage</th></tr></thead>
               <tbody>
-                {data.byContractor.map((row) => (
+                {byContractor.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className={TABLE.empty}>
+                      <EmptyState compact title="No contractor evidence yet" description="Contractor coverage appears once checks include contractor details." />
+                    </td>
+                  </tr>
+                )}
+                {byContractor.map((row) => (
                   <tr key={row.contractor} className={TABLE.tr}>
                     <td className={TABLE.td}>{row.contractor}</td>
                     <td className={TABLE.td}>{row.checks}</td>

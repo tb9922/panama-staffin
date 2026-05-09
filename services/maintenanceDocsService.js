@@ -57,7 +57,14 @@ export async function getMaintenanceDocs(homeId, homeConfig) {
   const categories = homeConfig?.maintenance_categories?.length
     ? homeConfig.maintenance_categories
     : DEFAULT_MAINTENANCE_CATEGORIES;
-  const categoryNames = Object.fromEntries(categories.map((category) => [category.id, category.name]));
+  const categoryMap = new Map(categories.map((category) => [category.id, category.name]));
+  for (const check of checkRows) {
+    const categoryId = check.category || 'uncategorised';
+    if (!categoryMap.has(categoryId)) {
+      categoryMap.set(categoryId, check.category || 'Uncategorised');
+    }
+  }
+  const categoryNames = Object.fromEntries(categoryMap.entries());
 
   const attachmentCountByRecord = new Map();
   const latestAttachmentByRecord = new Map();
@@ -74,14 +81,16 @@ export async function getMaintenanceDocs(homeId, homeConfig) {
     const status = getMaintenanceStatus(check);
     const attachmentCount = attachmentCountByRecord.get(String(check.id)) || 0;
     const contractor = normalizeContractorName(check.contractor);
+    const categoryId = check.category || 'uncategorised';
     return {
       ...check,
-      category_name: categoryNames[check.category] || check.category,
+      category: categoryId,
+      category_name: categoryNames[categoryId] || categoryId,
       contractor,
       attachment_count: attachmentCount,
       latest_attachment: latestAttachmentByRecord.get(String(check.id)) || null,
       status,
-      missing_evidence: attachmentCount === 0 && ['due_soon', 'overdue'].includes(status.status),
+      missing_evidence: attachmentCount === 0 && status.status !== 'compliant',
       certificate_expiring: Boolean(
         check.certificate_expiry &&
         new Date(`${check.certificate_expiry}T00:00:00Z`).getTime() <= Date.now() + (CERTIFICATE_EXPIRY_WARNING_DAYS * 86400000)
@@ -96,11 +105,11 @@ export async function getMaintenanceDocs(homeId, homeConfig) {
     checksByCategory.set(check.category, bucket);
   }
 
-  const byCategory = categories.map((category) => {
-    const items = checksByCategory.get(category.id) || [];
+  const byCategory = [...categoryMap.entries()].map(([id, name]) => {
+    const items = checksByCategory.get(id) || [];
     return {
-      id: category.id,
-      name: category.name,
+      id,
+      name,
       attachment_count: items.reduce((sum, item) => sum + item.attachment_count, 0),
       missing_evidence_count: items.filter((item) => item.missing_evidence).length,
       expiring_count: items.filter((item) => item.certificate_expiring).length,
