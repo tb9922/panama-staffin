@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useId, useMemo } from 'react';
 import Modal from '../Modal.jsx';
 import { BTN, BADGE, MODAL } from '../../lib/design.js';
 
@@ -39,6 +39,7 @@ function makeKey(a, i) {
 }
 
 export default function CoverPlanModal({ isOpen, plan, saving, onAccept, onDismiss }) {
+  const idBase = useId();
   const assignments = useMemo(() => plan?.assignments || [], [plan]);
   const [deselected, setDeselected] = useState(new Set());
 
@@ -111,8 +112,8 @@ export default function CoverPlanModal({ isOpen, plan, saving, onAccept, onDismi
               Un-check any row you don't want. Everything checked will be saved.
             </p>
             <div className="flex gap-2">
-              <button onClick={() => toggleAll(true)} className={`${BTN.ghost} ${BTN.xs}`}>Select all</button>
-              <button onClick={() => toggleAll(false)} className={`${BTN.ghost} ${BTN.xs}`}>Deselect all</button>
+              <button type="button" onClick={() => toggleAll(true)} className={`${BTN.ghost} ${BTN.xs}`}>Select all</button>
+              <button type="button" onClick={() => toggleAll(false)} className={`${BTN.ghost} ${BTN.xs}`}>Deselect all</button>
             </div>
           </div>
 
@@ -125,12 +126,15 @@ export default function CoverPlanModal({ isOpen, plan, saving, onAccept, onDismi
                     const globalIndex = assignments.indexOf(a);
                     const key = makeKey(a, globalIndex);
                     const isChecked = !deselected.has(key);
+                    const checkboxId = `${idBase}-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
                     return (
                       <label
+                        htmlFor={checkboxId}
                         key={key}
                         className={`flex items-center gap-2 px-3 py-2 text-xs ${isChecked ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 cursor-pointer`}
                       >
                         <input
+                          id={checkboxId}
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggle(key)}
@@ -165,8 +169,9 @@ export default function CoverPlanModal({ isOpen, plan, saving, onAccept, onDismi
           </div>
 
           <div className={MODAL.footer}>
-            <button onClick={onDismiss} className={BTN.ghost}>Dismiss</button>
+            <button type="button" onClick={onDismiss} className={BTN.ghost}>Dismiss</button>
             <button
+              type="button"
               disabled={saving || selected.length === 0}
               onClick={() => onAccept(selected)}
               className={`${BTN.primary} disabled:opacity-50`}

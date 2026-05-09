@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import Modal from '../Modal.jsx';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { SHIFT_COLORS, getScheduledShift, getCycleDay, isOTShift } from '../../lib/rotation.js';
@@ -69,6 +70,8 @@ export default function RotationGridModals({
   bulkSickWeek,
   applyChange,
 }) {
+  const idBase = useId();
+  const controlId = (name) => `${idBase}-${name}`;
   const currentStaff = editing ? schedData?.staff?.find(staff => staff.id === editing.staffId) : null;
   const scheduledShift = editing && currentStaff
     ? getScheduledShift(currentStaff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr), schedData.config)
@@ -80,8 +83,8 @@ export default function RotationGridModals({
         <p className="text-sm text-gray-600 mb-2">Remove all manual overrides for <strong>{monthLabel}</strong>?</p>
         <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month.</p>
         <div className={MODAL.footer}>
-          <button onClick={() => setBulkModal(null)} className={BTN.secondary}>Cancel</button>
-          <button onClick={revertAllOverrides} disabled={saving} className={`${BTN.danger} disabled:opacity-50`}>
+          <button type="button" onClick={() => setBulkModal(null)} className={BTN.secondary}>Cancel</button>
+          <button type="button" onClick={revertAllOverrides} disabled={saving} className={`${BTN.danger} disabled:opacity-50`}>
             {saving ? 'Reverting...' : 'Revert All'}
           </button>
         </div>
@@ -104,8 +107,9 @@ export default function RotationGridModals({
 
             <div>
               <div className="mb-4">
-                <label className={INPUT.label}>Change shift to:</label>
+                <label htmlFor={controlId('shift')} className={INPUT.label}>Change shift to:</label>
                 <select
+                  id={controlId('shift')}
                   value={editing.proposedShift}
                   onChange={e => {
                     const newShift = e.target.value;
@@ -142,8 +146,9 @@ export default function RotationGridModals({
 
               {isOTShift(editing.proposedShift) && (
                 <div className="mb-4">
-                  <label className={INPUT.label}>Covers for (optional):</label>
+                  <label htmlFor={controlId('covers-for')} className={INPUT.label}>Covers for (optional):</label>
                   <select
+                    id={controlId('covers-for')}
                     value={editing.replacesStaffId || ''}
                     onChange={e => setEditing({ ...editing, replacesStaffId: e.target.value || null })}
                     className={INPUT.select}
@@ -259,11 +264,15 @@ export default function RotationGridModals({
             </div>
 
             <div className={MODAL.footer}>
-              <button onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>Cancel</button>
+              <button type="button" onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>Cancel</button>
               {canEdit && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
+                    type="button"
+                    onClick={async () => {
+                      const applied = await bulkSickWeek(editing.staffId, editing.dateStr);
+                      if (applied) setEditing(null);
+                    }}
                     disabled={saving}
                     className={`${BTN.ghost} ${BTN.xs} text-red-600 disabled:opacity-50`}
                   >
@@ -271,6 +280,7 @@ export default function RotationGridModals({
                   </button>
                   {editing.currentShift !== scheduledShift && (
                     <button
+                      type="button"
                       onClick={() => setEditing({ ...editing, proposedShift: scheduledShift, replacesStaffId: null })}
                       disabled={saving}
                       className={`${BTN.ghost} ${BTN.xs} text-blue-600 disabled:opacity-50`}
@@ -279,6 +289,7 @@ export default function RotationGridModals({
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={applyChange}
                     disabled={saving || !editing.proposedShift || editing.proposedShift === editing.currentShift}
                     className={`${

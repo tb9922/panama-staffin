@@ -253,7 +253,7 @@ describe('RotationGrid', () => {
 
     expect(screen.getByText('Bob Jones')).toBeInTheDocument();
 
-    const teamSelect = screen.getByDisplayValue('All Teams');
+    const teamSelect = screen.getByLabelText('Team filter');
     await user.selectOptions(teamSelect, 'Day A');
 
     await waitFor(() => {
@@ -261,6 +261,31 @@ describe('RotationGrid', () => {
     });
     expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument();
     expect(screen.queryByText('Carol Davis')).not.toBeInTheDocument();
+  });
+
+  it('labels shift editing controls and confirms bulk sick before saving', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    const shiftCells = document.querySelectorAll('button[title*="Click to change"]');
+    expect(shiftCells.length).toBeGreaterThan(0);
+    expect(shiftCells[0]).toHaveAccessibleName(/Alice Smith \d{4}-\d{2}-\d{2}/);
+
+    await user.click(shiftCells[0]);
+    const editor = await screen.findByRole('dialog');
+    expect(within(editor).getByLabelText(/Change shift to/i)).toBeInTheDocument();
+
+    await user.click(within(editor).getByRole('button', { name: /Sick 7 Days/i }));
+    const dialogs = await screen.findAllByRole('dialog');
+    const confirmDialog = dialogs[dialogs.length - 1];
+    expect(within(confirmDialog).getByText(/Mark Alice Smith as sick/i)).toBeInTheDocument();
+
+    await user.click(within(confirmDialog).getByRole('button', { name: 'Cancel' }));
+    expect(api.bulkUpsertOverrides).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('Auto-Roster opens the review modal when gaps remain but no assignments are possible', async () => {

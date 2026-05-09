@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
@@ -98,6 +98,8 @@ export default function RotationGrid() {
   const [autoPlanSaving, setAutoPlanSaving] = useState(false);
   const [autoSolving, setAutoSolving] = useState(false);
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  const idBase = useId();
+  const controlId = (name) => `${idBase}-${name}`;
 
   const homeSlug = getCurrentHome();
   const isOwnDataRoster = homeRole === 'staff_member';
@@ -381,7 +383,8 @@ export default function RotationGrid() {
 
   async function bulkSickWeek(staffId, startDateStr) {
     const staff = schedData.staff.find(s => s.id === staffId);
-    if (!staff) return;
+    if (!staff) return false;
+    if (!await confirm(`Mark ${staff.name} as sick for up to 7 scheduled working days from ${startDateStr}?`)) return false;
     const sickRows = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(parseLocalDate(startDateStr));
@@ -393,7 +396,7 @@ export default function RotationGrid() {
         sickRows.push({ date: dk, staffId, shift: 'SICK', reason: 'Sick (bulk)', source: 'manual' });
       }
     }
-    if (sickRows.length === 0) { setBulkModal(null); return; }
+    if (sickRows.length === 0) { setBulkModal(null); return true; }
     setSaving(true);
     setOverrideWarnings([]);
     try {
@@ -403,13 +406,15 @@ export default function RotationGrid() {
     } catch (e) {
       if (e.status === 423) {
         handleLockedError(sickRows.map(row => row.date), () => bulkSickWeek(staffId, startDateStr));
-        return;
+        return false;
       }
       setError(e.message);
+      return false;
     } finally {
       setSaving(false);
     }
     setBulkModal(null);
+    return true;
   }
 
   async function revertAllOverrides() {
@@ -578,16 +583,19 @@ export default function RotationGrid() {
           {/* Month Navigation */}
           <div className="flex items-center gap-1">
             <button
+              type="button"
               aria-label="Previous month"
               onClick={() => setMonthOffset(monthOffset - 1)}
               className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&larr;</button>
             {monthOffset !== 0 && (
               <button
+                type="button"
                 aria-label="Current month"
                 onClick={() => setMonthOffset(0)}
                 className={`${BTN.ghost} ${BTN.xs} text-blue-600 transition-colors duration-150`}>Current</button>
             )}
             <button
+              type="button"
               aria-label="Next month"
               onClick={() => setMonthOffset(monthOffset + 1)}
               className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&rarr;</button>
@@ -597,20 +605,21 @@ export default function RotationGrid() {
           {saving && <span className="text-xs font-medium text-[var(--info)]">Saving...</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
+          <label htmlFor={controlId('team-filter')} className="sr-only">Team filter</label>
+          <select id={controlId('team-filter')} value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
             className={`${INPUT.select} w-auto ${BTN.xs}`}>
             <option value="All">All Teams</option>
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          {canEdit && <button onClick={handleAutoRoster} disabled={saving || autoSolving}
+          {canEdit && <button type="button" onClick={handleAutoRoster} disabled={saving || autoSolving}
             className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}
             title="Analyse the visible month and propose float / OT / agency cover for every gap">
             {autoSolving ? 'Solving…' : 'Auto-Roster'}</button>}
-          {canEdit && <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
+          {canEdit && <button type="button" onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
             className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>}
-          <button onClick={exportCSV}
+          <button type="button" onClick={exportCSV}
             className={`${BTN.secondary} ${BTN.xs}`}>Export CSV</button>
-          <button onClick={() => window.print()}
+          <button type="button" onClick={() => window.print()}
             className={`${BTN.secondary} ${BTN.xs}`}>Print</button>
           <span className="text-xs text-[var(--ink-3)]">{activeStaff.length} staff</span>
         </div>
@@ -628,8 +637,9 @@ export default function RotationGrid() {
       {showLockPrompt && (
         <div className="mb-3 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-amber-800">Past dates are locked — enter the edit PIN to continue.</span>
+            <label htmlFor={controlId('edit-lock-pin')} className="text-sm text-amber-800">Past dates are locked - enter the edit PIN to continue.</label>
             <input
+              id={controlId('edit-lock-pin')}
               type="password"
               inputMode="numeric"
               maxLength={6}
@@ -640,8 +650,9 @@ export default function RotationGrid() {
               className={`${INPUT.sm} w-24`}
               autoFocus
             />
-            <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
+            <button type="button" onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
             <button
+              type="button"
               onClick={dismissLockPrompt}
               className={`${BTN.ghost} ${BTN.sm}`}
             >
@@ -714,8 +725,10 @@ export default function RotationGrid() {
                     return (
                       <td key={i} className={`px-0.5 py-0.5 text-center ${isMonday ? 'border-l border-[var(--line-2)]' : ''}`}>
                         <button
+                          type="button"
                           onClick={() => canEdit && openEditor(s.id, dateKey)}
                           disabled={saving || !canEdit}
+                          aria-label={`${s.name} ${dateKey} ${shift}${isOverride ? ' override' : ''}`}
                           className={`inline-block min-h-[24px] w-full rounded-md px-0.5 py-0.5 text-[10px] font-semibold ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-[var(--accent)]' : 'cursor-default'} transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
                           } ${isOverride ? 'ring-1 ring-[var(--info)]' : ''} ${isEditing ? 'ring-2 ring-[var(--accent)]' : ''} disabled:cursor-not-allowed`}
@@ -899,9 +912,9 @@ function StaffSelfServiceRoster({ schedData, monthDates, monthLabel, monthOffset
             <p className="mt-2 text-sm text-gray-600">Your rota is shown here in a staff-safe view. Manager tools like coverage editing and team-wide overrides stay hidden.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button aria-label="Previous month" onClick={() => setMonthOffset(monthOffset - 1)} className={`${BTN.ghost} ${BTN.xs}`}>&larr;</button>
-            {monthOffset !== 0 && <button aria-label="Current month" onClick={() => setMonthOffset(0)} className={`${BTN.ghost} ${BTN.xs} text-blue-600`}>Current</button>}
-            <button aria-label="Next month" onClick={() => setMonthOffset(monthOffset + 1)} className={`${BTN.ghost} ${BTN.xs}`}>&rarr;</button>
+            <button type="button" aria-label="Previous month" onClick={() => setMonthOffset(monthOffset - 1)} className={`${BTN.ghost} ${BTN.xs}`}>&larr;</button>
+            {monthOffset !== 0 && <button type="button" aria-label="Current month" onClick={() => setMonthOffset(0)} className={`${BTN.ghost} ${BTN.xs} text-blue-600`}>Current</button>}
+            <button type="button" aria-label="Next month" onClick={() => setMonthOffset(monthOffset + 1)} className={`${BTN.ghost} ${BTN.xs}`}>&rarr;</button>
           </div>
         </div>
       </div>
