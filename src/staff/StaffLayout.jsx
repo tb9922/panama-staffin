@@ -2,6 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { BTN } from '../lib/design.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', end: true },
@@ -15,7 +17,24 @@ const NAV_ITEMS = [
 
 export default function StaffLayout() {
   const { user, logout } = useAuth();
-  const { activeHomeObj } = useData();
+  const { loading, error, activeHomeObj, staffId } = useData();
+
+  let content = null;
+  if (loading) {
+    content = <LoadingState message="Loading your staff portal..." className="p-6" />;
+  } else if (error) {
+    content = <ErrorState title="Unable to load your staff portal" message={error} onRetry={() => window.location.reload()} className="p-6" />;
+  } else if (!activeHomeObj || !staffId) {
+    content = (
+      <ErrorState
+        title="Unable to find your staff profile"
+        message="Your portal account is signed in, but it is not linked to an active staff profile for this home."
+        className="p-6"
+      />
+    );
+  } else {
+    content = <Outlet />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -50,7 +69,7 @@ export default function StaffLayout() {
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Outlet />
+          {content}
         </div>
       </main>
     </div>

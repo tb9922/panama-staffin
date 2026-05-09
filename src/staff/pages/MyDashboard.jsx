@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BADGE, BTN } from '../../lib/design.js';
 import { downloadAuthenticatedFile, getMyDashboard, getMyPayslipDownloadUrl } from '../../lib/api.js';
@@ -19,8 +19,10 @@ export default function MyDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadingRunId, setDownloadingRunId] = useState(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -30,11 +32,27 @@ export default function MyDashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  async function handlePayslipDownload(item) {
+    if (!staffId || downloadingRunId) return;
+    setDownloadError('');
+    setDownloadingRunId(item.runId);
+    try {
+      await downloadAuthenticatedFile(
+        getMyPayslipDownloadUrl(item.runId, staffId),
+        `payslip_${item.periodStart}.pdf`,
+      );
+    } catch (err) {
+      setDownloadError(err.message || 'Payslip download failed');
+    } finally {
+      setDownloadingRunId(null);
+    }
+  }
 
   if (loading) return <LoadingState message="Loading your dashboard..." className="p-6" />;
   if (error) return <div className="p-6"><ErrorState title="Unable to load your portal" message={error} onRetry={() => void load()} /></div>;
@@ -111,18 +129,22 @@ export default function MyDashboard() {
               <Link to="/payslips" className="text-sm font-medium text-blue-600 hover:text-blue-700">View all</Link>
             </div>
             <div className="mt-4 space-y-3">
+              {downloadError && (
+                <ErrorState title="Unable to download payslip" message={downloadError} />
+              )}
               {(data?.payslips || []).slice(0, 3).map((item) => (
                 <button
                   key={item.runId}
                   type="button"
                   className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-3 text-left hover:bg-slate-50"
-                  onClick={() => downloadAuthenticatedFile(getMyPayslipDownloadUrl(item.runId, staffId), `payslip_${item.periodStart}.pdf`)}
+                  onClick={() => void handlePayslipDownload(item)}
+                  disabled={downloadingRunId === item.runId || !staffId}
                 >
                   <div>
                     <p className="font-medium text-slate-900">{item.periodStart} to {item.periodEnd}</p>
                     <p className="text-sm text-slate-500">{money(item.netPay)} net</p>
                   </div>
-                  <span className={BADGE.green}>PDF</span>
+                  <span className={BADGE.green}>{downloadingRunId === item.runId ? 'Downloading' : 'PDF'}</span>
                 </button>
               ))}
               {(!data?.payslips || data.payslips.length === 0) && (
