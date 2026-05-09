@@ -120,7 +120,7 @@ function MissingItems({ items }) {
   }
   return (
     <ul className="grid gap-1 text-sm text-[var(--ink-2)] sm:grid-cols-2">
-      {items.slice(0, 8).map((item) => <li key={item}>{item}</li>)}
+      {items.slice(0, 8).map((item, index) => <li key={`${index}-${item}`} className="break-words">{item}</li>)}
     </ul>
   );
 }
@@ -204,7 +204,7 @@ export default function HomeSetupDashboard() {
 
       {error && !loading && <ErrorState message={error} onRetry={load} className="mb-4" />}
 
-      {!error && (
+      {!loading && !error && homes.length > 0 && (
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             label="Average completion"
