@@ -46,6 +46,7 @@ function makeTask(id) {
 
 describe('AuditCalendar', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useData.mockReturnValue({
       activeHome: 'test-home',
       canRead: () => true,
@@ -53,6 +54,7 @@ describe('AuditCalendar', () => {
       homeRole: 'home_manager',
       staffId: null,
     });
+    api.getAuditTasks.mockResolvedValue({ tasks: [], _total: 0 });
   });
 
   it('shows the result count and requests subsequent audit-task pages', async () => {
@@ -84,5 +86,45 @@ describe('AuditCalendar', () => {
       }));
     });
     expect(screen.getByText('Showing 101-125 of 125 tasks')).toBeInTheDocument();
+  });
+
+  it('shows a no-home state without calling the audit API', async () => {
+    useData.mockReturnValue({
+      activeHome: '',
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'home_manager',
+      staffId: null,
+    });
+
+    renderWithProviders(<AuditCalendar />);
+
+    expect(await screen.findByText('No home selected')).toBeInTheDocument();
+    expect(screen.getByText('Select a home before opening the audit calendar.')).toBeInTheDocument();
+    expect(api.getAuditTasks).not.toHaveBeenCalled();
+  });
+
+  it('creates a task from the modal using the selected home', async () => {
+    const user = userEvent.setup();
+    api.createAuditTask.mockResolvedValue({ id: 77, version: 1 });
+
+    renderWithProviders(<AuditCalendar />);
+
+    await screen.findByText('No audit tasks');
+    await user.click(screen.getByRole('button', { name: 'New Task' }));
+    await user.type(screen.getByLabelText('Title'), 'Monthly medication audit');
+    await user.type(screen.getByLabelText('Due date'), '2026-05-31');
+    await user.type(screen.getByLabelText('Evidence notes'), 'Upload MAR spot-check evidence.');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(api.createAuditTask).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        title: 'Monthly medication audit',
+        due_date: '2026-05-31',
+        category: 'governance',
+        evidence_required: true,
+        evidence_notes: 'Upload MAR spot-check evidence.',
+      }));
+    });
   });
 });

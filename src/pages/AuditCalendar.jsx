@@ -58,6 +58,7 @@ function statusBadge(status) {
 function taskPayload(form) {
   return {
     ...form,
+    title: form.title.trim(),
     template_key: form.template_key || null,
     period_start: form.period_start || null,
     period_end: form.period_end || null,
@@ -140,7 +141,7 @@ function TaskModal({ isOpen, task, form, setForm, saveError, canEdit, onClose, o
       <div className={MODAL.footer}>
         {task && canEdit && <button type="button" className={`${BTN.danger} mr-auto`} onClick={onDelete}>Delete</button>}
         <button type="button" className={BTN.secondary} onClick={onClose}>Close</button>
-        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={!form.title || !form.due_date}>Save</button>}
+        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={!form.title.trim() || !form.due_date}>Save</button>}
       </div>
     </Modal>
   );
@@ -169,10 +170,19 @@ export default function AuditCalendar() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_TASK });
-  useDirtyGuard(modalOpen);
+  const [formBaseline, setFormBaseline] = useState(null);
+  const isDirty = modalOpen && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
   const load = useCallback(async () => {
-    if (!activeHome) return;
+    if (!activeHome) {
+      setTasks([]);
+      setAllTasks([]);
+      setTotal(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [result, allResult] = await Promise.all([
@@ -217,14 +227,16 @@ export default function AuditCalendar() {
 
   function openNew() {
     setEditing(null);
-    setForm({ ...EMPTY_TASK });
+    const nextForm = { ...EMPTY_TASK };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
   function openEdit(task) {
     setEditing(task);
-    setForm({
+    const nextForm = {
       ...EMPTY_TASK,
       ...task,
       template_key: task.template_key || '',
@@ -234,16 +246,32 @@ export default function AuditCalendar() {
       evidence_notes: task.evidence_notes || '',
       evidence_required: Boolean(task.evidence_required),
       _version: task.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
+  function closeModal() {
+    setModalOpen(false);
+    setFormBaseline(null);
+    setSaveError(null);
+  }
+
   async function saveTask() {
+    if (!activeHome) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (!form.title.trim() || !form.due_date) {
+      setSaveError('Title and due date are required.');
+      return;
+    }
     try {
       if (editing) await updateAuditTask(activeHome, editing.id, taskPayload(form));
       else await createAuditTask(activeHome, taskPayload(form));
-      setModalOpen(false);
+      closeModal();
       showNotice(editing ? 'Audit task updated.' : 'Audit task created.');
       await load();
     } catch (e) {
@@ -257,7 +285,7 @@ export default function AuditCalendar() {
     if (!ok) return;
     try {
       await deleteAuditTask(activeHome, editing.id, editing.version);
-      setModalOpen(false);
+      closeModal();
       showNotice('Audit task deleted.');
       await load();
     } catch (e) {
@@ -315,6 +343,17 @@ export default function AuditCalendar() {
 
   const showingStart = tasks.length === 0 ? 0 : offset + 1;
   const showingEnd = offset + tasks.length;
+
+  if (!activeHome && !loading) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening the audit calendar."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -420,7 +459,7 @@ export default function AuditCalendar() {
         setForm={setForm}
         saveError={saveError}
         canEdit={canEdit}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         onSave={saveTask}
         onDelete={removeTask}
       />
