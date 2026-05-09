@@ -48,16 +48,18 @@ vi.mock('../../lib/design.js', async (importActual) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-import { getSchedulingData, saveConfig, getLoggedInUser } from '../../lib/api.js';
+import { getCurrentHome, getSchedulingData, saveConfig, getLoggedInUser } from '../../lib/api.js';
 import { syncBankHolidays } from '../../lib/bankHolidays.js';
 
 function setupAdminMocks() {
+  getCurrentHome.mockReturnValue('test-home');
   getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA, configUpdatedAt: '2026-03-28T10:00:00.000Z' });
   saveConfig.mockResolvedValue({});
 }
 
 function setupViewerMocks() {
+  getCurrentHome.mockReturnValue('test-home');
   getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA, configUpdatedAt: '2026-03-28T10:00:00.000Z' });
 }
@@ -75,6 +77,14 @@ describe('Config', () => {
   it('smoke test — renders without crashing', async () => {
     renderWithProviders(<Config />);
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+  });
+
+  it('shows a no-home state instead of loading settings forever', async () => {
+    getCurrentHome.mockReturnValue('');
+    renderWithProviders(<Config />);
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.queryByText('Loading settings...')).not.toBeInTheDocument();
+    expect(getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('shows loading state while data is being fetched', () => {
@@ -326,6 +336,20 @@ describe('Config', () => {
     expect(screen.getByRole('option', { name: 'Nursing' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Dementia' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Mixed' })).toBeInTheDocument();
+  });
+
+  it('blocks saving a short past-date edit PIN', async () => {
+    setupAdminMocks();
+    const user = userEvent.setup();
+    renderWithProviders(<Config />, { user: { username: 'admin', role: 'admin' } });
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/Past-Date Edit PIN/i), '123');
+
+    expect(screen.getByText('PIN must be at least 4 digits')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Save Now/i })).toBeDisabled();
+    expect(saveConfig).not.toHaveBeenCalled();
   });
 
   it('disables editable settings controls for read-only roles', async () => {

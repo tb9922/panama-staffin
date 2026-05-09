@@ -26,6 +26,11 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 const DISABLED_CONTROL_CLASS = 'disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[var(--paper-2)] disabled:text-[var(--ink-3)] disabled:shadow-none';
 const DISABLED_CHECK_CLASS = 'disabled:cursor-not-allowed disabled:opacity-60';
 
+function isEditLockPinInvalid(config) {
+  const pin = config?.edit_lock_pin ? String(config.edit_lock_pin) : '';
+  return Boolean(pin && pin.length < 4);
+}
+
 export default function Config() {
   const { canWrite } = useData();
   const canEdit = canWrite('config');
@@ -47,6 +52,13 @@ export default function Config() {
   useDirtyGuard(dirty);
 
   const load = useCallback(async () => {
+    if (!homeSlug) {
+      setLoading(false);
+      setLoadError(null);
+      setConfig(null);
+      setStaff([]);
+      return;
+    }
     try {
       setLoading(true);
       setLoadError(null);
@@ -64,11 +76,14 @@ export default function Config() {
   useEffect(() => { load(); }, [load]);
 
   function handleChange(path, value) {
-    if (!canEdit) return;
+    if (!canEdit || !config) return;
     const keys = path.split('.');
     const newConfig = JSON.parse(JSON.stringify(config));
     let obj = newConfig;
-    for (let i = 0; i < keys.length - 1; i++) obj = obj[keys[i]];
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!obj[keys[i]] || typeof obj[keys[i]] !== 'object') obj[keys[i]] = {};
+      obj = obj[keys[i]];
+    }
     obj[keys[keys.length - 1]] = value;
     setConfig(newConfig);
     setSaved(false);
@@ -77,7 +92,7 @@ export default function Config() {
   }
 
   async function handleSave() {
-    if (!canEdit || saving) return;
+    if (!canEdit || saving || !homeSlug || isEditLockPinInvalid(config)) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -143,7 +158,18 @@ export default function Config() {
     );
   }
 
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="No home selected" message="Select a home before opening Settings." />
+      </div>
+    );
+  }
+
   if (!config) return null;
+
+  const pinInvalid = isEditLockPinInvalid(config);
+  const saveDisabled = saving || pinInvalid;
 
   return (
     <div className={PAGE.container}>
@@ -158,7 +184,7 @@ export default function Config() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saveDisabled}
             className={`${BTN.secondary} ${BTN.sm} border-[var(--caution)] text-[var(--caution)] hover:bg-[var(--caution-soft)]`}
           >
             {saving ? 'Saving...' : 'Save Now'}
@@ -175,7 +201,7 @@ export default function Config() {
           <h1 className={PAGE.title}>Settings</h1>
           <p className={PAGE.subtitle}>Home configuration, rota patterns, budgets and compliance defaults</p>
         </div>
-        {canEdit && <button onClick={handleSave} disabled={saving}
+        {canEdit && <button type="button" onClick={handleSave} disabled={saveDisabled}
           className={`${BTN.primary} w-full sm:w-auto ${saved ? '!border-[var(--ok)] !bg-[var(--ok)]' : dirty ? '!border-[var(--caution)] !bg-[var(--caution)] hover:!brightness-95' : ''}`}>
           {saving ? 'Saving...' : saved ? 'Saved!' : dirty ? 'Save Changes *' : 'Save Changes'}
         </button>}
@@ -433,7 +459,7 @@ export default function Config() {
             placeholder="Leave blank to disable locking"
             className={controlClass(INPUT.sm, 'w-40')}
           />
-          {config.edit_lock_pin && String(config.edit_lock_pin).length < 4 && (
+          {pinInvalid && (
             <p className="mt-1 text-xs text-[var(--alert)]">PIN must be at least 4 digits</p>
           )}
           <p className="mt-1 text-xs text-[var(--ink-4)]">
@@ -576,7 +602,7 @@ export default function Config() {
       <section className={CARD.padded}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-[var(--ink)]">Bank Holidays</h2>
-          <button onClick={async () => {
+          <button type="button" onClick={async () => {
             if (!canEdit) return;
             setSyncStatus({ loading: true });
             try {
@@ -595,9 +621,9 @@ export default function Config() {
           </button>
         </div>
         <div className="mb-4 max-w-sm">
-          <label className={INPUT.label}>Bank Holiday Region</label>
+          <label htmlFor="config-bank-holiday-region" className={INPUT.label}>Bank Holiday Region</label>
           <select
-            aria-label="Bank Holiday Region"
+            id="config-bank-holiday-region"
             value={config.bank_holiday_region || 'england-and-wales'}
             onChange={(e) => handleChange('bank_holiday_region', e.target.value)}
             disabled={!canEdit}
