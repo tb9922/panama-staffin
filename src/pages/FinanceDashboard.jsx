@@ -24,11 +24,17 @@ function formatPercent(value, digits = 1) {
   return `${Number(value).toFixed(digits)}%`;
 }
 
+function displayPercent(value, digits = 1) {
+  if (value == null || Number.isNaN(Number(value))) return '-';
+  return formatPercent(value, digits);
+}
+
 export default function FinanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [exporting, setExporting] = useState(false);
   const [period, setPeriod] = useState(() => ({
     from: startOfLocalMonthISO(),
     to: todayLocalISO(),
@@ -36,9 +42,20 @@ export default function FinanceDashboard() {
   const home = getCurrentHome();
 
   const datesReversed = period.from > period.to;
+  const canShowDashboard = Boolean(dashboard && !datesReversed);
 
   const load = useCallback(async (signal) => {
-    if (!home || datesReversed) return;
+    if (!home) {
+      setDashboard(null);
+      setAlerts([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    if (datesReversed) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [nextDashboard, nextAlerts] = await Promise.all([
@@ -65,46 +82,54 @@ export default function FinanceDashboard() {
   }, [load]);
 
   async function handleExport() {
-    if (!dashboard) return;
-    const { downloadXLSX } = await import('../lib/excel.js');
-    const sheets = [];
-    const trendRows = buildTrendRows(dashboard.income_trend, dashboard.expense_trend);
-    if (trendRows.length) {
-      sheets.push({
-        name: 'Monthly Summary',
-        headers: ['Month', 'Income', 'Expenses', 'Net'],
-        rows: trendRows.map(row => [row.month, row.income, row.expenses, row.net]),
-      });
-    }
-    if (dashboard.expenses_by_category?.length) {
-      sheets.push({
-        name: 'Expenses by Category',
-        headers: ['Category', 'Total', 'Count'],
-        rows: dashboard.expenses_by_category.map(category => [
-          getLabel(category.category, EXPENSE_CATEGORIES),
-          category.total,
-          category.count,
-        ]),
-      });
-    }
-    if (dashboard.ageing?.overdue_items?.length) {
-      sheets.push({
-        name: 'Overdue Receivables',
-        headers: ['Invoice #', 'Payer', 'Type', 'Total', 'Paid', 'Outstanding', 'Due Date', 'Days Overdue'],
-        rows: dashboard.ageing.overdue_items.map(item => [
-          item.invoice_number,
-          item.payer_name,
-          item.payer_type,
-          item.total_amount,
-          item.amount_paid,
-          item.outstanding,
-          item.due_date,
-          item.days_overdue,
-        ]),
-      });
-    }
-    if (sheets.length) {
-      downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
+    if (!dashboard || datesReversed || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const { downloadXLSX } = await import('../lib/excel.js');
+      const sheets = [];
+      const trendRows = buildTrendRows(dashboard.income_trend, dashboard.expense_trend);
+      if (trendRows.length) {
+        sheets.push({
+          name: 'Monthly Summary',
+          headers: ['Month', 'Income', 'Expenses', 'Net'],
+          rows: trendRows.map(row => [row.month, row.income, row.expenses, row.net]),
+        });
+      }
+      if (dashboard.expenses_by_category?.length) {
+        sheets.push({
+          name: 'Expenses by Category',
+          headers: ['Category', 'Total', 'Count'],
+          rows: dashboard.expenses_by_category.map(category => [
+            getLabel(category.category, EXPENSE_CATEGORIES),
+            category.total,
+            category.count,
+          ]),
+        });
+      }
+      if (dashboard.ageing?.overdue_items?.length) {
+        sheets.push({
+          name: 'Overdue Receivables',
+          headers: ['Invoice #', 'Payer', 'Type', 'Total', 'Paid', 'Outstanding', 'Due Date', 'Days Overdue'],
+          rows: dashboard.ageing.overdue_items.map(item => [
+            item.invoice_number,
+            item.payer_name,
+            item.payer_type,
+            item.total_amount,
+            item.amount_paid,
+            item.outstanding,
+            item.due_date,
+            item.days_overdue,
+          ]),
+        });
+      }
+      if (sheets.length) {
+        downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to export finance dashboard');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -129,20 +154,24 @@ export default function FinanceDashboard() {
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
           <input
+            aria-label="From date"
             type="date"
             value={period.from}
             onChange={event => setPeriod(current => ({ ...current, from: event.target.value }))}
+            max={period.to}
             className={`${INPUT.sm} min-w-0 flex-[1_1_8.5rem] sm:w-auto sm:flex-none`}
           />
           <span className="shrink-0 text-sm text-[var(--ink-4)]">to</span>
           <input
+            aria-label="To date"
             type="date"
             value={period.to}
             onChange={event => setPeriod(current => ({ ...current, to: event.target.value }))}
+            min={period.from}
             className={`${INPUT.sm} min-w-0 flex-[1_1_8.5rem] sm:w-auto sm:flex-none`}
           />
-          <button onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Refresh</button>
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
+          <button type="button" onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`} disabled={datesReversed}>Refresh</button>
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`} disabled={!dashboard || datesReversed || exporting}>{exporting ? 'Exporting...' : 'Export Excel'}</button>
         </div>
       </div>
 
@@ -151,10 +180,10 @@ export default function FinanceDashboard() {
           "From" date is after "To" date. Adjust the range to load data.
         </div>
       )}
-      {error && dashboard && (
+      {error && canShowDashboard && (
         <ErrorState title="Some finance data could not be refreshed" message={error} onRetry={() => void load()} className="mb-4" />
       )}
-      {dashboard?.degraded && (
+      {canShowDashboard && dashboard?.degraded && (
         <div className="mb-4 rounded-lg border border-[var(--caution)] bg-[var(--caution-soft)] px-4 py-3 text-sm text-[var(--caution)]">
           Some finance inputs are unavailable right now:
           {' '}
@@ -166,11 +195,11 @@ export default function FinanceDashboard() {
         </div>
       )}
 
-      {!dashboard ? (
+      {!canShowDashboard ? (
         <div className={CARD.flush}>
           <EmptyState
-            title="No finance dashboard data for this range"
-            description="Try a broader date range or refresh once finance records have been added."
+            title={datesReversed ? 'Adjust the date range' : 'No finance dashboard data for this range'}
+            description={datesReversed ? 'The dashboard is hidden while the range is invalid.' : 'Try a broader date range or refresh once finance records have been added.'}
           />
         </div>
       ) : (
@@ -191,12 +220,12 @@ export default function FinanceDashboard() {
             <KPICard
               label="Net Position"
               value={formatCurrency(dashboard.net_position)}
-              sub={`Margin: ${formatPercent(dashboard.margin)}`}
+              sub={`Margin: ${displayPercent(dashboard.margin)}`}
               color={dashboard.net_position == null ? 'blue' : dashboard.net_position >= 0 ? 'emerald' : 'red'}
             />
             <KPICard
               label="Occupancy"
-              value={formatPercent(dashboard.occupancy?.rate, 0)}
+              value={displayPercent(dashboard.occupancy?.rate, 0)}
               sub={dashboard.occupancy?.registered_beds == null
                 ? `${dashboard.occupancy?.active ?? 0} beds occupied | registered beds unavailable`
                 : `${dashboard.occupancy?.active ?? 0} of ${dashboard.occupancy?.registered_beds} beds`}

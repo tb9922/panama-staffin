@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import FinanceDashboard from '../FinanceDashboard.jsx';
 
@@ -22,6 +23,7 @@ vi.mock('../../lib/excel.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import { downloadXLSX } from '../../lib/excel.js';
 
 const MOCK_DASHBOARD = {
   income: {
@@ -90,6 +92,8 @@ describe('FinanceDashboard', () => {
     expect(screen.getByText('Total Expenses')).toBeInTheDocument();
     expect(screen.getByText('Net Position')).toBeInTheDocument();
     expect(screen.getByText('Occupancy')).toBeInTheDocument();
+    expect(screen.getByLabelText('From date')).toBeInTheDocument();
+    expect(screen.getByLabelText('To date')).toBeInTheDocument();
   });
 
   it('shows occupancy rate from dashboard data', async () => {
@@ -148,5 +152,44 @@ describe('FinanceDashboard', () => {
 
     await waitFor(() => expect(screen.getByText(/some finance inputs are unavailable right now/i)).toBeInTheDocument());
     expect(screen.getByText(/displayed totals may be incomplete/i)).toBeInTheDocument();
+  });
+
+  it('hides stale dashboard figures while the date range is invalid', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FinanceDashboard />);
+
+    await waitFor(() => expect(screen.getByText('Income (Invoiced)')).toBeInTheDocument());
+    await user.clear(screen.getByLabelText('From date'));
+    await user.type(screen.getByLabelText('From date'), '2099-01-01');
+
+    expect(screen.getByText('Adjust the date range')).toBeInTheDocument();
+    expect(screen.queryByText('Income (Invoiced)')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Excel' })).toBeDisabled();
+  });
+
+  it('exports the current dashboard workbook once', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FinanceDashboard />);
+
+    await waitFor(() => expect(screen.getByText('Income (Invoiced)')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
+
+    await waitFor(() => expect(downloadXLSX).toHaveBeenCalledTimes(1));
+    expect(downloadXLSX).toHaveBeenCalledWith(
+      expect.stringMatching(/^finance_dashboard_.*_to_.*\.xlsx$/),
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Monthly Summary' }),
+        expect.objectContaining({ name: 'Expenses by Category' }),
+      ]),
+    );
+  });
+
+  it('does not spin forever when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<FinanceDashboard />);
+
+    await waitFor(() => expect(screen.getByText('No finance dashboard data for this range')).toBeInTheDocument());
+    expect(screen.queryByText(/loading finance data/i)).not.toBeInTheDocument();
   });
 });
