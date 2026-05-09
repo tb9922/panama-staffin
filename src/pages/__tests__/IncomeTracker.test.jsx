@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import IncomeTracker from '../IncomeTracker.jsx';
@@ -34,6 +34,7 @@ vi.mock('../../lib/excel.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import { downloadXLSX } from '../../lib/excel.js';
 
 const MOCK_RESIDENTS = {
   rows: [
@@ -70,6 +71,9 @@ const MOCK_INVOICES = {
 function setupMocks() {
   api.getFinanceResidents.mockResolvedValue(MOCK_RESIDENTS);
   api.getFinanceInvoices.mockResolvedValue(MOCK_INVOICES);
+  api.getFinanceInvoice.mockResolvedValue({ ...MOCK_INVOICES.rows[0], lines: [
+    { id: 100, description: 'Residential fees', quantity: 1, unit_price: 4100, amount: 4100, line_type: 'fee' },
+  ] });
   api.getFinanceFeeHistory.mockResolvedValue([]);
   api.getRecordAttachments.mockResolvedValue([]);
 }
@@ -92,6 +96,7 @@ function renderViewer() {
 describe('IncomeTracker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCurrentHome.mockReturnValue('test-home');
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   });
 
@@ -175,5 +180,73 @@ describe('IncomeTracker', () => {
     );
     expect(screen.getByRole('button', { name: 'Fee History' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument();
+  });
+
+  it('does not spin forever when no home is selected', async () => {
+    const user = userEvent.setup();
+    api.getCurrentHome.mockReturnValue(null);
+    setupMocks();
+    renderWithProviders(<IncomeTracker />);
+
+    await waitFor(() => expect(screen.getByText('No billing residents found')).toBeInTheDocument());
+    expect(screen.queryByText('Loading residents...')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Invoices' }));
+    await waitFor(() => expect(screen.getByText('No invoices found')).toBeInTheDocument());
+    expect(screen.queryByText('Loading invoices...')).not.toBeInTheDocument();
+  });
+
+  it('shows resident validation inside the modal', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => expect(screen.getByText('Mrs Joan Smith')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Add Resident' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add Resident' });
+    await user.click(within(dialog).getByRole('button', { name: 'Add Resident' }));
+
+    expect(screen.getByText('Resident name is required.')).toBeInTheDocument();
+    expect(api.createFinanceResident).not.toHaveBeenCalled();
+  });
+
+  it('does not open an editable invoice when full invoice loading fails', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    api.getFinanceInvoice.mockRejectedValue(new Error('Invoice detail failed'));
+
+    await user.click(screen.getByRole('tab', { name: 'Invoices' }));
+    await waitFor(() => expect(screen.getByText('INV-001')).toBeInTheDocument());
+    await user.click(screen.getByText('INV-001'));
+
+    await waitFor(() => expect(screen.getByText('Invoice detail failed')).toBeInTheDocument());
+    expect(screen.queryByText('Invoice INV-001')).not.toBeInTheDocument();
+    expect(api.updateFinanceInvoice).not.toHaveBeenCalled();
+  });
+
+  it('validates invoice lines before saving', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await user.click(screen.getByRole('tab', { name: 'Invoices' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New Invoice' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'New Invoice' }));
+    await user.type(screen.getByLabelText('Payer Name *'), 'County Council');
+    await user.click(screen.getByRole('button', { name: 'Create Invoice' }));
+
+    expect(screen.getByText('Every invoice line needs a description.')).toBeInTheDocument();
+    expect(api.createFinanceInvoice).not.toHaveBeenCalled();
+  });
+
+  it('exports resident rows once', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => expect(screen.getByText('Mrs Joan Smith')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
+
+    await waitFor(() => expect(downloadXLSX).toHaveBeenCalledTimes(1));
+    expect(downloadXLSX).toHaveBeenCalledWith(
+      'finance_residents.xlsx',
+      expect.arrayContaining([expect.objectContaining({ name: 'Residents' })]),
+    );
   });
 });

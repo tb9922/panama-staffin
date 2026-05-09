@@ -42,6 +42,7 @@ export default function IncomeTracker() {
   const canEdit = canWrite('finance');
   const [tab, setTab] = useState('residents');
   const home = getCurrentHome();
+  const canEditHome = canEdit && Boolean(home);
 
   return (
     <div className={PAGE.container}>
@@ -54,8 +55,8 @@ export default function IncomeTracker() {
 
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
-      {tab === 'residents' && <ResidentsTab home={home} canEdit={canEdit} />}
-      {tab === 'invoices' && <InvoicesTab home={home} canEdit={canEdit} />}
+      {tab === 'residents' && <ResidentsTab home={home} canEdit={canEditHome} />}
+      {tab === 'invoices' && <InvoicesTab home={home} canEdit={canEditHome} />}
     </div>
   );
 }
@@ -75,12 +76,20 @@ function ResidentsTab({ home, canEdit }) {
   const [modalTab, setModalTab] = useState('profile');
   const [feeHistory, setFeeHistory] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [exporting, setExporting] = useState(false);
   useDirtyGuard(!!showModal);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterFunding, setFilterFunding] = useState('');
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setResidents([]);
+      setTotal(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const filters = {};
@@ -101,6 +110,8 @@ function ResidentsTab({ home, canEdit }) {
     setForm({ status: 'active', funding_type: 'self_funded', care_type: 'residential', admission_date: todayLocalISO() });
     setModalTab('profile');
     setFeeHistory([]);
+    setFormError(null);
+    setError(null);
     setShowModal(true);
   }
 
@@ -108,6 +119,8 @@ function ResidentsTab({ home, canEdit }) {
     setEditing(r);
     setForm({ ...r });
     setModalTab('profile');
+    setFormError(null);
+    setError(null);
     if (r.id) {
       try { setFeeHistory(await getFinanceFeeHistory(home, r.id)); }
       catch { setFeeHistory([]); }
@@ -115,45 +128,64 @@ function ResidentsTab({ home, canEdit }) {
     setShowModal(true);
   }
 
-  function closeModal() { setShowModal(false); setEditing(null); setForm({}); setFeeHistory([]); }
+  function closeModal() { setShowModal(false); setEditing(null); setForm({}); setFeeHistory([]); setFormError(null); }
 
   async function handleSave() {
     if (saving) return;
-    setError(null);
+    setFormError(null);
     if (!form.resident_name?.trim()) {
-      setError('Resident name is required.');
+      setFormError('Resident name is required.');
+      setModalTab('profile');
       return;
     }
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        resident_name: form.resident_name.trim(),
+        room_number: form.room_number?.trim() || null,
+        funding_authority: form.funding_authority?.trim() || null,
+        funding_reference: form.funding_reference?.trim() || null,
+        top_up_payer: form.top_up_payer?.trim() || null,
+        top_up_contact: form.top_up_contact?.trim() || null,
+      };
       if (editing?.id) {
-        await updateFinanceResident(home, editing.id, { ...form, _version: editing.version });
+        await updateFinanceResident(home, editing.id, { ...payload, _version: editing.version });
         showNotice('Resident profile updated.');
-        showToast({ title: 'Resident updated', message: form.resident_name });
+        showToast({ title: 'Resident updated', message: payload.resident_name });
       } else {
-        await createFinanceResident(home, form);
+        await createFinanceResident(home, payload);
         showNotice('Resident profile created.');
-        showToast({ title: 'Resident added', message: form.resident_name });
+        showToast({ title: 'Resident added', message: payload.resident_name });
       }
       closeModal();
       await load();
-    } catch (e) { setError(normalizeFinanceError(e.message)); }
+    } catch (e) { setFormError(normalizeFinanceError(e.message)); }
     finally { setSaving(false); }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function handleExportResidents() {
-    const { downloadXLSX } = await import('../lib/excel.js');
-    downloadXLSX('finance_residents.xlsx', [{
-      name: 'Residents',
-      headers: ['Name', 'Room', 'Care Type', 'Funding', 'Weekly Fee', 'Status', 'Next Fee Review', 'Outstanding', 'Last Paid', 'Last Payment'],
-      rows: residents.map(r => [
-        r.resident_name, r.room_number || '', r.care_type, r.funding_type,
-        r.weekly_fee, r.status, r.next_fee_review || '',
-        r.outstanding_balance || 0, r.last_payment_date || '', r.last_payment_amount || '',
-      ]),
-    }]);
+    if (exporting || residents.length === 0) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const { downloadXLSX } = await import('../lib/excel.js');
+      downloadXLSX('finance_residents.xlsx', [{
+        name: 'Residents',
+        headers: ['Name', 'Room', 'Care Type', 'Funding', 'Weekly Fee', 'Status', 'Next Fee Review', 'Outstanding', 'Last Paid', 'Last Payment'],
+        rows: residents.map(r => [
+          r.resident_name, r.room_number || '', r.care_type, r.funding_type,
+          r.weekly_fee, r.status, r.next_fee_review || '',
+          r.outstanding_balance || 0, r.last_payment_date || '', r.last_payment_amount || '',
+        ]),
+      }]);
+    } catch (e) {
+      setError(normalizeFinanceError(e.message || 'Failed to export residents.'));
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (loading) return <LoadingState message="Loading residents..." card />;
@@ -183,8 +215,8 @@ function ResidentsTab({ home, canEdit }) {
         </select>
         <span className="text-sm text-gray-500">{total} resident{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
-        <button onClick={handleExportResidents} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        {canEdit && <button onClick={openCreate} className={BTN.primary}>Add Resident</button>}
+        <button type="button" onClick={handleExportResidents} className={`${BTN.secondary} ${BTN.sm}`} disabled={residents.length === 0 || exporting}>{exporting ? 'Exporting...' : 'Export Excel'}</button>
+        {canEdit && <button type="button" onClick={openCreate} className={BTN.primary}>Add Resident</button>}
       </div>
 
       <StickyTable className={CARD.flush}>
@@ -236,9 +268,14 @@ function ResidentsTab({ home, canEdit }) {
 
       {/* Resident Modal */}
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Resident' : 'Add Resident'} size="xl">
+            {formError && (
+              <InlineNotice variant="error" className="mb-4">
+                {formError}
+              </InlineNotice>
+            )}
             <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
               {[{ id: 'profile', label: 'Profile' }, { id: 'fees', label: 'Fees' }, { id: 'history', label: 'Fee History' }, { id: 'notes', label: 'Notes' }].map(t => (
-                <button key={t.id} onClick={() => setModalTab(t.id)}
+                <button type="button" key={t.id} onClick={() => setModalTab(t.id)}
                   className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
                     modalTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}>{t.label}</button>
@@ -364,8 +401,8 @@ function ResidentsTab({ home, canEdit }) {
             )}
 
             <div className={MODAL.footer}>
-              <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Resident'}</button>}
+              <button type="button" onClick={closeModal} className={BTN.secondary}>Cancel</button>
+              {canEdit && <button type="button" onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Resident'}</button>}
             </div>
       </Modal>
     </>
@@ -391,13 +428,22 @@ function InvoicesTab({ home, canEdit }) {
   const [filterPayer, setFilterPayer] = useState('');
   const [residents, setResidents] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [exporting, setExporting] = useState(false);
   useDirtyGuard(!!showModal);
 
   // Payment sub-form
   const [payForm, setPayForm] = useState({ amount: '', payment_method: 'bacs', payment_reference: '' });
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setInvoices([]);
+      setResidents([]);
+      setTotal(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const filters = {};
@@ -423,65 +469,112 @@ function InvoicesTab({ home, canEdit }) {
     setLines([{ description: '', quantity: 1, unit_price: '', amount: '', line_type: 'fee' }]);
     setModalTab('details');
     setPayForm({ amount: '', payment_method: 'bacs', payment_reference: '' });
+    setFormError(null);
+    setError(null);
     setShowModal(true);
   }
 
   async function openEdit(inv) {
-    setEditing(inv);
-    setForm({ ...inv });
-    // Fetch full invoice with lines
+    if (saving) return;
+    setSaving(true);
+    setFormError(null);
+    setError(null);
     try {
       const { getFinanceInvoice } = await import('../lib/api.js');
       const full = await getFinanceInvoice(home, inv.id);
+      setEditing(full);
       setForm({ ...full });
       setLines(full.lines?.length ? full.lines : []);
-    } catch {
+      setModalTab('details');
+      setPayForm({ amount: '', payment_method: 'bacs', payment_reference: '' });
+      setShowModal(true);
+    } catch (e) {
+      setEditing(null);
+      setForm({});
       setLines([]);
+      setError(normalizeFinanceError(e.message || 'Unable to load invoice details.'));
+    } finally {
+      setSaving(false);
     }
-    setModalTab('details');
-    setPayForm({ amount: '', payment_method: 'bacs', payment_reference: '' });
-    setShowModal(true);
   }
 
-  function closeModal() { setShowModal(false); setEditing(null); setForm({}); setLines([]); }
+  function closeModal() { setShowModal(false); setEditing(null); setForm({}); setLines([]); setFormError(null); }
 
   async function handleSave() {
     if (saving) return;
-    setError(null);
+    setFormError(null);
     if (!form.payer_name?.trim() || !form.payer_type) {
-      setError('Payer type and payer name are required.');
+      setFormError('Payer type and payer name are required.');
+      setModalTab('details');
+      return;
+    }
+    if (form.period_start && form.period_end && form.period_start > form.period_end) {
+      setFormError('Period start cannot be after period end.');
+      setModalTab('details');
+      return;
+    }
+    const preparedLines = lines
+      .map(l => ({
+        ...l,
+        description: l.description?.trim() || '',
+        amount: parseFloat(l.amount) || (parseFloat(l.quantity) * parseFloat(l.unit_price)) || 0,
+      }))
+      .filter(l => l.description || l.quantity || l.unit_price || l.amount);
+    if (preparedLines.length === 0) {
+      setFormError('Add at least one invoice line.');
+      setModalTab('lines');
+      return;
+    }
+    if (preparedLines.some(l => !l.description)) {
+      setFormError('Every invoice line needs a description.');
+      setModalTab('lines');
       return;
     }
     setSaving(true);
     try {
-      const payload = { ...form, lines: lines.map(l => ({ ...l, amount: parseFloat(l.amount) || (parseFloat(l.quantity) * parseFloat(l.unit_price)) || 0 })) };
+      const payload = {
+        ...form,
+        payer_name: form.payer_name.trim(),
+        payer_reference: form.payer_reference?.trim() || null,
+        notes: form.notes?.trim() || null,
+        lines: preparedLines,
+      };
       if (editing?.id) {
-        await updateFinanceInvoice(home, editing.id, { ...payload, _version: editing.version });
+        await updateFinanceInvoice(home, editing.id, { ...payload, _version: editing.version ?? form.version });
         showNotice('Invoice updated.');
-        showToast({ title: 'Invoice updated', message: form.payer_name });
+        showToast({ title: 'Invoice updated', message: payload.payer_name });
       } else {
         await createFinanceInvoice(home, payload);
         showNotice('Invoice created.');
-        showToast({ title: 'Invoice created', message: form.payer_name });
+        showToast({ title: 'Invoice created', message: payload.payer_name });
       }
       closeModal();
       await load();
-    } catch (e) { setError(normalizeFinanceError(e.message)); }
+    } catch (e) { setFormError(normalizeFinanceError(e.message)); }
     finally { setSaving(false); }
   }
 
   async function handlePayment() {
     if (saving) return;
-    if (!editing?.id || !payForm.amount) return;
+    setFormError(null);
+    if (!editing?.id) return;
+    const amount = Number(payForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFormError('Payment amount must be greater than zero.');
+      return;
+    }
+    if (amount > Number(editing.balance_due || 0)) {
+      setFormError('Payment amount cannot exceed the outstanding balance.');
+      return;
+    }
     setSaving(true);
-    setError(null);
     try {
-      await recordFinancePayment(home, editing.id, payForm);
+      await recordFinancePayment(home, editing.id, { ...payForm, amount });
       showNotice('Payment recorded against invoice.');
       showToast({ title: 'Payment recorded', message: editing.invoice_number || editing.payer_name });
       closeModal();
       await load();
-    } catch (e) { setError(normalizeFinanceError(e.message)); }
+    } catch (e) { setFormError(normalizeFinanceError(e.message)); }
     finally { setSaving(false); }
   }
 
@@ -489,7 +582,7 @@ function InvoicesTab({ home, canEdit }) {
     if (!editing?.id || saving) return;
     if (!await confirm(`Void invoice ${editing.invoice_number || editing.id}?`)) return;
     setSaving(true);
-    setError(null);
+    setFormError(null);
     try {
       await voidFinanceInvoice(home, editing.id);
       showNotice('Invoice voided.');
@@ -497,7 +590,7 @@ function InvoicesTab({ home, canEdit }) {
       closeModal();
       await load();
     } catch (e) {
-      setError(normalizeFinanceError(e.message));
+      setFormError(normalizeFinanceError(e.message));
     } finally {
       setSaving(false);
     }
@@ -507,7 +600,7 @@ function InvoicesTab({ home, canEdit }) {
     if (!editing?.id || saving) return;
     if (!await confirm(`Issue a credit note for invoice ${editing.invoice_number || editing.id}?`)) return;
     setSaving(true);
-    setError(null);
+    setFormError(null);
     try {
       await creditFinanceInvoice(home, editing.id);
       showNotice('Credit note issued.');
@@ -515,7 +608,7 @@ function InvoicesTab({ home, canEdit }) {
       closeModal();
       await load();
     } catch (e) {
-      setError(normalizeFinanceError(e.message));
+      setFormError(normalizeFinanceError(e.message));
     } finally {
       setSaving(false);
     }
@@ -547,16 +640,25 @@ function InvoicesTab({ home, canEdit }) {
   }
 
   async function handleExportInvoices() {
-    const { downloadXLSX } = await import('../lib/excel.js');
-    downloadXLSX('finance_invoices.xlsx', [{
-      name: 'Invoices',
-      headers: ['Invoice #', 'Payer', 'Type', 'Period Start', 'Period End', 'Total', 'Paid', 'Balance', 'Status', 'Due Date'],
-      rows: invoices.map(inv => [
-        inv.invoice_number, inv.payer_name, inv.payer_type,
-        inv.period_start || '', inv.period_end || '',
-        inv.total_amount, inv.amount_paid, inv.balance_due, inv.status, inv.due_date || '',
-      ]),
-    }]);
+    if (exporting || invoices.length === 0) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const { downloadXLSX } = await import('../lib/excel.js');
+      downloadXLSX('finance_invoices.xlsx', [{
+        name: 'Invoices',
+        headers: ['Invoice #', 'Payer', 'Type', 'Period Start', 'Period End', 'Total', 'Paid', 'Balance', 'Status', 'Due Date'],
+        rows: invoices.map(inv => [
+          inv.invoice_number, inv.payer_name, inv.payer_type,
+          inv.period_start || '', inv.period_end || '',
+          inv.total_amount, inv.amount_paid, inv.balance_due, inv.status, inv.due_date || '',
+        ]),
+      }]);
+    } catch (e) {
+      setError(normalizeFinanceError(e.message || 'Failed to export invoices.'));
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (loading) return <LoadingState message="Loading invoices..." card />;
@@ -587,8 +689,8 @@ function InvoicesTab({ home, canEdit }) {
         </select>
         <span className="text-sm text-gray-500">{total} invoice{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
-        <button onClick={handleExportInvoices} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        {canEdit && <button onClick={openCreate} className={BTN.primary}>New Invoice</button>}
+        <button type="button" onClick={handleExportInvoices} className={`${BTN.secondary} ${BTN.sm}`} disabled={invoices.length === 0 || exporting}>{exporting ? 'Exporting...' : 'Export Excel'}</button>
+        {canEdit && <button type="button" onClick={openCreate} className={BTN.primary}>New Invoice</button>}
       </div>
 
       <StickyTable className={CARD.flush}>
@@ -634,9 +736,14 @@ function InvoicesTab({ home, canEdit }) {
 
       {/* Invoice Modal */}
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? `Invoice ${editing.invoice_number || ''}` : 'New Invoice'} size="wide">
+            {formError && (
+              <InlineNotice variant="error" className="mb-4">
+                {formError}
+              </InlineNotice>
+            )}
             <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
               {[{ id: 'details', label: 'Details' }, { id: 'lines', label: 'Lines' }, ...(editing ? [{ id: 'payment', label: 'Payment' }] : [])].map(t => (
-                <button key={t.id} onClick={() => setModalTab(t.id)}
+                <button type="button" key={t.id} onClick={() => setModalTab(t.id)}
                   className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
                     modalTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}>{t.label}</button>
@@ -650,7 +757,7 @@ function InvoicesTab({ home, canEdit }) {
                     {PAYER_TYPES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select></div>
                 <div><label className={INPUT.label}>Payer Name *</label>
-                  <input value={form.payer_name || ''} onChange={e => set('payer_name', e.target.value)} className={INPUT.base} /></div>
+                  <input aria-label="Payer Name *" value={form.payer_name || ''} onChange={e => set('payer_name', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>Resident</label>
                   <select value={form.resident_id || ''} onChange={e => set('resident_id', e.target.value ? parseInt(e.target.value) : null)} className={INPUT.select}>
                     <option value="">None</option>
@@ -700,12 +807,12 @@ function InvoicesTab({ home, canEdit }) {
                       <div className="col-span-2"><label className={INPUT.label}>Amount</label>
                         <input type="number" step="0.01" inputMode="decimal" value={line.amount ?? ''} onChange={e => updateLine(idx, 'amount', e.target.value)} className={`${INPUT.sm} bg-gray-50`} readOnly /></div>
                       <div className="col-span-1">
-                        <button onClick={() => removeLine(idx)} className={`${BTN.ghost} ${BTN.xs} text-red-500`}>x</button>
+                        <button type="button" onClick={() => removeLine(idx)} className={`${BTN.ghost} ${BTN.xs} text-red-500`}>x</button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button onClick={addLine} className={`${BTN.secondary} ${BTN.sm} mt-3`}>+ Add Line</button>
+                <button type="button" onClick={addLine} className={`${BTN.secondary} ${BTN.sm} mt-3`}>+ Add Line</button>
                 <div className="mt-3 text-right text-sm font-medium text-gray-700">
                   Subtotal: {formatCurrency(lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0))}
                 </div>
@@ -735,19 +842,19 @@ function InvoicesTab({ home, canEdit }) {
                     <div className="col-span-2"><label className={INPUT.label}>Reference</label>
                       <input value={payForm.payment_reference} onChange={e => setPayForm(p => ({ ...p, payment_reference: e.target.value }))} className={INPUT.base} placeholder="Payment reference" /></div>
                     {canEdit && <div className="col-span-2">
-                      <button onClick={handlePayment} disabled={saving} className={BTN.success}>{saving ? 'Recording...' : 'Record Payment'}</button>
+                      <button type="button" onClick={handlePayment} disabled={saving} className={BTN.success}>{saving ? 'Recording...' : 'Record Payment'}</button>
                     </div>}
                   </div>
                 )}
                 {canEdit && editing.amount_paid <= 0 && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {['draft', 'sent', 'overdue'].includes(editing.status) && (
-                      <button onClick={handleVoidInvoice} disabled={saving} className={BTN.secondary}>
+                      <button type="button" onClick={handleVoidInvoice} disabled={saving} className={BTN.secondary}>
                         {saving ? 'Working...' : 'Void Invoice'}
                       </button>
                     )}
                     {['sent', 'overdue'].includes(editing.status) && (
-                      <button onClick={handleCreditInvoice} disabled={saving} className={BTN.secondary}>
+                      <button type="button" onClick={handleCreditInvoice} disabled={saving} className={BTN.secondary}>
                         {saving ? 'Working...' : 'Issue Credit Note'}
                       </button>
                     )}
@@ -757,8 +864,8 @@ function InvoicesTab({ home, canEdit }) {
             )}
 
             <div className={MODAL.footer}>
-              <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {canEdit && modalTab !== 'payment' && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Invoice'}</button>}
+              <button type="button" onClick={closeModal} className={BTN.secondary}>Cancel</button>
+              {canEdit && modalTab !== 'payment' && <button type="button" onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Invoice'}</button>}
             </div>
       </Modal>
     </>
