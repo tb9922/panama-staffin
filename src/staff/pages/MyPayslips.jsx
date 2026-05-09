@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BADGE, BTN } from '../../lib/design.js';
 import { downloadAuthenticatedFile, getMyPayslipDownloadUrl, getMyPayslips } from '../../lib/api.js';
 import LoadingState from '../../components/LoadingState.jsx';
@@ -16,8 +16,10 @@ export default function MyPayslips() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadingRunId, setDownloadingRunId] = useState(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -27,11 +29,27 @@ export default function MyPayslips() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  async function handleDownload(item) {
+    if (!staffId || downloadingRunId) return;
+    setDownloadError('');
+    setDownloadingRunId(item.runId);
+    try {
+      await downloadAuthenticatedFile(
+        getMyPayslipDownloadUrl(item.runId, staffId),
+        `payslip_${item.periodStart}.pdf`,
+      );
+    } catch (err) {
+      setDownloadError(err.message || 'Payslip download failed');
+    } finally {
+      setDownloadingRunId(null);
+    }
+  }
 
   if (loading) return <LoadingState message="Loading payslips..." className="p-6" />;
   if (error && rows.length === 0) return <div className="p-6"><ErrorState title="Unable to load payslips" message={error} onRetry={() => void load()} /></div>;
@@ -39,6 +57,7 @@ export default function MyPayslips() {
   return (
     <div className="space-y-6 p-6">
       {error && <ErrorState title="Some payslip data could not be loaded" message={error} onRetry={() => void load()} />}
+      {downloadError && <ErrorState title="Unable to download payslip" message={downloadError} />}
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-2xl font-bold text-slate-900">My Payslips</h2>
         <p className="mt-2 text-sm text-slate-600">Download your own payslip PDFs from approved payroll runs.</p>
@@ -62,9 +81,11 @@ export default function MyPayslips() {
               <button
                 type="button"
                 className={BTN.primary}
-                onClick={() => downloadAuthenticatedFile(getMyPayslipDownloadUrl(item.runId, staffId), `payslip_${item.periodStart}.pdf`)}
+                onClick={() => void handleDownload(item)}
+                disabled={downloadingRunId === item.runId || !staffId}
+                aria-label={`Download payslip ${item.periodStart} to ${item.periodEnd}`}
               >
-                Download PDF
+                {downloadingRunId === item.runId ? 'Downloading...' : 'Download PDF'}
               </button>
             </div>
           ))}
