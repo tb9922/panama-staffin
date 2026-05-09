@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { BADGE, BTN, CARD, INPUT, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
@@ -31,6 +31,7 @@ export default function Residents() {
   const [editResident, setEditResident] = useState(null);
   const [dischargeResident, setDischargeResident] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  const requestRef = useRef(0);
 
   const home = getCurrentHome();
   const { canWrite } = useData();
@@ -38,8 +39,16 @@ export default function Residents() {
   useDirtyGuard(showAdmit || !!editResident || !!dischargeResident);
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setLoading(false);
+      setResidents([]);
+      setTotal(0);
+      setBedsAvailable(null);
+      return;
+    }
+    const requestId = ++requestRef.current;
     setLoading(true);
+    setError(null);
     try {
       const filters = {};
       if (filterStatus) filters.status = filterStatus;
@@ -49,15 +58,25 @@ export default function Residents() {
         getResidentsWithBeds(home, filters),
         getBeds(home).catch(e => { console.warn('Failed to load beds:', e.message); return null; }),
       ]);
+      if (requestId !== requestRef.current) return;
       setResidents(data.rows || []);
       setTotal(data.total || 0);
       if (bedsData) {
         const beds = bedsData.beds || bedsData || [];
         setBedsAvailable(beds.filter(b => b.status === 'available').length);
+      } else {
+        setBedsAvailable(null);
       }
       setError(null);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
+    } catch (e) {
+      if (requestId !== requestRef.current) return;
+      setError(e.message);
+      setResidents([]);
+      setTotal(0);
+      setBedsAvailable(null);
+    } finally {
+      if (requestId === requestRef.current) setLoading(false);
+    }
   }, [home, filterStatus, filterFunding, searchQuery]);
 
   useEffect(() => { load(); }, [load]);
@@ -100,9 +119,13 @@ export default function Residents() {
           <p className="text-sm text-gray-500">Resident register and bed assignments</p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={() => setShowAdmit(true)}>Admit Resident</button>
+          <button type="button" className={BTN.primary} onClick={() => setShowAdmit(true)}>Admit Resident</button>
         )}
       </div>
+
+      {!home && (
+        <ErrorState title="No home selected" message="Select a home before opening the resident register." className="mb-4" />
+      )}
 
       {notice && (
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
@@ -114,10 +137,10 @@ export default function Residents() {
         <ErrorState title="Unable to load residents" message={error} onRetry={load} className="mb-4" />
       )}
 
-      <ResidentSummaryBar stats={stats} />
+      {home && <ResidentSummaryBar stats={stats} />}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center mb-4">
+      {home && <div className="flex flex-wrap gap-3 items-center mb-4">
         <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)} aria-label="Filter residents by status">
           <option value="">All Statuses</option>
           {RESIDENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -148,9 +171,9 @@ export default function Residents() {
           </button>
         </div>
         {total > 0 && <span className="text-sm text-gray-500">{total} resident{total !== 1 ? 's' : ''}</span>}
-      </div>
+      </div>}
 
-      {loading ? (
+      {!home ? null : loading ? (
         <LoadingState message="Loading resident register..." />
       ) : (
         <ResidentTable

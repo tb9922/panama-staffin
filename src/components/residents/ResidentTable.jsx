@@ -49,10 +49,10 @@ export default function ResidentTable({ residents, canEdit, onEdit, onDischarge,
         r.resident_name,
         r.bed?.room_number || (r.status === 'active' ? 'No bed' : ''),
         getLabel(r.funding_type, FUNDING_TYPES),
-        r.weekly_fee != null ? `£${parseFloat(r.weekly_fee).toFixed(2)}` : '',
+        r.weekly_fee != null ? formatCurrency(r.weekly_fee) : '',
         r.admission_date || '',
         r.next_fee_review || '',
-        r.outstanding_balance != null ? `£${parseFloat(r.outstanding_balance).toFixed(2)}` : '',
+        r.outstanding_balance != null ? formatCurrency(r.outstanding_balance) : '',
         r.last_payment_date || '',
         getLabel(r.status, RESIDENT_STATUSES),
       ]),
@@ -62,7 +62,7 @@ export default function ResidentTable({ residents, canEdit, onEdit, onDischarge,
   return (
     <>
       <div className="flex justify-end mb-2">
-        <button className={BTN.ghost + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
+        <button type="button" className={BTN.ghost + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
       </div>
       <div className={CARD.flush}>
         <table className={TABLE.table}>
@@ -114,7 +114,7 @@ export default function ResidentTable({ residents, canEdit, onEdit, onDischarge,
                 {canEdit && (
                   <td className={TABLE.td}>
                     {r.status === 'active' && (
-                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => onDischarge(r)}>Discharge</button>
+                      <button type="button" className={BTN.ghost + ' ' + BTN.xs} onClick={() => onDischarge(r)}>Discharge</button>
                     )}
                   </td>
                 )}

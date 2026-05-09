@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import Residents from '../Residents.jsx';
 
@@ -74,6 +75,7 @@ function renderViewer() {
 describe('Residents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCurrentHome.mockReturnValue('test-home');
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   });
 
@@ -98,6 +100,13 @@ describe('Residents', () => {
     await waitFor(() =>
       expect(screen.getByText('Forbidden')).toBeInTheDocument()
     );
+  });
+
+  it('shows a no-home state instead of loading forever', () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderWithProviders(<Residents />);
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.queryByText('Loading resident register...')).not.toBeInTheDocument();
   });
 
   it('renders resident names after load', async () => {
@@ -141,5 +150,25 @@ describe('Residents', () => {
       expect(screen.getByText('Mrs Joan Smith')).toBeInTheDocument()
     );
     warnSpy.mockRestore();
+  });
+
+  it('clears stale resident rows after a failed reload', async () => {
+    const user = userEvent.setup();
+    api.getResidentsWithBeds
+      .mockResolvedValueOnce(MOCK_RESIDENTS)
+      .mockRejectedValueOnce(new Error('Reload failed'));
+    api.getBeds.mockResolvedValue(MOCK_BEDS);
+
+    renderWithProviders(<Residents />);
+    await waitFor(() =>
+      expect(screen.getByText('Mrs Joan Smith')).toBeInTheDocument()
+    );
+
+    await user.selectOptions(screen.getByLabelText('Filter residents by funding type'), 'self_funded');
+
+    await waitFor(() =>
+      expect(screen.getByText('Reload failed')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Mrs Joan Smith')).not.toBeInTheDocument();
   });
 });
