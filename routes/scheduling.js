@@ -442,10 +442,12 @@ async function checkWTRBlockingForOverride(homeId, staffId, shift, config, effec
   const proposedActual = getActualShift(staff, targetDate, proposedOverrides, config?.cycle_start_date, config);
   const currentHours = getWorkedHoursForActual(staff, targetDate, currentActual, config);
   const proposedHours = getWorkedHoursForActual(staff, targetDate, proposedActual, config);
-  if (currentHours > 0 && proposedHours <= currentHours + 0.01) return null;
+  const isAdditionalWtrExposure = !(currentHours > 0 && proposedHours <= currentHours + 0.01);
 
-  const impact = checkWTRImpact(staff, effectiveDate, proposedOverrides, config, shift);
-  if (!impact.ok) return impact.message;
+  if (isAdditionalWtrExposure) {
+    const impact = checkWTRImpact(staff, effectiveDate, proposedOverrides, config, shift);
+    if (!impact.ok) return impact.message;
+  }
 
   const fatigue = checkFatigueImpact(staff, effectiveDate, proposedOverrides, config, shift);
   if (fatigue.exceeded) {

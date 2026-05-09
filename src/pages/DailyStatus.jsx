@@ -49,10 +49,17 @@ function getShiftEditReason(shift) {
   return 'Manual shift edit';
 }
 
+function isValidDateParam(value) {
+  if (!value) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return formatDate(parseDate(value)) === value;
+}
+
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
   const navigate = useNavigate();
-  const currentDate = useMemo(() => dateParam ? parseDate(dateParam) : new Date(), [dateParam]);
+  const invalidDateParam = Boolean(dateParam && !isValidDateParam(dateParam));
+  const currentDate = useMemo(() => invalidDateParam ? new Date() : dateParam ? parseDate(dateParam) : new Date(), [dateParam, invalidDateParam]);
   const dateStr = formatDate(currentDate);
 
   const [schedData, setSchedData] = useState(null);
@@ -91,6 +98,10 @@ export default function DailyStatus() {
   const goDay = useCallback((offset) => {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
   }, [currentDate, navigate]);
+
+  useEffect(() => {
+    if (invalidDateParam) navigate(`/day/${todayLocalISO()}`, { replace: true });
+  }, [invalidDateParam, navigate]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -580,7 +591,7 @@ export default function DailyStatus() {
       <td className={`${TABLE.td} text-xs text-[var(--ink-3)]`}>{s.reason || ''}</td>
       <td className={TABLE.td}>
         {canEdit && s.isOverride && (
-          <button onClick={() => withLockCheck(() => removeOverride(s.id))} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-[var(--alert)] hover:bg-[var(--alert-soft)] disabled:opacity-50`}>Revert</button>
+          <button type="button" onClick={() => withLockCheck(() => removeOverride(s.id))} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-[var(--alert)] hover:bg-[var(--alert-soft)] disabled:opacity-50`}>Revert</button>
         )}
       </td>
     </tr>
@@ -665,7 +676,7 @@ export default function DailyStatus() {
       {/* Date Navigation */}
       <div className="mb-5 flex flex-col gap-3 print:hidden lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <button onClick={() => goDay(-1)} className={`${BTN.secondary} ${BTN.sm}`}>&larr;</button>
+          <button type="button" onClick={() => goDay(-1)} className={`${BTN.secondary} ${BTN.sm}`} aria-label="Previous day">&larr;</button>
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Daily Status</p>
           <h1 className={`${PAGE.title} leading-tight`}>
@@ -679,12 +690,12 @@ export default function DailyStatus() {
             )}
           </h1>
           </div>
-          <button onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
+          <button type="button" onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`} aria-label="Next day">&rarr;</button>
           {saving && <span className="text-xs font-medium text-[var(--info)]">Saving...</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
-          <button onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-[var(--info)]`}>Today</button>
+          <button type="button" onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
+          <button type="button" onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-[var(--info)]`}>Today</button>
         </div>
       </div>
 
@@ -706,6 +717,7 @@ export default function DailyStatus() {
             type="password"
             inputMode="numeric"
             maxLength={6}
+            aria-label="Past-date edit PIN"
             value={lockPin}
             onChange={e => updateLockPin(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
@@ -713,8 +725,8 @@ export default function DailyStatus() {
             className={`${INPUT.sm} w-20`}
             autoFocus
           />
-          <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
-          <button onClick={dismissLockPrompt} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
+          <button type="button" onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
+          <button type="button" onClick={dismissLockPrompt} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
           {lockError && <span className="text-xs text-[var(--alert)]">{lockError}</span>}
         </div>
       )}
@@ -779,6 +791,7 @@ export default function DailyStatus() {
               </span>
             </div>
             <textarea
+              aria-label="Operational day notes"
               value={schedData.day_notes?.[dateStr] || ''}
               readOnly={isLocked || !canEditDayNotes}
               onChange={e => {

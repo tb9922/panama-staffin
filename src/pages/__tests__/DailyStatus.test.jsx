@@ -135,11 +135,24 @@ describe('DailyStatus', () => {
     await waitFor(() => {
       expect(screen.getByText(/Coverage/i)).toBeInTheDocument();
     });
-    // Arrow buttons for day navigation
-    const prevBtn = screen.getByRole('button', { name: /←/i });
-    const nextBtn = screen.getByRole('button', { name: /→/i });
+    const prevBtn = screen.getByRole('button', { name: 'Previous day' });
+    const nextBtn = screen.getByRole('button', { name: 'Next day' });
     expect(prevBtn).toBeInTheDocument();
     expect(nextBtn).toBeInTheDocument();
+  });
+
+  it('normalises invalid date route parameters before loading scheduling data', async () => {
+    renderWithProviders(<DailyStatus />, {
+      route: '/day/not-a-date',
+      path: '/day/:date',
+      user: { username: 'admin', role: 'admin' },
+    });
+    await waitFor(() => {
+      expect(api.getSchedulingData).toHaveBeenCalled();
+    });
+    const [, range] = api.getSchedulingData.mock.calls[0];
+    expect(range.from).not.toContain('NaN');
+    expect(range.to).not.toContain('NaN');
   });
 
   it('renders Today navigation button', async () => {

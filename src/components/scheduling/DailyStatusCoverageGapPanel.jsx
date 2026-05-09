@@ -32,6 +32,7 @@ function RankedRow({ staff, secondary, fatigue, scored, shortPeriods, label, per
         </span>
         {shortPeriods.map(period => (
           <button
+            type="button"
             key={period}
             onClick={() => onAssign(period)}
             disabled={saving}
@@ -91,7 +92,7 @@ export default function DailyStatusCoverageGapPanel({
     <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 print:hidden">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-amber-800">Coverage Gap - action needed</h3>
-        <button onClick={onDismiss} className={`${BTN.ghost} ${BTN.xs} text-gray-400`}>Dismiss</button>
+        <button type="button" onClick={onDismiss} className={`${BTN.ghost} ${BTN.xs} text-gray-400`}>Dismiss</button>
       </div>
       <p className="text-xs text-amber-700 mb-3">
         {shortPeriods.length > 0
@@ -148,7 +149,7 @@ export default function DailyStatusCoverageGapPanel({
       </div>
       <div>
         <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">3 - Book Agency</div>
-        <button onClick={onOpenAgencyBooking} className={`${BTN.danger} ${BTN.xs}`}>Open Agency Booking</button>
+        <button type="button" onClick={onOpenAgencyBooking} className={`${BTN.danger} ${BTN.xs}`}>Open Agency Booking</button>
       </div>
     </div>
   );
