@@ -55,7 +55,7 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
   }
 
   return (
-    <Modal isOpen onClose={onClose} title={`Discharge — ${resident.resident_name}`} size="sm">
+    <Modal isOpen onClose={onClose} title={`Discharge - ${resident.resident_name}`} size="sm">
       {error && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>}
 
       {hasBed && (
