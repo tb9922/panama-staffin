@@ -131,6 +131,18 @@ describe('action items API', () => {
       .expect(200);
 
     expect(verified.body.status).toBe('verified');
+
+    await request(app)
+      .delete(`/api/action-items/${created.body.id}?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ _version: verified.body.version - 1 })
+      .expect(409);
+
+    await request(app)
+      .delete(`/api/action-items/${created.body.id}?home=${HOME_A}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ _version: verified.body.version })
+      .expect(200);
   });
 
   it('enforces tenant isolation through home access', async () => {

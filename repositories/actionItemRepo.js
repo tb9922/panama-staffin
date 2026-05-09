@@ -417,19 +417,24 @@ export async function verify(id, homeId, userId, version = null, client = pool) 
   return shapeRow(rows[0]);
 }
 
-export async function softDelete(id, homeId, updatedBy = null, client = pool) {
-  const { rows, rowCount } = await client.query(
-    `UPDATE action_items
-        SET deleted_at = NOW(),
-            updated_at = NOW(),
-            updated_by = $3,
-            version = version + 1
-      WHERE id = $1
-        AND home_id = $2
-        AND deleted_at IS NULL
-      RETURNING ${COLS}`,
-    [id, homeId, updatedBy]
-  );
+export async function softDelete(id, homeId, updatedBy = null, version = null, client = pool) {
+  const params = [id, homeId, updatedBy];
+  let sql = `
+    UPDATE action_items
+       SET deleted_at = NOW(),
+           updated_at = NOW(),
+           updated_by = $3,
+           version = version + 1
+     WHERE id = $1
+       AND home_id = $2
+       AND deleted_at IS NULL
+  `;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  sql += ` RETURNING ${COLS}`;
+  const { rows, rowCount } = await client.query(sql, params);
   return rowCount > 0 ? shapeRow(rows[0]) : null;
 }
 

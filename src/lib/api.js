@@ -692,9 +692,11 @@ export async function verifyActionItem(homeSlug, id, data = {}) {
   });
 }
 
-export async function deleteActionItem(homeSlug, id) {
+export async function deleteActionItem(homeSlug, id, version = undefined) {
   return apiFetch(`${API_BASE}/action-items/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
-    method: 'DELETE', headers: authHeaders(),
+    method: 'DELETE',
+    headers: authHeaders(),
+    ...(version === undefined ? {} : { body: JSON.stringify({ _version: version }) }),
   });
 }
 

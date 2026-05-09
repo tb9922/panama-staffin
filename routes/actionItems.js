@@ -51,6 +51,10 @@ const completeSchema = z.object({
   evidence_notes: optionalText(5000),
 });
 
+const deleteSchema = z.object({
+  _version: z.number().int().nonnegative().optional(),
+});
+
 const listFilterSchema = paginationSchema.extend({
   status: z.enum(ACTION_ITEM_STATUSES).optional(),
   source_type: z.enum(ACTION_ITEM_SOURCE_TYPES).optional(),
@@ -265,9 +269,13 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const deleted = await actionItemRepo.softDelete(idParsed.data, req.home.id, actorId(req));
-    if (!deleted) return res.status(404).json({ error: 'Action item not found' });
-    await auditService.log('action_item_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    const parsed = deleteSchema.safeParse(req.body || {});
+    if (!parsed.success) return zodError(res, parsed);
+    const existing = await actionItemRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Action item not found' });
+    const deleted = await actionItemRepo.softDelete(idParsed.data, req.home.id, actorId(req), parsed.data._version);
+    if (!deleted) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    await auditService.log('action_item_delete', req.home.slug, req.user.username, { id: idParsed.data, title: existing.title, status: existing.status });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

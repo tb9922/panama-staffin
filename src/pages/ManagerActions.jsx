@@ -68,6 +68,28 @@ function hasEvidenceNotes(item) {
 
 const titleCase = value => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+function hasOwner(form) {
+  return Boolean(String(form.owner_name || '').trim() || String(form.owner_role || '').trim());
+}
+
+function isActionFormInvalid(form) {
+  return !String(form.title || '').trim() || !form.due_date || !hasOwner(form);
+}
+
+function actionPayload(form) {
+  return {
+    ...form,
+    title: form.title.trim(),
+    source_id: form.source_id?.trim() || null,
+    source_action_key: form.source_action_key?.trim() || null,
+    description: form.description?.trim() || null,
+    owner_name: form.owner_name?.trim() || null,
+    owner_role: form.owner_role?.trim() || null,
+    evidence_notes: form.evidence_notes?.trim() || null,
+    _version: form._version,
+  };
+}
+
 function badgeForPriority(priority) {
   if (priority === 'critical') return BADGE.red;
   if (priority === 'high') return BADGE.orange;
@@ -130,7 +152,11 @@ function ActionItemModal({ isOpen, item, form, setForm, saveError, onClose, onSa
         <div>
           <label htmlFor={statusId} className={INPUT.label}>Status</label>
           <select id={statusId} className={INPUT.select} value={form.status} onChange={e => setField('status', e.target.value)} disabled={!canEdit}>
-            {ACTION_ITEM_STATUSES.map(status => <option key={status} value={status}>{titleCase(status)}</option>)}
+            {ACTION_ITEM_STATUSES.map(status => (
+              <option key={status} value={status} disabled={['completed', 'verified'].includes(status) && form.status !== status}>
+                {titleCase(status)}
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -178,7 +204,7 @@ function ActionItemModal({ isOpen, item, form, setForm, saveError, onClose, onSa
           </button>
         )}
         <button type="button" className={BTN.secondary} onClick={onClose}>Close</button>
-        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={!form.title || !form.due_date}>Save</button>}
+        {canEdit && <button type="button" className={BTN.primary} onClick={onSave} disabled={isActionFormInvalid(form)}>Save</button>}
       </div>
     </Modal>
   );
@@ -186,11 +212,12 @@ function ActionItemModal({ isOpen, item, form, setForm, saveError, onClose, onSa
 
 export default function ManagerActions() {
   const [searchParams] = useSearchParams();
-  const { canWrite } = useData();
+  const { activeHome, canWrite } = useData();
   const canEdit = canWrite('governance');
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { confirm, ConfirmDialog } = useConfirm();
   const [items, setItems] = useState([]);
+  const [allItems, setAllItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -205,16 +232,42 @@ export default function ManagerActions() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  useDirtyGuard(modalOpen);
+  const [formBaseline, setFormBaseline] = useState(null);
+  const isDirty = modalOpen && formBaseline != null && JSON.stringify(form) !== JSON.stringify(formBaseline);
+  useDirtyGuard(isDirty);
 
-  const home = getCurrentHome();
+  const home = activeHome || getCurrentHome();
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setItems([]);
+      setAllItems([]);
+      setTotal(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const result = await getActionItems(home, { ...filters, limit: PAGE_SIZE, offset });
+      const [result, allResult] = await Promise.all([
+        getActionItems(home, { ...filters, limit: PAGE_SIZE, offset }),
+        (async () => {
+          const collected = [];
+          let allOffset = 0;
+          let totalRows = Infinity;
+          while (collected.length < totalRows) {
+            const page = await getActionItems(home, { ...filters, limit: 500, offset: allOffset });
+            const rows = Array.isArray(page?.actionItems) ? page.actionItems : [];
+            collected.push(...rows);
+            totalRows = page?._total ?? collected.length;
+            if (rows.length === 0) break;
+            allOffset += rows.length;
+          }
+          return collected;
+        })(),
+      ]);
       setItems(Array.isArray(result.actionItems) ? result.actionItems : []);
+      setAllItems(allResult);
       setTotal(result._total || 0);
       setError(null);
     } catch (e) {
@@ -227,23 +280,26 @@ export default function ManagerActions() {
   useEffect(() => { load(); }, [load]);
 
   const stats = useMemo(() => {
-    const open = items.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status)).length;
-    const overdue = items.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status) && item.due_date && item.due_date < new Date().toISOString().slice(0, 10)).length;
-    const escalated = items.filter(item => (item.escalation_level || 0) >= 3).length;
-    const completed = items.filter(item => ['completed', 'verified'].includes(item.status)).length;
+    const source = allItems;
+    const open = source.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status)).length;
+    const overdue = source.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status) && item.due_date && item.due_date < new Date().toISOString().slice(0, 10)).length;
+    const escalated = source.filter(item => (item.escalation_level || 0) >= 3).length;
+    const completed = source.filter(item => ['completed', 'verified'].includes(item.status)).length;
     return { open, overdue, escalated, completed };
-  }, [items]);
+  }, [allItems]);
 
   function openAdd() {
     setEditing(null);
-    setForm({ ...EMPTY_FORM });
+    const nextForm = { ...EMPTY_FORM };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
   function openEdit(item) {
     setEditing(item);
-    setForm({
+    const nextForm = {
       ...EMPTY_FORM,
       ...item,
       source_id: item.source_id || '',
@@ -254,22 +310,29 @@ export default function ManagerActions() {
       evidence_notes: item.evidence_notes || '',
       evidence_required: Boolean(item.evidence_required),
       _version: item.version,
-    });
+    };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
     setSaveError(null);
     setModalOpen(true);
   }
 
+  function closeModal() {
+    setModalOpen(false);
+    setFormBaseline(null);
+    setSaveError(null);
+  }
+
   async function handleSave() {
-    const payload = {
-      ...form,
-      source_id: form.source_id || null,
-      source_action_key: form.source_action_key || null,
-      description: form.description || null,
-      owner_name: form.owner_name || null,
-      owner_role: form.owner_role || null,
-      evidence_notes: form.evidence_notes || null,
-      _version: form._version,
-    };
+    if (!home) {
+      setSaveError('Select a home before saving.');
+      return;
+    }
+    if (isActionFormInvalid(form)) {
+      setSaveError('Title, due date and an owner are required.');
+      return;
+    }
+    const payload = actionPayload(form);
     try {
       if (editing) {
         await updateActionItem(home, editing.id, payload);
@@ -278,7 +341,7 @@ export default function ManagerActions() {
         await createActionItem(home, payload);
         showNotice('Action created.');
       }
-      setModalOpen(false);
+      closeModal();
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to save action');
@@ -289,8 +352,8 @@ export default function ManagerActions() {
     if (!editing) return;
     if (!await confirm('Delete this manager action?')) return;
     try {
-      await deleteActionItem(home, editing.id);
-      setModalOpen(false);
+      await deleteActionItem(home, editing.id, editing.version);
+      closeModal();
       showNotice('Action deleted.', { variant: 'warning' });
       await load();
     } catch (e) {
@@ -336,6 +399,17 @@ export default function ManagerActions() {
   const showingStart = items.length === 0 ? 0 : offset + 1;
   const showingEnd = offset + items.length;
 
+  if (!home && !loading) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No home selected"
+          description="Select a home before opening manager actions."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={PAGE.container}>
       <div className={PAGE.header}>
@@ -343,7 +417,10 @@ export default function ManagerActions() {
           <h1 className={PAGE.title}>Manager Actions</h1>
           <p className={PAGE.subtitle}>Owners, deadlines, escalation and verification across the home.</p>
         </div>
-        {canEdit && <button type="button" className={BTN.primary} onClick={openAdd}>New Action</button>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={BTN.secondary} onClick={load}>Refresh</button>
+          {canEdit && <button type="button" className={BTN.primary} onClick={openAdd}>New Action</button>}
+        </div>
       </div>
 
       {notice && <InlineNotice variant={notice.variant || 'success'} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
@@ -443,7 +520,7 @@ export default function ManagerActions() {
         form={form}
         setForm={setForm}
         saveError={saveError}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         onSave={handleSave}
         onDelete={handleDelete}
         canEdit={canEdit}
