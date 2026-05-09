@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BADGE, BTN, CARD, PAGE, TABLE } from '../lib/design.js';
 import {
@@ -102,7 +102,9 @@ function toBedForm(bed) {
 export default function BedManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
+  const home = getCurrentHome();
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestRef = useRef(0);
   const [beds, setBeds] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -150,36 +152,51 @@ export default function BedManager() {
   }, [searchParams]);
 
   const load = useCallback(async () => {
+    if (!home) {
+      setLoading(false);
+      setError(null);
+      setBeds([]);
+      setSummary(null);
+      return;
+    }
+    const requestId = ++requestRef.current;
+    setLoading(true);
     try {
       setError(null);
-      const home = getCurrentHome();
       const [bedsResult, summaryResult] = await Promise.all([
         getBeds(home),
         getBedSummary(home),
       ]);
+      if (requestId !== requestRef.current) return;
       setBeds(bedsResult.beds || bedsResult || []);
       setSummary(summaryResult);
     } catch (err) {
+      if (requestId !== requestRef.current) return;
       setError(err.message);
+      setBeds([]);
+      setSummary(null);
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
-  }, []);
+  }, [home]);
 
   useEffect(() => { load(); }, [load]);
 
   // Load residents when we might need the picker
   const loadResidents = useCallback(async () => {
+    if (!home) {
+      setResidents([]);
+      return;
+    }
     try {
-      const home = getCurrentHome();
       const result = await getFinanceResidents(home, { status: 'active' });
       setResidents(result.rows || result || []);
     } catch { /* non-critical */ }
-  }, []);
+  }, [home]);
 
   useEffect(() => {
-    if (requestedResidentId) loadResidents();
-  }, [requestedResidentId, loadResidents]);
+    if (requestedResidentId && home) loadResidents();
+  }, [requestedResidentId, home, loadResidents]);
 
   const requestedResident = useMemo(
     () => residents.find(r => r.id === requestedResidentId) || null,
@@ -203,13 +220,13 @@ export default function BedManager() {
   );
 
   // Occupancy stats
-  const occupancyPct = summary?.occupancy_rate ?? (beds.length
+  const occupancyPct = summary?.occupancyRate ?? summary?.occupancy_rate ?? (beds.length
     ? Math.round((beds.filter(b => b.status === 'occupied' || b.status === 'hospital_hold').length / beds.length) * 100)
     : 0);
-  const totalBeds = summary?.total_beds ?? beds.length;
+  const totalBeds = summary?.total ?? summary?.total_beds ?? beds.length;
   const occupiedCount = summary?.occupied ?? beds.filter(b => b.status === 'occupied').length;
   const availableCount = summary?.available ?? beds.filter(b => b.status === 'available').length;
-  const vacancyCostPerWeek = summary?.vacancy_cost_per_week ?? null;
+  const vacancyCostPerWeek = summary?.vacancyCostPerWeek ?? summary?.vacancy_cost_per_week ?? null;
 
   const occupancyColor = occupancyPct >= 90 ? 'green' : occupancyPct >= 80 ? 'amber' : 'red';
 
@@ -217,9 +234,9 @@ export default function BedManager() {
 
   async function handleAddBed(e) {
     e.preventDefault();
+    if (!home) return;
     setSubmitting(true);
     try {
-      const home = getCurrentHome();
       await createBed(home, addForm);
       setShowAddModal(false);
       setAddForm({ ...EMPTY_BED_FORM });
@@ -241,9 +258,9 @@ export default function BedManager() {
   async function handleEditBed(e) {
     e.preventDefault();
     if (!editBed) return;
+    if (!home) return;
     setSubmitting(true);
     try {
-      const home = getCurrentHome();
       await updateBedApi(home, editBed.id, {
         ...editForm,
         clientUpdatedAt: editBed.updated_at,
@@ -283,9 +300,9 @@ export default function BedManager() {
 
   async function handleTransition(e) {
     e.preventDefault();
+    if (!home) return;
     setSubmitting(true);
     try {
-      const home = getCurrentHome();
       const data = { status: transitionTarget, clientUpdatedAt: transitionBed.updated_at, ...transitionMeta };
       if (transitionBed.status === 'available' && transitionTarget === 'occupied') data.skipReservation = true;
       await transitionBedStatus(home, transitionBed.id, data);
@@ -317,6 +334,7 @@ export default function BedManager() {
 
   async function handleMove(e) {
     e.preventDefault();
+    if (!home) return;
     if (!moveTargetId) return;
     const targetBed = beds.find(bed => String(bed.id) === String(moveTargetId));
     if (!targetBed) {
@@ -325,7 +343,6 @@ export default function BedManager() {
     }
     setSubmitting(true);
     try {
-      const home = getCurrentHome();
       await moveBedResident(home, moveBed.id, moveTargetId, moveBed.updated_at, targetBed.updated_at);
       setShowMoveModal(false);
       setMoveBed(null);
@@ -342,8 +359,8 @@ export default function BedManager() {
     setHistoryBed(bed);
     setHistory([]);
     setShowHistoryModal(true);
+    if (!home) return;
     try {
-      const home = getCurrentHome();
       const result = await getBedHistory(home, bed.id);
       setHistory(result.transitions || result.history || []);
     } catch (err) {
@@ -360,9 +377,9 @@ export default function BedManager() {
   async function handleRevert(e) {
     e.preventDefault();
     if (!revertReason.trim()) return;
+    if (!home) return;
     setSubmitting(true);
     try {
-      const home = getCurrentHome();
       await revertBedTransition(home, revertBed.id, revertReason);
       setShowRevertModal(false);
       setRevertBed(null);
@@ -382,9 +399,9 @@ export default function BedManager() {
 
   async function handleDeleteBed() {
     if (!deleteTarget) return;
+    if (!home) return;
     setSubmitting(true);
     try {
-      const home = getCurrentHome();
       await deleteBedApi(home, deleteTarget.id, deleteTarget.updated_at);
       setShowDeleteModal(false);
       setDeleteTarget(null);
@@ -415,12 +432,16 @@ export default function BedManager() {
     <div className={PAGE.container}>
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>Beds &amp; Occupancy</h1>
-        {canEdit && (
-          <button className={BTN.primary} onClick={() => setShowAddModal(true)}>
+        {canEdit && home && (
+          <button type="button" className={BTN.primary} onClick={() => setShowAddModal(true)}>
             Add Bed
           </button>
         )}
       </div>
+
+      {!home && (
+        <ErrorState title="No home selected" message="Select a home before opening Bed Manager." className="mb-4" />
+      )}
 
       {notice && (
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
@@ -434,14 +455,14 @@ export default function BedManager() {
         </InlineNotice>
       )}
 
-      {requestedResident && (
+      {home && requestedResident && (
         <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           <span className="font-medium">Assign a bed for {requestedResident.resident_name || requestedResident.name}</span>
           <span className="ml-2 text-blue-700">Select an available bed and choose Admit to continue.</span>
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {home && <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className={CARD.padded}>
           <p className="text-xs font-medium uppercase text-gray-500">Occupancy</p>
           <p className={`text-2xl font-bold ${occupancyColor === 'green' ? 'text-emerald-700' : occupancyColor === 'amber' ? 'text-amber-700' : 'text-red-700'}`}>
@@ -467,9 +488,9 @@ export default function BedManager() {
             )}
           </p>
         </div>
-      </div>
+      </div>}
 
-      {beds.length === 0 ? (
+      {!home ? null : beds.length === 0 ? (
         <div className={CARD.padded}>
           <EmptyState
             title="No beds configured yet."
@@ -510,11 +531,12 @@ export default function BedManager() {
                     <td className={TABLE.td}>{bed.status_since || '--'}</td>
                     <td className={TABLE.td}>
                       <div className="flex flex-wrap gap-1">
-                        <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openHistory(bed)}>
+                        <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openHistory(bed)}>
                           History
                         </button>
                         {canEdit && (
                           <button
+                            type="button"
                             className={`${BTN.ghost} ${BTN.xs}`}
                             aria-label={`Edit bed ${bed.room_number}`}
                             onClick={() => openEdit(bed)}
@@ -525,6 +547,7 @@ export default function BedManager() {
                         {canEdit && (TRANSITIONS[bed.status] || []).map(target => (
                           <button
                             key={target}
+                            type="button"
                             className={`${BTN.secondary} ${BTN.xs}`}
                             onClick={() => openTransition(bed, target)}
                           >
@@ -532,12 +555,13 @@ export default function BedManager() {
                           </button>
                         ))}
                         {canEdit && bed.status === 'occupied' && (
-                          <button className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openMove(bed)}>
+                          <button type="button" className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openMove(bed)}>
                             Move
                           </button>
                         )}
                         {canEdit && bed.status === 'available' && (
                           <button
+                            type="button"
                             className={`${BTN.ghost} ${BTN.xs}`}
                             aria-label={`Delete bed ${bed.room_number}`}
                             onClick={() => openDelete(bed)}
@@ -546,7 +570,7 @@ export default function BedManager() {
                           </button>
                         )}
                         {canEdit && (
-                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openRevert(bed)}>
+                          <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openRevert(bed)}>
                             Revert
                           </button>
                         )}

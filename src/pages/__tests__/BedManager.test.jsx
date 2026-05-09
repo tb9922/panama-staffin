@@ -94,6 +94,14 @@ describe('BedManager', () => {
     await waitFor(() => expect(screen.getByText('Beds & Occupancy')).toBeInTheDocument());
   });
 
+  it('shows a no-home state instead of exposing bed controls', async () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderWithProviders(<BedManager />);
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^add bed$/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getBeds).not.toHaveBeenCalled());
+  });
+
   it('shows occupancy KPI cards', async () => {
     renderWithProviders(<BedManager />);
     await waitFor(() => expect(screen.getByText('Occupancy')).toBeInTheDocument());
@@ -103,6 +111,21 @@ describe('BedManager', () => {
     expect(screen.getAllByText('Available').length).toBeGreaterThan(0);
     // Occupancy rate from summary
     expect(screen.getByText('67%')).toBeInTheDocument();
+  });
+
+  it('uses camelCase occupancy summary fields returned by the API', async () => {
+    api.getBedSummary.mockResolvedValue({
+      total: 5,
+      occupied: 1,
+      available: 4,
+      occupancyRate: 20,
+      vacancyCostPerWeek: 350,
+    });
+    renderWithProviders(<BedManager />);
+    await waitFor(() => expect(screen.getByText('20%')).toBeInTheDocument());
+    expect(screen.getByText('Total Beds')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText(/£350\.00\/wk/)).toBeInTheDocument();
   });
 
   it('renders beds table with room numbers and status', async () => {

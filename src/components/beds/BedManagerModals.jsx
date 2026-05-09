@@ -282,7 +282,7 @@ export default function BedManagerModals({
           </div>
         )}
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setShowHistoryModal(false)}>Close</button>
+          <button type="button" className={BTN.secondary} onClick={() => setShowHistoryModal(false)}>Close</button>
         </div>
       </Modal>
 
