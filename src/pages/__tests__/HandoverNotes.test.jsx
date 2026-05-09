@@ -109,6 +109,32 @@ describe('HandoverNotes', () => {
     await waitFor(() => expect(screen.getByText('Handover Book')).toBeInTheDocument());
   });
 
+  it('shows a no-home state without calling handover APIs', () => {
+    api.getCurrentHome.mockReturnValue('');
+
+    renderWithProviders(<HandoverNotes />);
+
+    expect(screen.getByText('Handover Book is not ready yet')).toBeInTheDocument();
+    expect(api.getHandoverEntries).not.toHaveBeenCalled();
+    expect(api.getHandoverEntriesByRange).not.toHaveBeenCalled();
+    expect(api.getIncidents).not.toHaveBeenCalled();
+  });
+
+  it('retries the handover load after an error', async () => {
+    const user = userEvent.setup();
+    api.getHandoverEntries
+      .mockRejectedValueOnce(new Error('Network down'))
+      .mockResolvedValueOnce(MOCK_ENTRIES);
+
+    renderWithProviders(<HandoverNotes />);
+
+    await waitFor(() => expect(screen.getByText('Network down')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.getByText(/resident in room 5 had a fall/i)).toBeInTheDocument());
+    expect(api.getHandoverEntries).toHaveBeenCalledTimes(2);
+  });
+
   it('shows all handover shift sections including early + late', async () => {
     renderWithProviders(<HandoverNotes />);
     await waitFor(() => expect(screen.getAllByText('Early Shift').length).toBeGreaterThan(0));
@@ -174,10 +200,14 @@ describe('HandoverNotes', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: /add entry/i }).length).toBeGreaterThan(0));
     await user.click(screen.getAllByRole('button', { name: /add entry/i })[0]);
     const dialog = screen.getByRole('dialog');
-    const categorySelect = within(dialog).getAllByRole('combobox')[1];
+    const categorySelect = within(dialog).getByLabelText(/category/i);
     expect(categorySelect).toHaveValue('operational');
+    expect(within(categorySelect).queryByRole('option', { name: 'Clinical' })).not.toBeInTheDocument();
+    expect(within(categorySelect).queryByRole('option', { name: 'Safety' })).not.toBeInTheDocument();
+    expect(within(categorySelect).getByRole('option', { name: 'Operational' })).toBeInTheDocument();
+    expect(within(categorySelect).getByRole('option', { name: 'Admin' })).toBeInTheDocument();
     await user.type(
-      within(dialog).getByPlaceholderText('Describe the situation, actions taken, or information to hand over'),
+      within(dialog).getByLabelText(/content/i),
       'Operational handover from scheduling coordinator.'
     );
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
