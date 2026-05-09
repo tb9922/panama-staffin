@@ -16,6 +16,8 @@ vi.mock('../../lib/api.js', async () => {
     getCurrentHome: vi.fn(() => 'test-home'),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
     getSchedulingData: vi.fn(),
+    getSnapshots: vi.fn(() => Promise.resolve([])),
+    getSnapshot: vi.fn(),
     logReportDownload: vi.fn(),
   };
 });
@@ -66,7 +68,9 @@ function renderViewer() {
 describe('Reports', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCurrentHome.mockReturnValue('test-home');
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+    api.getSnapshots.mockResolvedValue([]);
   });
 
   it('smoke test — renders without crashing', async () => {
@@ -91,6 +95,13 @@ describe('Reports', () => {
       expect(screen.getByText('Data unavailable')).toBeInTheDocument()
     );
     expect(screen.queryByText('PDF Reports')).not.toBeInTheDocument();
+  });
+
+  it('shows a no-home state instead of loading forever', () => {
+    api.getCurrentHome.mockReturnValue('');
+    renderWithProviders(<Reports />, { user: { username: 'admin', role: 'admin' } });
+    expect(screen.getByText('No home selected')).toBeInTheDocument();
+    expect(screen.queryByText('Loading report data...')).not.toBeInTheDocument();
   });
 
   it('admin sees all five report type cards', async () => {
@@ -136,6 +147,7 @@ describe('Reports', () => {
     // "Week starting (Monday)" label appears for both Weekly Roster and Coverage reports
     const weekLabels = screen.getAllByText('Week starting (Monday)');
     expect(weekLabels.length).toBe(2);
+    expect(screen.getAllByLabelText('Week starting (Monday)')).toHaveLength(2);
   });
 
   it('month input is shown for cost report', async () => {
@@ -144,9 +156,22 @@ describe('Reports', () => {
       expect(screen.getByText('PDF Reports')).toBeInTheDocument()
     );
     expect(screen.getByText('Month')).toBeInTheDocument();
-    // month input type
-    const monthInput = document.querySelector('input[type="month"]');
-    expect(monthInput).toBeTruthy();
+    expect(screen.getByLabelText('Month')).toHaveAttribute('type', 'month');
+  });
+
+  it('disables date-based downloads when the date is cleared', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('PDF Reports')).toBeInTheDocument()
+    );
+
+    const weekInputs = screen.getAllByLabelText('Week starting (Monday)');
+    await user.clear(weekInputs[0]);
+
+    const downloadBtns = screen.getAllByRole('button', { name: 'Download PDF' });
+    expect(downloadBtns[0]).toBeDisabled();
+    expect(downloadBtns[2]).toBeDisabled();
   });
 
   it('clicking Download PDF for roster calls generateRosterPDF', async () => {

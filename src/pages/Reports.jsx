@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { getDateRange } from '../lib/cqc.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
@@ -18,13 +18,14 @@ export default function Reports() {
 
   useEffect(() => {
     if (!homeSlug) return;
-    // Cost report may need a full month of overrides; default ±90 day window is sufficient
+    // Cost report may need a full month of overrides; default +/-90 day window is sufficient
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, [homeSlug]);
 
+  if (!homeSlug) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="No home selected" message="Select a home before generating reports." /></div>;
   if (loading) return <LoadingState message="Loading report data..." className="px-6 py-6" />;
   if (error || !schedData) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="Unable to load report data" message={error || 'Failed to load scheduling data'} /></div>;
 
@@ -34,6 +35,10 @@ export default function Reports() {
 function ReportsInner({ data }) {
   const { canWrite } = useData();
   const canEdit = canWrite('reports');
+  const weekDateId = useId();
+  const costMonthId = useId();
+  const boardDaysId = useId();
+  const snapshotId = useId();
   const [generating, setGenerating] = useState(null);
   const [genError, setGenError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
@@ -46,10 +51,22 @@ function ReportsInner({ data }) {
   const homeSlug = getCurrentHome();
   useEffect(() => {
     if (!homeSlug) return;
-    getSnapshots(homeSlug, 'cqc').then(setCqcSnapshots).catch(() => {});
+    getSnapshots(homeSlug, 'cqc')
+      .then(result => setCqcSnapshots(Array.isArray(result) ? result : []))
+      .catch(() => setCqcSnapshots([]));
   }, [homeSlug]);
 
+  function reportInputMissing(type) {
+    if (type === 'roster' || type === 'coverage') return !weekDate;
+    if (type === 'cost') return !costMonth;
+    return false;
+  }
+
   async function generate(type) {
+    if (reportInputMissing(type)) {
+      setGenError('Choose the report date range before downloading.');
+      return;
+    }
     setGenerating(type);
     setGenError(null);
     try {
@@ -104,8 +121,8 @@ function ReportsInner({ data }) {
       color: 'blue',
       dateInput: (
         <div>
-          <label className={INPUT.label}>Week starting (Monday)</label>
-          <input type="date" value={weekDate} onChange={e => setWeekDate(e.target.value)}
+          <label htmlFor={`${weekDateId}-roster`} className={INPUT.label}>Week starting (Monday)</label>
+          <input id={`${weekDateId}-roster`} type="date" value={weekDate} onChange={e => setWeekDate(e.target.value)}
             className={INPUT.sm} />
         </div>
       ),
@@ -118,8 +135,8 @@ function ReportsInner({ data }) {
       color: 'green',
       dateInput: (
         <div>
-          <label className={INPUT.label}>Month</label>
-          <input type="month" value={costMonth} onChange={e => setCostMonth(e.target.value)}
+          <label htmlFor={costMonthId} className={INPUT.label}>Month</label>
+          <input id={costMonthId} type="month" value={costMonth} onChange={e => setCostMonth(e.target.value)}
             className={INPUT.sm} />
         </div>
       ),
@@ -132,8 +149,8 @@ function ReportsInner({ data }) {
       color: 'amber',
       dateInput: (
         <div>
-          <label className={INPUT.label}>Week starting (Monday)</label>
-          <input type="date" value={weekDate} onChange={e => setWeekDate(e.target.value)}
+          <label htmlFor={`${weekDateId}-coverage`} className={INPUT.label}>Week starting (Monday)</label>
+          <input id={`${weekDateId}-coverage`} type="date" value={weekDate} onChange={e => setWeekDate(e.target.value)}
             className={INPUT.sm} />
         </div>
       ),
@@ -149,14 +166,14 @@ function ReportsInner({ data }) {
     ...(canEdit ? [{
       id: 'boardpack',
       title: 'Board Pack',
-      description: 'Executive summary for board meeting — CQC score, coverage, training, incidents, costs.',
+      description: 'Executive summary for board meeting - CQC score, coverage, training, incidents, costs.',
       icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
       color: 'indigo',
       dateInput: (
         <div className="space-y-2">
           <div>
-            <label className={INPUT.label}>Date range (days)</label>
-            <select value={boardDays} onChange={e => setBoardDays(Number(e.target.value))} className={INPUT.sm}>
+            <label htmlFor={boardDaysId} className={INPUT.label}>Date range (days)</label>
+            <select id={boardDaysId} value={boardDays} onChange={e => setBoardDays(Number(e.target.value))} className={INPUT.sm}>
               <option value={28}>28 days</option>
               <option value={90}>90 days</option>
               <option value={365}>1 year</option>
@@ -164,12 +181,12 @@ function ReportsInner({ data }) {
           </div>
           {cqcSnapshots.length > 0 && (
             <div>
-              <label className={INPUT.label}>CQC Snapshot (optional)</label>
-              <select value={selectedSnapshotId} onChange={e => setSelectedSnapshotId(e.target.value)} className={INPUT.sm}>
+              <label htmlFor={snapshotId} className={INPUT.label}>CQC Snapshot (optional)</label>
+              <select id={snapshotId} value={selectedSnapshotId} onChange={e => setSelectedSnapshotId(e.target.value)} className={INPUT.sm}>
                 <option value="">Live calculation</option>
                 {cqcSnapshots.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.computed_at?.slice(0, 10)} — {s.overall_score}%{s.signed_off_by ? ` (signed: ${s.signed_off_by})` : ''}
+                    {s.computed_at?.slice(0, 10)} - {s.overall_score}%{s.signed_off_by ? ` (signed: ${s.signed_off_by})` : ''}
                   </option>
                 ))}
               </select>
@@ -210,6 +227,7 @@ function ReportsInner({ data }) {
         {reports.map(report => {
           const c = colorClasses[report.color];
           const isGenerating = generating === report.id;
+          const disabled = Boolean(generating) || reportInputMissing(report.id);
           return (
             <div key={report.id} className={`${c.bg} border ${c.border} rounded-xl p-5`}>
               <div className="flex items-start gap-3 mb-3">
@@ -228,7 +246,7 @@ function ReportsInner({ data }) {
                 <div className="mb-3">{report.dateInput}</div>
               )}
 
-              <button onClick={() => generate(report.id)} disabled={isGenerating}
+              <button type="button" onClick={() => generate(report.id)} disabled={disabled}
                 className={`w-full text-white py-2 rounded-lg text-sm font-medium shadow-sm transition-colors duration-150 ${c.btn} disabled:opacity-50`}>
                 {isGenerating ? 'Generating...' : 'Download PDF'}
               </button>
