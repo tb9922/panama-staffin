@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
@@ -22,6 +22,38 @@ const BUCKETS = [
   { id: '90+', label: '90+ days', key: 'days_90_plus', min: 91, max: Infinity },
 ];
 
+const EMPTY_RECEIVABLES = {
+  total_outstanding: 0,
+  buckets: {},
+  overdue_items: [],
+  chases_due: [],
+};
+
+function cleanOptionalText(value) {
+  const trimmed = (value || '').trim();
+  return trimmed || null;
+}
+
+function normalizeChasePayload(form) {
+  return {
+    chase_date: form.chase_date || '',
+    method: form.method || '',
+    contact_name: cleanOptionalText(form.contact_name),
+    outcome: cleanOptionalText(form.outcome),
+    next_action_date: form.next_action_date || null,
+    notes: cleanOptionalText(form.notes),
+  };
+}
+
+function validateChasePayload(payload, invoiceCount = 1) {
+  if (invoiceCount <= 0) return 'Please select at least one invoice';
+  if (!payload.chase_date || !payload.method) return 'Please fill in chase date and method';
+  if (payload.next_action_date && payload.next_action_date < payload.chase_date) {
+    return 'Next action date cannot be before the chase date';
+  }
+  return null;
+}
+
 export default function ReceivablesManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
@@ -37,12 +69,20 @@ export default function ReceivablesManager() {
   const [showBulkChaseModal, setShowBulkChaseModal] = useState(false);
   const [bulkChaseForm, setBulkChaseForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const home = getCurrentHome();
-  useDirtyGuard(!!showChaseModal);
+  const idPrefix = useId();
+  useDirtyGuard(!!showChaseModal || !!showBulkChaseModal);
 
   const load = useCallback(async () => {
-    if (!home) return;
+    if (!home) {
+      setData(EMPTY_RECEIVABLES);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       setData(await getReceivablesDetail(home));
@@ -55,7 +95,7 @@ export default function ReceivablesManager() {
 
   async function openChaseModal(invoice) {
     setSelectedInvoice(invoice);
-    setError(null);
+    setFormError(null);
     setChaseForm({ chase_date: todayLocalISO(), method: 'phone' });
     try {
       setChases(await getInvoiceChases(home, invoice.id));
@@ -68,65 +108,80 @@ export default function ReceivablesManager() {
     setSelectedInvoice(null);
     setChases([]);
     setChaseForm({});
+    setFormError(null);
   }
 
   function closeBulkChaseModal() {
     setShowBulkChaseModal(false);
     setBulkChaseForm({});
+    setFormError(null);
   }
 
   async function handleAddChase() {
     if (saving) return;
-    setError(null);
-    if (!selectedInvoice || !chaseForm.chase_date || !chaseForm.method) {
-      setError('Please fill in chase date and method');
+    setFormError(null);
+    const payload = normalizeChasePayload(chaseForm);
+    const validation = validateChasePayload(payload, selectedInvoice ? 1 : 0);
+    if (validation) {
+      setFormError(validation);
       return;
     }
     setSaving(true);
     try {
-      await createInvoiceChase(home, selectedInvoice.id, chaseForm);
+      await createInvoiceChase(home, selectedInvoice.id, payload);
       setChases(await getInvoiceChases(home, selectedInvoice.id));
-      load();
+      await load();
       showNotice('Chase recorded.');
-    } catch (e) { setError(e.message); }
+    } catch (e) { setFormError(e.message); }
     finally { setSaving(false); }
   }
 
   async function handleBulkChase() {
     if (saving) return;
-    setError(null);
-    if (selectedInvoiceIds.length === 0 || !bulkChaseForm.chase_date || !bulkChaseForm.method) {
-      setError('Please select at least one invoice and enter chase date and method');
+    setFormError(null);
+    const selectedCount = selectedInvoiceIds.length;
+    const payload = normalizeChasePayload(bulkChaseForm);
+    const validation = validateChasePayload(payload, selectedCount);
+    if (validation) {
+      setFormError(validation);
       return;
     }
     setSaving(true);
     try {
       for (const invoiceId of selectedInvoiceIds) {
-        await createInvoiceChase(home, invoiceId, bulkChaseForm);
+        await createInvoiceChase(home, invoiceId, payload);
       }
       setSelectedInvoiceIds([]);
       closeBulkChaseModal();
       await load();
-      showNotice(`Chase logged for ${selectedInvoiceIds.length} invoice${selectedInvoiceIds.length === 1 ? '' : 's'}.`);
+      showNotice(`Chase logged for ${selectedCount} invoice${selectedCount === 1 ? '' : 's'}.`);
     } catch (e) {
-      setError(e.message);
+      setFormError(e.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function handleExport() {
-    if (!data?.overdue_items?.length) return;
-    const { downloadXLSX } = await import('../lib/excel.js');
-    downloadXLSX('receivables_ageing.xlsx', [{
-      name: 'Outstanding Invoices',
-      headers: ['Invoice #', 'Payer', 'Type', 'Total', 'Paid', 'Outstanding', 'Due Date', 'Days Overdue', 'Last Chase Date', 'Last Chase Method', 'Next Action'],
-      rows: data.overdue_items.map(i => [
-        i.invoice_number, i.payer_name, i.payer_type,
-        i.total_amount, i.amount_paid, i.outstanding, i.due_date, i.days_overdue,
-        i.last_chase?.chase_date || '', i.last_chase?.method || '', i.last_chase?.next_action_date || '',
-      ]),
-    }]);
+    if (!data?.overdue_items?.length || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const { downloadXLSX } = await import('../lib/excel.js');
+      downloadXLSX('receivables_ageing.xlsx', [{
+        name: 'Outstanding Invoices',
+        headers: ['Invoice #', 'Payer', 'Type', 'Total', 'Paid', 'Outstanding', 'Due Date', 'Days Overdue', 'Last Chase Date', 'Last Chase Method', 'Next Action'],
+        rows: data.overdue_items.map(i => [
+          i.invoice_number, i.payer_name, i.payer_type,
+          i.total_amount, i.amount_paid, i.outstanding, i.due_date, i.days_overdue,
+          i.last_chase?.chase_date || '', i.last_chase?.method || '', i.last_chase?.next_action_date || '',
+        ]),
+      }]);
+    } catch (e) {
+      setError(e.message || 'Unable to export receivables.');
+    } finally {
+      setExporting(false);
+    }
   }
 
   const setChaseField = (k, v) => setChaseForm(f => ({ ...f, [k]: v }));
@@ -172,18 +227,26 @@ export default function ReceivablesManager() {
           <p className={PAGE.subtitle}>Outstanding invoices, ageing and chase management</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || !data?.overdue_items?.length}
+            className={`${BTN.secondary} ${BTN.sm}`}
+          >
+            {exporting ? 'Exporting...' : 'Export Excel'}
+          </button>
         </div>
       </div>
 
       {notice && <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
       {error && <ErrorState title="Unable to load receivables" message={error} onRetry={load} className="mb-4" />}
+      {!home && <EmptyState title="No home selected" description="Choose a home before reviewing receivables." className="mb-4" />}
 
       {/* Ageing Cards */}
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           {BUCKETS.filter(b => b.key).map(b => (
-            <button key={b.id} onClick={() => setFilterBucket(filterBucket === b.id ? 'all' : b.id)}
+            <button key={b.id} type="button" onClick={() => setFilterBucket(filterBucket === b.id ? 'all' : b.id)}
               className={`${CARD.padded} text-center transition-all cursor-pointer ${filterBucket === b.id ? 'ring-2 ring-blue-500' : ''}`}>
               <p className="text-xs text-gray-500">{b.label}</p>
               <p className={`text-lg font-bold ${b.id === 'current' ? 'text-emerald-600' : b.id === '1-30' ? 'text-amber-600' : b.id === '31-60' ? 'text-orange-600' : 'text-red-600'}`}>
@@ -206,8 +269,9 @@ export default function ReceivablesManager() {
       )}
 
       {/* Filter */}
-      <div className="flex items-center gap-3 mb-4">
-        <select value={filterBucket} onChange={e => setFilterBucket(e.target.value)} className={`${INPUT.select} w-auto`}>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label htmlFor={`${idPrefix}-bucket-filter`} className="sr-only">Filter ageing bucket</label>
+        <select id={`${idPrefix}-bucket-filter`} value={filterBucket} onChange={e => setFilterBucket(e.target.value)} className={`${INPUT.select} w-auto`}>
           {BUCKETS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
         </select>
         <span className="text-sm text-gray-500">{filteredItems.length} invoice{filteredItems.length !== 1 ? 's' : ''}</span>
@@ -289,7 +353,7 @@ export default function ReceivablesManager() {
                     <td className={TABLE.td}>
                       {item.last_chase?.next_action_date ? (
                         <span className={`text-xs ${actionOverdue ? 'text-red-600 font-bold' : ''}`}>{item.last_chase.next_action_date}</span>
-                      ) : <span className="text-gray-400 text-xs">&mdash;</span>}
+                      ) : <span className="text-gray-400 text-xs">-</span>}
                     </td>
                   </tr>
                 );
@@ -300,8 +364,8 @@ export default function ReceivablesManager() {
       </div>
 
       {/* Chase Modal */}
-      <Modal isOpen={!!(showChaseModal && selectedInvoice)} onClose={closeChaseModal} title={`Chase Log \u2014 ${selectedInvoice?.invoice_number || ''}`} size="lg">
-        <div className="flex items-center gap-4 mb-4 text-sm">
+      <Modal isOpen={!!(showChaseModal && selectedInvoice)} onClose={closeChaseModal} title={`Chase Log - ${selectedInvoice?.invoice_number || ''}`} size="lg">
+        <div className="mb-4 flex flex-wrap items-center gap-4 text-sm">
           <span><strong>Payer:</strong> {selectedInvoice?.payer_name}</span>
           <span><strong>Outstanding:</strong> <span className="text-red-600 font-bold">{formatCurrency(selectedInvoice?.outstanding)}</span></span>
           <span><strong>Overdue:</strong> {selectedInvoice?.days_overdue} days</span>
@@ -326,9 +390,9 @@ export default function ReceivablesManager() {
                   <tr key={c.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{c.chase_date}</td>
                     <td className={TABLE.td}><span className={BADGE.blue}>{getLabel(c.method, CHASE_METHODS)}</span></td>
-                    <td className={TABLE.td}>{c.contact_name || '\u2014'}</td>
-                    <td className={`${TABLE.td} max-w-48 truncate`}>{c.outcome || '\u2014'}</td>
-                    <td className={TABLE.td}>{c.next_action_date || '\u2014'}</td>
+                    <td className={TABLE.td}>{c.contact_name || '-'}</td>
+                    <td className={`${TABLE.td} max-w-48 truncate`}>{c.outcome || '-'}</td>
+                    <td className={TABLE.td}>{c.next_action_date || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -338,26 +402,27 @@ export default function ReceivablesManager() {
 
         {/* Add Chase Form */}
         <h3 className="text-sm font-semibold text-gray-700 mb-2 mt-4">Record Chase</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label htmlFor="receivables-chase-date" className={INPUT.label}>Date *</label>
-            <input id="receivables-chase-date" type="date" value={chaseForm.chase_date || ''} onChange={e => setChaseField('chase_date', e.target.value)} className={INPUT.base} /></div>
-          <div><label htmlFor="receivables-chase-method" className={INPUT.label}>Method *</label>
-            <select id="receivables-chase-method" value={chaseForm.method || ''} onChange={e => setChaseField('method', e.target.value)} className={INPUT.select}>
+        {formError && <InlineNotice variant="error" className="mb-4">{formError}</InlineNotice>}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div><label htmlFor={`${idPrefix}-chase-date`} className={INPUT.label}>Date *</label>
+            <input id={`${idPrefix}-chase-date`} type="date" value={chaseForm.chase_date || ''} onChange={e => setChaseField('chase_date', e.target.value)} className={INPUT.base} /></div>
+          <div><label htmlFor={`${idPrefix}-chase-method`} className={INPUT.label}>Method *</label>
+            <select id={`${idPrefix}-chase-method`} value={chaseForm.method || ''} onChange={e => setChaseField('method', e.target.value)} className={INPUT.select}>
               {CHASE_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select></div>
-          <div><label className={INPUT.label}>Contact Name</label>
-            <input value={chaseForm.contact_name || ''} onChange={e => setChaseField('contact_name', e.target.value)} className={INPUT.base} /></div>
-          <div><label className={INPUT.label}>Next Action Date</label>
-            <input type="date" value={chaseForm.next_action_date || ''} onChange={e => setChaseField('next_action_date', e.target.value || null)} className={INPUT.base} /></div>
-          <div className="col-span-2"><label className={INPUT.label}>Outcome</label>
-            <textarea rows={2} value={chaseForm.outcome || ''} onChange={e => setChaseField('outcome', e.target.value)} className={INPUT.base} /></div>
-          <div className="col-span-2"><label className={INPUT.label}>Notes</label>
-            <textarea rows={2} value={chaseForm.notes || ''} onChange={e => setChaseField('notes', e.target.value)} className={INPUT.base} /></div>
+          <div><label htmlFor={`${idPrefix}-chase-contact`} className={INPUT.label}>Contact Name</label>
+            <input id={`${idPrefix}-chase-contact`} value={chaseForm.contact_name || ''} onChange={e => setChaseField('contact_name', e.target.value)} className={INPUT.base} /></div>
+          <div><label htmlFor={`${idPrefix}-chase-next-action`} className={INPUT.label}>Next Action Date</label>
+            <input id={`${idPrefix}-chase-next-action`} type="date" value={chaseForm.next_action_date || ''} onChange={e => setChaseField('next_action_date', e.target.value || null)} className={INPUT.base} /></div>
+          <div className="sm:col-span-2"><label htmlFor={`${idPrefix}-chase-outcome`} className={INPUT.label}>Outcome</label>
+            <textarea id={`${idPrefix}-chase-outcome`} rows={2} value={chaseForm.outcome || ''} onChange={e => setChaseField('outcome', e.target.value)} className={INPUT.base} /></div>
+          <div className="sm:col-span-2"><label htmlFor={`${idPrefix}-chase-notes`} className={INPUT.label}>Notes</label>
+            <textarea id={`${idPrefix}-chase-notes`} rows={2} value={chaseForm.notes || ''} onChange={e => setChaseField('notes', e.target.value)} className={INPUT.base} /></div>
         </div>
 
         <div className={MODAL.footer}>
-          <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>
-          {canEdit && <button onClick={handleAddChase} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Record Chase'}</button>}
+          <button type="button" onClick={closeChaseModal} className={BTN.secondary}>Close</button>
+          {canEdit && <button type="button" onClick={handleAddChase} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Record Chase'}</button>}
         </div>
       </Modal>
 
@@ -367,37 +432,38 @@ export default function ReceivablesManager() {
             ? selectedInvoices.map(invoice => invoice.invoice_number).join(', ')
             : 'Selected invoices will all receive the same chase log entry.'}
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        {formError && <InlineNotice variant="error" className="mb-4">{formError}</InlineNotice>}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label htmlFor="bulk-chase-date" className={INPUT.label}>Date *</label>
-            <input id="bulk-chase-date" type="date" value={bulkChaseForm.chase_date || ''} onChange={e => setBulkChaseField('chase_date', e.target.value)} className={INPUT.base} />
+            <label htmlFor={`${idPrefix}-bulk-chase-date`} className={INPUT.label}>Date *</label>
+            <input id={`${idPrefix}-bulk-chase-date`} type="date" value={bulkChaseForm.chase_date || ''} onChange={e => setBulkChaseField('chase_date', e.target.value)} className={INPUT.base} />
           </div>
           <div>
-            <label htmlFor="bulk-chase-method" className={INPUT.label}>Method *</label>
-            <select id="bulk-chase-method" value={bulkChaseForm.method || ''} onChange={e => setBulkChaseField('method', e.target.value)} className={INPUT.select}>
+            <label htmlFor={`${idPrefix}-bulk-chase-method`} className={INPUT.label}>Method *</label>
+            <select id={`${idPrefix}-bulk-chase-method`} value={bulkChaseForm.method || ''} onChange={e => setBulkChaseField('method', e.target.value)} className={INPUT.select}>
               {CHASE_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Contact Name</label>
-            <input value={bulkChaseForm.contact_name || ''} onChange={e => setBulkChaseField('contact_name', e.target.value)} className={INPUT.base} />
+            <label htmlFor={`${idPrefix}-bulk-contact`} className={INPUT.label}>Contact Name</label>
+            <input id={`${idPrefix}-bulk-contact`} value={bulkChaseForm.contact_name || ''} onChange={e => setBulkChaseField('contact_name', e.target.value)} className={INPUT.base} />
           </div>
           <div>
-            <label className={INPUT.label}>Next Action Date</label>
-            <input type="date" value={bulkChaseForm.next_action_date || ''} onChange={e => setBulkChaseField('next_action_date', e.target.value || null)} className={INPUT.base} />
+            <label htmlFor={`${idPrefix}-bulk-next-action`} className={INPUT.label}>Next Action Date</label>
+            <input id={`${idPrefix}-bulk-next-action`} type="date" value={bulkChaseForm.next_action_date || ''} onChange={e => setBulkChaseField('next_action_date', e.target.value || null)} className={INPUT.base} />
           </div>
-          <div className="col-span-2">
-            <label className={INPUT.label}>Outcome</label>
-            <textarea rows={2} value={bulkChaseForm.outcome || ''} onChange={e => setBulkChaseField('outcome', e.target.value)} className={INPUT.base} />
+          <div className="sm:col-span-2">
+            <label htmlFor={`${idPrefix}-bulk-outcome`} className={INPUT.label}>Outcome</label>
+            <textarea id={`${idPrefix}-bulk-outcome`} rows={2} value={bulkChaseForm.outcome || ''} onChange={e => setBulkChaseField('outcome', e.target.value)} className={INPUT.base} />
           </div>
-          <div className="col-span-2">
-            <label className={INPUT.label}>Notes</label>
-            <textarea rows={2} value={bulkChaseForm.notes || ''} onChange={e => setBulkChaseField('notes', e.target.value)} className={INPUT.base} />
+          <div className="sm:col-span-2">
+            <label htmlFor={`${idPrefix}-bulk-notes`} className={INPUT.label}>Notes</label>
+            <textarea id={`${idPrefix}-bulk-notes`} rows={2} value={bulkChaseForm.notes || ''} onChange={e => setBulkChaseField('notes', e.target.value)} className={INPUT.base} />
           </div>
         </div>
         <div className={MODAL.footer}>
-          <button onClick={closeBulkChaseModal} className={BTN.secondary}>Close</button>
-          <button onClick={handleBulkChase} disabled={saving || selectedInvoiceIds.length === 0} className={BTN.primary}>
+          <button type="button" onClick={closeBulkChaseModal} className={BTN.secondary}>Close</button>
+          <button type="button" onClick={handleBulkChase} disabled={saving || selectedInvoiceIds.length === 0} className={BTN.primary}>
             {saving ? 'Saving...' : `Log chase on ${selectedInvoiceIds.length}`}
           </button>
         </div>

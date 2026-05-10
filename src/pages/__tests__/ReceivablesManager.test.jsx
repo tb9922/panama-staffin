@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import ReceivablesManager from '../ReceivablesManager.jsx';
@@ -24,6 +24,7 @@ vi.mock('../../lib/excel.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import * as excel from '../../lib/excel.js';
 
 const MOCK_RECEIVABLES = {
   total_outstanding: 8500,
@@ -73,9 +74,10 @@ describe('ReceivablesManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+    api.getCurrentHome.mockReturnValue('test-home');
   });
 
-  it('smoke test — renders without crashing', async () => {
+  it('smoke test - renders without crashing', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('Receivables')).toBeInTheDocument()
@@ -94,6 +96,16 @@ describe('ReceivablesManager', () => {
     await waitFor(() =>
       expect(screen.getByText('Access denied')).toBeInTheDocument()
     );
+  });
+
+  it('does not hang forever when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('No home selected')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Loading receivables and chase history...')).not.toBeInTheDocument();
+    expect(api.getReceivablesDetail).not.toHaveBeenCalled();
   });
 
   it('renders ageing bucket cards with totals', async () => {
@@ -167,5 +179,64 @@ describe('ReceivablesManager', () => {
     await waitFor(() => {
       expect(api.createInvoiceChase).toHaveBeenCalledTimes(2);
     });
+    expect(api.createInvoiceChase).toHaveBeenNthCalledWith(1, 'test-home', 10, expect.objectContaining({
+      method: 'email',
+      contact_name: null,
+      outcome: null,
+      next_action_date: null,
+      notes: null,
+    }));
+  });
+
+  it('keeps chase validation inside the active modal', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('INV-001')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByText('INV-001'));
+    const dialog = await screen.findByRole('dialog');
+    await user.clear(within(dialog).getByLabelText('Date *'));
+    await user.click(within(dialog).getByRole('button', { name: 'Record Chase' }));
+
+    expect(within(dialog).getByText('Please fill in chase date and method')).toBeInTheDocument();
+    expect(screen.queryByText('Unable to load receivables')).not.toBeInTheDocument();
+  });
+
+  it('blocks next-action dates before the chase date', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('INV-001')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByText('INV-001'));
+    const dialog = await screen.findByRole('dialog');
+    await user.clear(within(dialog).getByLabelText('Next Action Date'));
+    await user.type(within(dialog).getByLabelText('Next Action Date'), '2020-01-01');
+    await user.click(within(dialog).getByRole('button', { name: 'Record Chase' }));
+
+    expect(within(dialog).getByText('Next action date cannot be before the chase date')).toBeInTheDocument();
+    expect(api.createInvoiceChase).not.toHaveBeenCalled();
+  });
+
+  it('disables export when there are no rows and exports populated rows', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('INV-001')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
+    await waitFor(() => expect(excel.downloadXLSX).toHaveBeenCalledTimes(1));
+    expect(excel.downloadXLSX).toHaveBeenCalledWith('receivables_ageing.xlsx', expect.any(Array));
+
+    unmount();
+    vi.clearAllMocks();
+    setupMocks({ total_outstanding: 0, buckets: {}, overdue_items: [], chases_due: [] });
+    renderWithProviders(<ReceivablesManager />);
+    const emptyExport = await screen.findByRole('button', { name: 'Export Excel' });
+    expect(emptyExport).toBeDisabled();
   });
 });
