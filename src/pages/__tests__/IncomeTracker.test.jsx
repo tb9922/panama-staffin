@@ -100,7 +100,7 @@ describe('IncomeTracker', () => {
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   });
 
-  it('smoke test — renders without crashing', async () => {
+  it('smoke test - renders without crashing', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('Income & Billing')).toBeInTheDocument()
@@ -208,6 +208,33 @@ describe('IncomeTracker', () => {
     expect(api.createFinanceResident).not.toHaveBeenCalled();
   });
 
+  it('labels resident form fields and blocks invalid billing dates/fees', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Resident' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Add Resident' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add Resident' });
+
+    await user.type(within(dialog).getByLabelText('Resident Name *'), 'New Resident');
+    await user.clear(within(dialog).getByLabelText('Admission Date'));
+    await user.type(within(dialog).getByLabelText('Admission Date'), '2026-05-10');
+    await user.type(within(dialog).getByLabelText('Discharge Date'), '2026-05-01');
+    await user.click(within(dialog).getByRole('button', { name: 'Add Resident' }));
+
+    expect(screen.getByText('Discharge date cannot be before admission date.')).toBeInTheDocument();
+    expect(api.createFinanceResident).not.toHaveBeenCalled();
+
+    await user.clear(within(dialog).getByLabelText('Discharge Date'));
+    await user.click(within(dialog).getByRole('button', { name: 'Fees' }));
+    await user.clear(within(dialog).getByLabelText('Weekly Fee'));
+    await user.type(within(dialog).getByLabelText('Weekly Fee'), '-1');
+    await user.click(within(dialog).getByRole('button', { name: 'Add Resident' }));
+
+    expect(screen.getByText('Weekly fee must be zero or more.')).toBeInTheDocument();
+    expect(api.createFinanceResident).not.toHaveBeenCalled();
+  });
+
   it('does not open an editable invoice when full invoice loading fails', async () => {
     const user = userEvent.setup();
     renderAdmin();
@@ -233,6 +260,25 @@ describe('IncomeTracker', () => {
     await user.click(screen.getByRole('button', { name: 'Create Invoice' }));
 
     expect(screen.getByText('Every invoice line needs a description.')).toBeInTheDocument();
+    expect(api.createFinanceInvoice).not.toHaveBeenCalled();
+  });
+
+  it('blocks negative invoice line amounts before saving', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await user.click(screen.getByRole('tab', { name: 'Invoices' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New Invoice' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'New Invoice' }));
+    const dialog = screen.getByRole('dialog', { name: 'New Invoice' });
+    await user.type(within(dialog).getByLabelText('Payer Name *'), 'County Council');
+    await user.click(within(dialog).getByRole('button', { name: 'Lines' }));
+    await user.type(within(dialog).getByLabelText('Description'), 'Care fee');
+    await user.clear(within(dialog).getByLabelText('Qty'));
+    await user.type(within(dialog).getByLabelText('Qty'), '-1');
+    await user.click(within(dialog).getByRole('button', { name: 'Create Invoice' }));
+
+    expect(screen.getByText('Invoice line quantities and amounts must be zero or more.')).toBeInTheDocument();
     expect(api.createFinanceInvoice).not.toHaveBeenCalled();
   });
 

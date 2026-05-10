@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
@@ -61,11 +61,12 @@ export default function IncomeTracker() {
   );
 }
 
-// ── Residents Tab ────────────────────────────────────────────────────────────
+// Residents Tab
 
 function ResidentsTab({ home, canEdit }) {
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { showToast } = useToast();
+  const residentFormId = useId();
   const [residents, setResidents] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -137,6 +138,28 @@ function ResidentsTab({ home, canEdit }) {
       setFormError('Resident name is required.');
       setModalTab('profile');
       return;
+    }
+    if (form.admission_date && form.discharge_date && form.discharge_date < form.admission_date) {
+      setFormError('Discharge date cannot be before admission date.');
+      setModalTab('profile');
+      return;
+    }
+    const moneyFields = [
+      ['weekly_fee', 'Weekly fee'],
+      ['la_contribution', 'LA contribution'],
+      ['chc_contribution', 'CHC contribution'],
+      ['fnc_amount', 'FNC amount'],
+      ['top_up_amount', 'Top-up amount'],
+    ];
+    for (const [field, label] of moneyFields) {
+      const raw = form[field];
+      if (raw === '' || raw === null || raw === undefined) continue;
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        setFormError(`${label} must be zero or more.`);
+        setModalTab('fees');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -248,18 +271,18 @@ function ResidentsTab({ home, canEdit }) {
               ) : residents.map(r => (
                 <tr key={r.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(r))}>
                   <td className={`${TABLE.td} font-medium`}>{r.resident_name}</td>
-                  <td className={TABLE.td}>{r.room_number || '—'}</td>
+                  <td className={TABLE.td}>{r.room_number || '-'}</td>
                   <td className={TABLE.td}>{getLabel(r.care_type, CARE_TYPES)}</td>
                   <td className={TABLE.td}>{getLabel(r.funding_type, FUNDING_TYPES)}</td>
                   <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(r.weekly_fee)}</td>
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(r.status, RESIDENT_STATUSES)]}>{getLabel(r.status, RESIDENT_STATUSES)}</span></td>
-                  <td className={TABLE.td}>{r.next_fee_review || '—'}</td>
+                  <td className={TABLE.td}>{r.next_fee_review || '-'}</td>
                   <td className={`${TABLE.tdMono} text-right`}>
                     {r.outstanding_balance > 0
                       ? <span className="text-amber-600 font-medium">{formatCurrency(r.outstanding_balance)}</span>
                       : <span className="text-green-600">{formatCurrency(0)}</span>}
                   </td>
-                  <td className={TABLE.td}>{r.last_payment_date || '—'}</td>
+                  <td className={TABLE.td}>{r.last_payment_date || '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -283,79 +306,79 @@ function ResidentsTab({ home, canEdit }) {
             </div>
 
             {modalTab === 'profile' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2"><label className={INPUT.label}>Resident Name *</label>
-                  <input value={form.resident_name || ''} onChange={e => set('resident_name', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Room Number</label>
-                  <input value={form.room_number || ''} onChange={e => set('room_number', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Status</label>
-                  <select value={form.status || 'active'} onChange={e => set('status', e.target.value)} className={INPUT.select}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2"><label htmlFor={`${residentFormId}-resident-name`} className={INPUT.label}>Resident Name *</label>
+                  <input id={`${residentFormId}-resident-name`} value={form.resident_name || ''} onChange={e => set('resident_name', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-room-number`} className={INPUT.label}>Room Number</label>
+                  <input id={`${residentFormId}-room-number`} value={form.room_number || ''} onChange={e => set('room_number', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-status`} className={INPUT.label}>Status</label>
+                  <select id={`${residentFormId}-status`} value={form.status || 'active'} onChange={e => set('status', e.target.value)} className={INPUT.select}>
                     {RESIDENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select></div>
-                <div><label className={INPUT.label}>Care Type</label>
-                  <select value={form.care_type || ''} onChange={e => set('care_type', e.target.value)} className={INPUT.select}>
+                <div><label htmlFor={`${residentFormId}-care-type`} className={INPUT.label}>Care Type</label>
+                  <select id={`${residentFormId}-care-type`} value={form.care_type || ''} onChange={e => set('care_type', e.target.value)} className={INPUT.select}>
                     <option value="">Select...</option>
                     {CARE_TYPES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </select></div>
-                <div><label className={INPUT.label}>Funding Type</label>
-                  <select value={form.funding_type || ''} onChange={e => set('funding_type', e.target.value)} className={INPUT.select}>
+                <div><label htmlFor={`${residentFormId}-funding-type`} className={INPUT.label}>Funding Type</label>
+                  <select id={`${residentFormId}-funding-type`} value={form.funding_type || ''} onChange={e => set('funding_type', e.target.value)} className={INPUT.select}>
                     {FUNDING_TYPES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select></div>
-                <div><label className={INPUT.label}>Admission Date</label>
-                  <input type="date" value={form.admission_date || ''} onChange={e => set('admission_date', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Discharge Date</label>
-                  <input type="date" value={form.discharge_date || ''} onChange={e => set('discharge_date', e.target.value || null)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Funding Authority</label>
-                  <input value={form.funding_authority || ''} onChange={e => set('funding_authority', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Funding Reference</label>
-                  <input value={form.funding_reference || ''} onChange={e => set('funding_reference', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-admission-date`} className={INPUT.label}>Admission Date</label>
+                  <input id={`${residentFormId}-admission-date`} type="date" value={form.admission_date || ''} onChange={e => set('admission_date', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-discharge-date`} className={INPUT.label}>Discharge Date</label>
+                  <input id={`${residentFormId}-discharge-date`} type="date" value={form.discharge_date || ''} onChange={e => set('discharge_date', e.target.value || null)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-funding-authority`} className={INPUT.label}>Funding Authority</label>
+                  <input id={`${residentFormId}-funding-authority`} value={form.funding_authority || ''} onChange={e => set('funding_authority', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-funding-reference`} className={INPUT.label}>Funding Reference</label>
+                  <input id={`${residentFormId}-funding-reference`} value={form.funding_reference || ''} onChange={e => set('funding_reference', e.target.value)} className={INPUT.base} /></div>
               </div>
             )}
 
             {modalTab === 'fees' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className={INPUT.label}>Weekly Fee</label>
-                  <input type="number" step="0.01" inputMode="decimal" value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} className={INPUT.base} /></div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div><label htmlFor={`${residentFormId}-weekly-fee`} className={INPUT.label}>Weekly Fee</label>
+                  <input id={`${residentFormId}-weekly-fee`} type="number" min="0" step="0.01" inputMode="decimal" value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} className={INPUT.base} /></div>
                 {editing && Number(form.weekly_fee ?? editing.weekly_fee ?? 0) > Number(editing.weekly_fee ?? 0) && (
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <InlineNotice variant="warning">
                       Fee increases need at least 28 days&apos; notice. Immediate in-app increases are blocked until scheduled fee changes are implemented.
                     </InlineNotice>
                   </div>
                 )}
-                <div><label className={INPUT.label}>LA Contribution</label>
-                  <input type="number" step="0.01" inputMode="decimal" value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>CHC Contribution</label>
-                  <input type="number" step="0.01" inputMode="decimal" value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>FNC Amount</label>
-                  <input type="number" step="0.01" inputMode="decimal" value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} className={INPUT.base} /></div>
-                <div className="col-span-2 grid grid-cols-2 gap-4 text-xs text-gray-500">
+                <div><label htmlFor={`${residentFormId}-la-contribution`} className={INPUT.label}>LA Contribution</label>
+                  <input id={`${residentFormId}-la-contribution`} type="number" min="0" step="0.01" inputMode="decimal" value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-chc-contribution`} className={INPUT.label}>CHC Contribution</label>
+                  <input id={`${residentFormId}-chc-contribution`} type="number" min="0" step="0.01" inputMode="decimal" value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-fnc-amount`} className={INPUT.label}>FNC Amount</label>
+                  <input id={`${residentFormId}-fnc-amount`} type="number" min="0" step="0.01" inputMode="decimal" value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} className={INPUT.base} /></div>
+                <div className="grid gap-2 text-xs text-gray-500 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
                   <p>CHC = NHS Continuing Healthcare funding for residents with a primary health need.</p>
                   <p>FNC = Funded Nursing Care contribution paid by the NHS towards registered nursing input.</p>
                 </div>
-                <div><label className={INPUT.label}>Top-Up Amount</label>
-                  <input type="number" step="0.01" inputMode="decimal" value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Top-Up Payer</label>
-                  <input value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Top-Up Contact</label>
-                  <input value={form.top_up_contact || ''} onChange={e => set('top_up_contact', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Last Fee Review</label>
-                  <input type="date" value={form.last_fee_review || ''} onChange={e => set('last_fee_review', e.target.value || null)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Next Fee Review</label>
-                  <input type="date" value={form.next_fee_review || ''} onChange={e => set('next_fee_review', e.target.value || null)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-top-up-amount`} className={INPUT.label}>Top-Up Amount</label>
+                  <input id={`${residentFormId}-top-up-amount`} type="number" min="0" step="0.01" inputMode="decimal" value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-top-up-payer`} className={INPUT.label}>Top-Up Payer</label>
+                  <input id={`${residentFormId}-top-up-payer`} value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-top-up-contact`} className={INPUT.label}>Top-Up Contact</label>
+                  <input id={`${residentFormId}-top-up-contact`} value={form.top_up_contact || ''} onChange={e => set('top_up_contact', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-last-fee-review`} className={INPUT.label}>Last Fee Review</label>
+                  <input id={`${residentFormId}-last-fee-review`} type="date" value={form.last_fee_review || ''} onChange={e => set('last_fee_review', e.target.value || null)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${residentFormId}-next-fee-review`} className={INPUT.label}>Next Fee Review</label>
+                  <input id={`${residentFormId}-next-fee-review`} type="date" value={form.next_fee_review || ''} onChange={e => set('next_fee_review', e.target.value || null)} className={INPUT.base} /></div>
                 {editing && (
-                  <div className="col-span-2"><label className={INPUT.label}>Fee Change Reason</label>
-                    <input value={form._fee_change_reason || ''} onChange={e => set('_fee_change_reason', e.target.value)} className={INPUT.base} placeholder="Reason for fee change (recorded in history)" /></div>
+                  <div className="sm:col-span-2"><label htmlFor={`${residentFormId}-fee-change-reason`} className={INPUT.label}>Fee Change Reason</label>
+                    <input id={`${residentFormId}-fee-change-reason`} value={form._fee_change_reason || ''} onChange={e => set('_fee_change_reason', e.target.value)} className={INPUT.base} placeholder="Reason for fee change (recorded in history)" /></div>
                 )}
                 {editing?.last_payment_date && (
-                  <div className="col-span-2 mt-1 p-3 bg-gray-50 rounded border border-gray-200 text-sm">
+                  <div className="mt-1 rounded border border-gray-200 bg-gray-50 p-3 text-sm sm:col-span-2">
                     <span className="text-gray-500">Last payment:</span>{' '}
                     <span className="font-medium">{formatCurrency(editing.last_payment_amount)}</span>
                     <span className="text-gray-400 ml-1">on {editing.last_payment_date}</span>
                   </div>
                 )}
                 {editing && editing.outstanding_balance > 0 && (
-                  <div className="col-span-2 p-3 bg-amber-50 rounded border border-amber-200 text-sm">
+                  <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm sm:col-span-2">
                     <span className="text-amber-700 font-medium">Outstanding: {formatCurrency(editing.outstanding_balance)}</span>
                   </div>
                 )}
@@ -382,8 +405,8 @@ function ResidentsTab({ home, canEdit }) {
                             <td className={TABLE.td}>{f.effective_date}</td>
                             <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(f.previous_weekly)}</td>
                             <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(f.new_weekly)}</td>
-                            <td className={TABLE.td}>{f.reason || '—'}</td>
-                            <td className={TABLE.td}>{f.created_by || '—'}</td>
+                            <td className={TABLE.td}>{f.reason || '-'}</td>
+                            <td className={TABLE.td}>{f.created_by || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -395,8 +418,8 @@ function ResidentsTab({ home, canEdit }) {
 
             {modalTab === 'notes' && (
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea rows={5} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} />
+                <label htmlFor={`${residentFormId}-notes`} className={INPUT.label}>Notes</label>
+                <textarea id={`${residentFormId}-notes`} rows={5} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} />
               </div>
             )}
 
@@ -409,12 +432,13 @@ function ResidentsTab({ home, canEdit }) {
   );
 }
 
-// ── Invoices Tab ─────────────────────────────────────────────────────────────
+// Invoices Tab
 
 function InvoicesTab({ home, canEdit }) {
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { showToast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const invoiceFormId = useId();
   const [invoices, setInvoices] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -527,6 +551,11 @@ function InvoicesTab({ home, canEdit }) {
     }
     if (preparedLines.some(l => !l.description)) {
       setFormError('Every invoice line needs a description.');
+      setModalTab('lines');
+      return;
+    }
+    if (preparedLines.some(l => Number(l.quantity) < 0 || Number(l.unit_price) < 0 || Number(l.amount) < 0)) {
+      setFormError('Invoice line quantities and amounts must be zero or more.');
       setModalTab('lines');
       return;
     }
@@ -723,11 +752,11 @@ function InvoicesTab({ home, canEdit }) {
                   <td className={`${TABLE.td} font-medium font-mono`}>{inv.invoice_number}</td>
                   <td className={TABLE.td}>{inv.payer_name}</td>
                   <td className={TABLE.td}>{getLabel(inv.payer_type, PAYER_TYPES)}</td>
-                  <td className={TABLE.td}>{inv.period_start ? `${inv.period_start} — ${inv.period_end || ''}` : '—'}</td>
+                  <td className={TABLE.td}>{inv.period_start ? `${inv.period_start} - ${inv.period_end || ''}` : '-'}</td>
                   <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(inv.total_amount)}</td>
                   <td className={`${TABLE.tdMono} text-right ${inv.balance_due > 0 ? 'text-red-600' : ''}`}>{formatCurrency(inv.balance_due)}</td>
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(inv.status, INVOICE_STATUSES)]}>{getLabel(inv.status, INVOICE_STATUSES)}</span></td>
-                  <td className={TABLE.td}>{inv.due_date || '—'}</td>
+                  <td className={TABLE.td}>{inv.due_date || '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -751,41 +780,41 @@ function InvoicesTab({ home, canEdit }) {
             </div>
 
             {modalTab === 'details' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className={INPUT.label}>Payer Type *</label>
-                  <select value={form.payer_type || ''} onChange={e => set('payer_type', e.target.value)} className={INPUT.select}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div><label htmlFor={`${invoiceFormId}-payer-type`} className={INPUT.label}>Payer Type *</label>
+                  <select id={`${invoiceFormId}-payer-type`} value={form.payer_type || ''} onChange={e => set('payer_type', e.target.value)} className={INPUT.select}>
                     {PAYER_TYPES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select></div>
-                <div><label className={INPUT.label}>Payer Name *</label>
-                  <input aria-label="Payer Name *" value={form.payer_name || ''} onChange={e => set('payer_name', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Resident</label>
-                  <select value={form.resident_id || ''} onChange={e => set('resident_id', e.target.value ? parseInt(e.target.value) : null)} className={INPUT.select}>
+                <div><label htmlFor={`${invoiceFormId}-payer-name`} className={INPUT.label}>Payer Name *</label>
+                  <input id={`${invoiceFormId}-payer-name`} value={form.payer_name || ''} onChange={e => set('payer_name', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-resident`} className={INPUT.label}>Resident</label>
+                  <select id={`${invoiceFormId}-resident`} value={form.resident_id || ''} onChange={e => set('resident_id', e.target.value ? parseInt(e.target.value) : null)} className={INPUT.select}>
                     <option value="">None</option>
                     {residents.map(r => <option key={r.id} value={r.id}>{r.resident_name} (Room {r.room_number || '?'})</option>)}
                   </select></div>
                 {selectedResident?.outstanding_balance > 0 && (
-                  <div className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:col-span-2">
                     This resident has {formatCurrency(selectedResident.outstanding_balance)} outstanding from prior invoices.
                   </div>
                 )}
-                <div><label className={INPUT.label}>Payer Reference</label>
-                  <input value={form.payer_reference || ''} onChange={e => set('payer_reference', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Period Start</label>
-                  <input type="date" value={form.period_start || ''} onChange={e => set('period_start', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Period End</label>
-                  <input type="date" value={form.period_end || ''} onChange={e => set('period_end', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Issue Date</label>
-                  <input type="date" value={form.issue_date || ''} onChange={e => set('issue_date', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Due Date</label>
-                  <input type="date" value={form.due_date || ''} onChange={e => set('due_date', e.target.value)} className={INPUT.base} /></div>
-                <div><label className={INPUT.label}>Status</label>
-                  <select value={form.status || 'draft'} onChange={e => set('status', e.target.value)} className={INPUT.select}>
+                <div><label htmlFor={`${invoiceFormId}-payer-reference`} className={INPUT.label}>Payer Reference</label>
+                  <input id={`${invoiceFormId}-payer-reference`} value={form.payer_reference || ''} onChange={e => set('payer_reference', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-period-start`} className={INPUT.label}>Period Start</label>
+                  <input id={`${invoiceFormId}-period-start`} type="date" value={form.period_start || ''} onChange={e => set('period_start', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-period-end`} className={INPUT.label}>Period End</label>
+                  <input id={`${invoiceFormId}-period-end`} type="date" value={form.period_end || ''} onChange={e => set('period_end', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-issue-date`} className={INPUT.label}>Issue Date</label>
+                  <input id={`${invoiceFormId}-issue-date`} type="date" value={form.issue_date || ''} onChange={e => set('issue_date', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-due-date`} className={INPUT.label}>Due Date</label>
+                  <input id={`${invoiceFormId}-due-date`} type="date" value={form.due_date || ''} onChange={e => set('due_date', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-status`} className={INPUT.label}>Status</label>
+                  <select id={`${invoiceFormId}-status`} value={form.status || 'draft'} onChange={e => set('status', e.target.value)} className={INPUT.select}>
                     {INVOICE_STATUSES.filter(s => ['draft', 'sent'].includes(s.id)).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select></div>
-                <div><label className={INPUT.label}>Adjustments</label>
-                  <input type="number" step="0.01" inputMode="decimal" value={form.adjustments ?? ''} onChange={e => set('adjustments', e.target.value)} className={INPUT.base} /></div>
-                <div className="col-span-2"><label className={INPUT.label}>Notes</label>
-                  <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
+                <div><label htmlFor={`${invoiceFormId}-adjustments`} className={INPUT.label}>Adjustments</label>
+                  <input id={`${invoiceFormId}-adjustments`} type="number" step="0.01" inputMode="decimal" value={form.adjustments ?? ''} onChange={e => set('adjustments', e.target.value)} className={INPUT.base} /></div>
+                <div className="sm:col-span-2"><label htmlFor={`${invoiceFormId}-notes`} className={INPUT.label}>Notes</label>
+                  <textarea id={`${invoiceFormId}-notes`} rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
               </div>
             )}
 
@@ -793,21 +822,21 @@ function InvoicesTab({ home, canEdit }) {
               <div>
                 <div className="space-y-3">
                   {lines.map((line, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-4"><label className={INPUT.label}>Description</label>
-                        <input value={line.description || ''} onChange={e => updateLine(idx, 'description', e.target.value)} className={INPUT.sm} /></div>
-                      <div className="col-span-2"><label className={INPUT.label}>Type</label>
-                        <select value={line.line_type || 'fee'} onChange={e => updateLine(idx, 'line_type', e.target.value)} className={INPUT.sm}>
+                    <div key={idx} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-12">
+                      <div className="sm:col-span-4"><label htmlFor={`${invoiceFormId}-line-${idx}-description`} className={INPUT.label}>Description</label>
+                        <input id={`${invoiceFormId}-line-${idx}-description`} value={line.description || ''} onChange={e => updateLine(idx, 'description', e.target.value)} className={INPUT.sm} /></div>
+                      <div className="sm:col-span-2"><label htmlFor={`${invoiceFormId}-line-${idx}-type`} className={INPUT.label}>Type</label>
+                        <select id={`${invoiceFormId}-line-${idx}-type`} value={line.line_type || 'fee'} onChange={e => updateLine(idx, 'line_type', e.target.value)} className={INPUT.sm}>
                           {LINE_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                         </select></div>
-                      <div className="col-span-1"><label className={INPUT.label}>Qty</label>
-                        <input type="number" step="0.01" inputMode="decimal" value={line.quantity ?? 1} onChange={e => updateLine(idx, 'quantity', e.target.value)} className={INPUT.sm} /></div>
-                      <div className="col-span-2"><label className={INPUT.label}>Unit Price</label>
-                        <input type="number" step="0.01" inputMode="decimal" value={line.unit_price ?? ''} onChange={e => updateLine(idx, 'unit_price', e.target.value)} className={INPUT.sm} /></div>
-                      <div className="col-span-2"><label className={INPUT.label}>Amount</label>
-                        <input type="number" step="0.01" inputMode="decimal" value={line.amount ?? ''} onChange={e => updateLine(idx, 'amount', e.target.value)} className={`${INPUT.sm} bg-gray-50`} readOnly /></div>
-                      <div className="col-span-1">
-                        <button type="button" onClick={() => removeLine(idx)} className={`${BTN.ghost} ${BTN.xs} text-red-500`}>x</button>
+                      <div className="sm:col-span-1"><label htmlFor={`${invoiceFormId}-line-${idx}-quantity`} className={INPUT.label}>Qty</label>
+                        <input id={`${invoiceFormId}-line-${idx}-quantity`} type="number" min="0" step="0.01" inputMode="decimal" value={line.quantity ?? 1} onChange={e => updateLine(idx, 'quantity', e.target.value)} className={INPUT.sm} /></div>
+                      <div className="sm:col-span-2"><label htmlFor={`${invoiceFormId}-line-${idx}-unit-price`} className={INPUT.label}>Unit Price</label>
+                        <input id={`${invoiceFormId}-line-${idx}-unit-price`} type="number" min="0" step="0.01" inputMode="decimal" value={line.unit_price ?? ''} onChange={e => updateLine(idx, 'unit_price', e.target.value)} className={INPUT.sm} /></div>
+                      <div className="sm:col-span-2"><label htmlFor={`${invoiceFormId}-line-${idx}-amount`} className={INPUT.label}>Amount</label>
+                        <input id={`${invoiceFormId}-line-${idx}-amount`} type="number" step="0.01" inputMode="decimal" value={line.amount ?? ''} onChange={e => updateLine(idx, 'amount', e.target.value)} className={`${INPUT.sm} bg-gray-50`} readOnly /></div>
+                      <div className="sm:col-span-1">
+                        <button type="button" aria-label={`Remove invoice line ${idx + 1}`} onClick={() => removeLine(idx)} className={`${BTN.ghost} ${BTN.xs} text-red-500`}>x</button>
                       </div>
                     </div>
                   ))}
@@ -832,16 +861,16 @@ function InvoicesTab({ home, canEdit }) {
                   </div>
                 </div>
                 {editing.balance_due > 0 && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><label className={INPUT.label}>Payment Amount *</label>
-                      <input type="number" step="0.01" inputMode="decimal" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className={INPUT.base} placeholder={`Max: ${editing.balance_due}`} /></div>
-                    <div><label className={INPUT.label}>Method</label>
-                      <select value={payForm.payment_method} onChange={e => setPayForm(p => ({ ...p, payment_method: e.target.value }))} className={INPUT.select}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div><label htmlFor={`${invoiceFormId}-payment-amount`} className={INPUT.label}>Payment Amount *</label>
+                      <input id={`${invoiceFormId}-payment-amount`} type="number" min="0.01" step="0.01" inputMode="decimal" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className={INPUT.base} placeholder={`Max: ${editing.balance_due}`} /></div>
+                    <div><label htmlFor={`${invoiceFormId}-payment-method`} className={INPUT.label}>Method</label>
+                      <select id={`${invoiceFormId}-payment-method`} value={payForm.payment_method} onChange={e => setPayForm(p => ({ ...p, payment_method: e.target.value }))} className={INPUT.select}>
                         {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                       </select></div>
-                    <div className="col-span-2"><label className={INPUT.label}>Reference</label>
-                      <input value={payForm.payment_reference} onChange={e => setPayForm(p => ({ ...p, payment_reference: e.target.value }))} className={INPUT.base} placeholder="Payment reference" /></div>
-                    {canEdit && <div className="col-span-2">
+                    <div className="sm:col-span-2"><label htmlFor={`${invoiceFormId}-payment-reference`} className={INPUT.label}>Reference</label>
+                      <input id={`${invoiceFormId}-payment-reference`} value={payForm.payment_reference} onChange={e => setPayForm(p => ({ ...p, payment_reference: e.target.value }))} className={INPUT.base} placeholder="Payment reference" /></div>
+                    {canEdit && <div className="sm:col-span-2">
                       <button type="button" onClick={handlePayment} disabled={saving} className={BTN.success}>{saving ? 'Recording...' : 'Record Payment'}</button>
                     </div>}
                   </div>
