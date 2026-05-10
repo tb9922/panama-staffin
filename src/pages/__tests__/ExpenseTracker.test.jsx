@@ -145,6 +145,7 @@ describe('ExpenseTracker', () => {
     await waitFor(() => expect(screen.getByText('No expenses found')).toBeInTheDocument());
 
     expect(screen.queryByText('Loading expenses...')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Expense' })).not.toBeInTheDocument();
     expect(api.getFinanceExpenses).not.toHaveBeenCalled();
   });
 

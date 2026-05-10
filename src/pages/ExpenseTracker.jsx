@@ -71,7 +71,7 @@ export default function ExpenseTracker() {
   const home = getCurrentHome();
   const user = getLoggedInUser();
   const { canWrite } = useData();
-  const canEdit = canWrite('finance');
+  const canEdit = canWrite('finance') && Boolean(home);
   useDirtyGuard(Boolean(showModal));
 
   const load = useCallback(async () => {
@@ -139,6 +139,10 @@ export default function ExpenseTracker() {
   async function handleSave() {
     if (readOnly || saving) return;
     setFormError(null);
+    if (!home) {
+      setFormError('Choose a home before saving an expense.');
+      return;
+    }
     const netAmount = Number(form.net_amount);
     const vatAmount = form.vat_amount === '' || form.vat_amount == null ? 0 : Number(form.vat_amount);
     if (!form.expense_date) {
@@ -208,6 +212,10 @@ export default function ExpenseTracker() {
 
   async function handleApprove(expense) {
     if (saving) return;
+    if (!home) {
+      setError('Choose a home before approving an expense.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -335,7 +343,7 @@ export default function ExpenseTracker() {
                     <td className={TABLE.td}>{expense.expense_date}</td>
                     <td className={TABLE.td}>{getLabel(expense.category, EXPENSE_CATEGORIES)}</td>
                     <td className={`${TABLE.td} max-w-48 truncate`}>{expense.description}</td>
-                    <td className={TABLE.td}>{expense.supplier || '—'}</td>
+                    <td className={TABLE.td}>{expense.supplier || '-'}</td>
                     <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(expense.net_amount)}</td>
                     <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(expense.vat_amount)}</td>
                     <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(expense.gross_amount)}</td>
@@ -392,11 +400,11 @@ export default function ExpenseTracker() {
 
             <div>
               <label htmlFor={netAmountId} className={INPUT.label}>Net Amount *</label>
-              <input id={netAmountId} type="number" step="0.01" inputMode="decimal" value={form.net_amount ?? ''} onChange={event => setAmount('net_amount', event.target.value)} className={INPUT.base} />
+              <input id={netAmountId} type="number" min="0" step="0.01" inputMode="decimal" value={form.net_amount ?? ''} onChange={event => setAmount('net_amount', event.target.value)} className={INPUT.base} />
             </div>
             <div>
               <label htmlFor={vatAmountId} className={INPUT.label}>VAT</label>
-              <input id={vatAmountId} type="number" step="0.01" inputMode="decimal" value={form.vat_amount ?? ''} onChange={event => setAmount('vat_amount', event.target.value)} className={INPUT.base} />
+              <input id={vatAmountId} type="number" min="0" step="0.01" inputMode="decimal" value={form.vat_amount ?? ''} onChange={event => setAmount('vat_amount', event.target.value)} className={INPUT.base} />
             </div>
             <div>
               <label htmlFor={grossAmountId} className={INPUT.label}>Gross Amount</label>
