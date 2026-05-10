@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useId } from 'react';
 import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
-import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
@@ -26,6 +26,7 @@ function getMonthDates(year, month) {
 export default function BudgetTracker() {
   const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
+  const [loadedHomeSlug, setLoadedHomeSlug] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingBudget, setEditingBudget] = useState(null);
@@ -34,19 +35,37 @@ export default function BudgetTracker() {
   useDirtyGuard(editingBudget !== null);
 
   useEffect(() => {
-    if (!homeSlug) return;
+    let cancelled = false;
+    if (!homeSlug) return () => { cancelled = true; };
     // BudgetTracker shows 6 months back + 5 months forward — request a wider override window
     const now = new Date();
     const from = startOfLocalMonthISO(now, -6);
     const to = endOfLocalMonthISO(now, 5);
     getSchedulingData(homeSlug, { from, to })
-      .then(setSchedData)
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+      .then(data => {
+        if (cancelled) return;
+        setSchedData(data);
+        setLoadedHomeSlug(homeSlug);
+        setError(null);
+      })
+      .catch(e => {
+        if (cancelled) return;
+        setError(e.message || 'Failed to load budget data');
+        setLoadedHomeSlug(homeSlug);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [homeSlug]);
 
-  if (loading) return <LoadingState message="Loading budget data..." className="px-6 py-6" />;
-  if (error) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="Unable to load budget data" message={error} /></div>;
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState title="No home selected" description="Choose a home before viewing budget and variance data." />
+      </div>
+    );
+  }
+  if (loading || loadedHomeSlug !== homeSlug) return <LoadingState message="Loading budget data..." className="px-6 py-6" />;
+  if (error) return <div className={PAGE.container}><ErrorState title="Unable to load budget data" message={error} /></div>;
   if (!schedData) return null;
 
   return <BudgetTrackerInner schedData={schedData} setSchedData={setSchedData} editingBudget={editingBudget} setEditingBudget={setEditingBudget} budgetInput={budgetInput} setBudgetInput={setBudgetInput} agencyCapInput={agencyCapInput} setAgencyCapInput={setAgencyCapInput} />;
@@ -58,7 +77,11 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [formError, setFormError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  const defaultBudgetInputId = useId();
+  const defaultAgencyCapInputId = useId();
+  const monthBudgetInputId = useId();
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
@@ -164,31 +187,75 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     }
   }
 
+  function parseNonNegativeMoney(value, label) {
+    const amount = Number.parseFloat(value);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setFormError(`${label} must be zero or more.`);
+      return null;
+    }
+    return amount;
+  }
+
+  function closeBudgetModal() {
+    setEditingBudget(null);
+    setFormError(null);
+  }
+
+  function openDefaultBudget() {
+    setEditingBudget('default');
+    setBudgetInput(String(defaultBudget || ''));
+    setAgencyCapInput(String(defaultAgencyCap || ''));
+    setFormError(null);
+  }
+
+  function openMonthBudget(month) {
+    setEditingBudget(month.key);
+    setBudgetInput(String(month.budget || defaultBudget || ''));
+    setFormError(null);
+  }
+
   async function saveBudgetOverride(monthKey) {
     if (saving) return;
-    const val = parseFloat(budgetInput);
-    if (isNaN(val) || val < 0) return;
+    const val = parseNonNegativeMoney(budgetInput, 'Monthly budget');
+    if (val === null) return;
     setSaving(true);
+    setFormError(null);
     try {
       const saved = await patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
-      if (saved) setEditingBudget(null);
+      if (saved) closeBudgetModal();
     } finally { setSaving(false); }
   }
 
   async function saveDefaultBudget() {
     if (saving) return;
+    const total = parseNonNegativeMoney(budgetInput, 'Total staff budget');
+    if (total === null) return;
+    const agCap = parseNonNegativeMoney(agencyCapInput, 'Agency cap');
+    if (agCap === null) return;
     setSaving(true);
+    setFormError(null);
     try {
-      const total = parseFloat(budgetInput) || 0;
-      const agCap = parseFloat(agencyCapInput) || 0;
       const saved = await patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
-      if (saved) setEditingBudget(null);
+      if (saved) closeBudgetModal();
+    } finally { setSaving(false); }
+  }
+
+  async function resetBudgetOverride(monthKey) {
+    if (saving) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      const newOverrides = { ...budgetOverrides };
+      delete newOverrides[monthKey];
+      const saved = await patchConfig({ budget_overrides: newOverrides });
+      if (saved) closeBudgetModal();
     } finally { setSaving(false); }
   }
 
   async function handleExport() {
     if (exporting) return;
     setExporting(true);
+    setSaveError(null);
     try {
       const headers = ['Month', 'Budget £', 'Actual £', 'Variance £', 'Var %', 'Base £', 'OT £', 'Agency £', 'BH £'];
       const rows = monthData.map(m => [
@@ -204,6 +271,8 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
       ]);
       const { downloadXLSX } = await import('../lib/excel.js');
       downloadXLSX(`budget_${config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
+    } catch (e) {
+      setSaveError(e.message || 'Failed to export budget workbook');
     } finally {
       setExporting(false);
     }
@@ -239,38 +308,35 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
           <p className="text-sm text-gray-500">12-month rolling view — staffing cost tracking</p>
         </div>
         <div className="flex gap-2">
-          {canEdit && <button onClick={() => {
-            setEditingBudget('default');
-            setBudgetInput(String(defaultBudget || ''));
-            setAgencyCapInput(String(defaultAgencyCap || ''));
-          }} className={BTN.primary}>
+          {canEdit && <button type="button" onClick={openDefaultBudget} className={BTN.primary}>
             Set Budget
           </button>}
-          <button onClick={handleExport} disabled={exporting} className={`${BTN.secondary} disabled:opacity-50`}>
-            {exporting ? 'Exporting�' : 'Export Excel'}
+          <button type="button" onClick={handleExport} disabled={exporting} className={`${BTN.secondary} disabled:opacity-50`}>
+            {exporting ? 'Exporting...' : 'Export Excel'}
           </button>
-          <button onClick={() => window.print()}
+          <button type="button" onClick={() => window.print()}
             className={BTN.secondary}>Print</button>
         </div>
       </div>
 
       {/* Budget Setting Modal */}
-      <Modal isOpen={editingBudget === 'default'} onClose={() => setEditingBudget(null)} title="Set Monthly Budget" size="sm">
+      <Modal isOpen={editingBudget === 'default'} onClose={closeBudgetModal} title="Set Monthly Budget" size="sm">
             <div className="space-y-3">
+              {formError && <InlineNotice variant="error" role="alert">{formError}</InlineNotice>}
               <div>
-                <label className={INPUT.label}>Total Staff Budget (£/month)</label>
-                <input type="number" inputMode="decimal" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+                <label htmlFor={defaultBudgetInputId} className={INPUT.label}>Total Staff Budget (£/month)</label>
+                <input id={defaultBudgetInputId} type="number" inputMode="decimal" min="0" step="0.01" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
                   className={INPUT.base} placeholder="e.g. 50000" />
               </div>
               <div>
-                <label className={INPUT.label}>Agency Cap (£/month)</label>
-                <input type="number" inputMode="decimal" value={agencyCapInput} onChange={e => setAgencyCapInput(e.target.value)}
+                <label htmlFor={defaultAgencyCapInputId} className={INPUT.label}>Agency Cap (£/month)</label>
+                <input id={defaultAgencyCapInputId} type="number" inputMode="decimal" min="0" step="0.01" value={agencyCapInput} onChange={e => setAgencyCapInput(e.target.value)}
                   className={INPUT.base} placeholder="e.g. 5000" />
               </div>
             </div>
             <div className={MODAL.footer}>
-              <button onClick={() => setEditingBudget(null)} className={BTN.secondary}>Cancel</button>
-              <button onClick={saveDefaultBudget} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>
+              <button type="button" onClick={closeBudgetModal} className={BTN.secondary}>Cancel</button>
+              <button type="button" onClick={saveDefaultBudget} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>
             </div>
       </Modal>
 
@@ -314,11 +380,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
               title="No budget set"
               description={canEdit ? 'Set monthly staff and agency targets to start tracking variance and forecast pressure.' : 'Budget targets have not been configured for this home yet.'}
               actionLabel={canEdit ? 'Set Budget' : undefined}
-              onAction={canEdit ? () => {
-                setEditingBudget('default');
-                setBudgetInput(String(defaultBudget || ''));
-                setAgencyCapInput(String(defaultAgencyCap || ''));
-              } : undefined}
+              onAction={canEdit ? openDefaultBudget : undefined}
             />
           </div>
         )}
@@ -443,10 +505,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                     ) : <span className="text-gray-300">-</span>}
                   </td>
                   {canEdit && <td className={`${TABLE.td} text-center print:hidden`}>
-                    <button onClick={() => {
-                      setEditingBudget(m.key);
-                      setBudgetInput(String(m.budget || defaultBudget || ''));
-                    }} className="text-blue-500 hover:text-blue-700 text-[10px] underline transition-colors duration-150">edit</button>
+                    <button type="button" aria-label={`Edit budget for ${m.fullLabel}`} onClick={() => openMonthBudget(m)} className="text-blue-500 hover:text-blue-700 text-[10px] underline transition-colors duration-150">edit</button>
                   </td>}
                 </tr>
               ))}
@@ -468,19 +527,15 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
       </div>
 
       {/* Per-month budget edit modal */}
-      <Modal isOpen={!!editingBudget && editingBudget !== 'default'} onClose={() => setEditingBudget(null)} title={`Budget for ${editingBudget || ''}`} size="sm">
-            <input type="number" inputMode="decimal" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+      <Modal isOpen={!!editingBudget && editingBudget !== 'default'} onClose={closeBudgetModal} title={`Budget for ${editingBudget || ''}`} size="sm">
+            {formError && <InlineNotice className="mb-3" variant="error" role="alert">{formError}</InlineNotice>}
+            <label htmlFor={monthBudgetInputId} className={INPUT.label}>Monthly Budget (£)</label>
+            <input id={monthBudgetInputId} type="number" inputMode="decimal" min="0" step="0.01" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
               className={`${INPUT.base} mb-3`} placeholder="Monthly budget £" />
             <div className={MODAL.footer}>
-              <button onClick={() => setEditingBudget(null)} className={BTN.ghost}>X</button>
-              <button onClick={() => {
-                // Reset to default
-                const newOverrides = { ...budgetOverrides };
-                delete newOverrides[editingBudget];
-                patchConfig({ budget_overrides: newOverrides });
-                setEditingBudget(null);
-              }} className={BTN.secondary}>Use Default</button>
-              <button onClick={() => saveBudgetOverride(editingBudget)} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>
+              <button type="button" onClick={closeBudgetModal} className={BTN.ghost}>Cancel</button>
+              <button type="button" onClick={() => resetBudgetOverride(editingBudget)} disabled={saving} className={BTN.secondary}>Use Default</button>
+              <button type="button" onClick={() => saveBudgetOverride(editingBudget)} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>
             </div>
       </Modal>
     </div>

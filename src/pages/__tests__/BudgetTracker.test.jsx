@@ -91,6 +91,7 @@ function renderViewer(schedData) {
 describe('BudgetTracker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCurrentHome.mockReturnValue('test-home');
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   });
 
@@ -114,6 +115,14 @@ describe('BudgetTracker', () => {
       expect(screen.getByText('Network error')).toBeInTheDocument()
     );
     expect(screen.queryByText('Budget vs Actual')).not.toBeInTheDocument();
+  });
+
+  it('does not call the scheduling API when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<BudgetTracker />);
+
+    await waitFor(() => expect(screen.getByText('No home selected')).toBeInTheDocument());
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('shows "No budget set" message when no budget is configured', async () => {
@@ -153,8 +162,7 @@ describe('BudgetTracker', () => {
       expect(screen.getByText('Budget vs Actual')).toBeInTheDocument()
     );
     expect(screen.getByRole('button', { name: 'Set Budget' })).toBeInTheDocument();
-    // Each of the 12 months gets an edit link
-    const editLinks = screen.getAllByText('edit');
+    const editLinks = screen.getAllByRole('button', { name: /Edit budget for/i });
     expect(editLinks.length).toBe(12);
   });
 
@@ -175,8 +183,48 @@ describe('BudgetTracker', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Set Budget' }));
     expect(screen.getByText('Set Monthly Budget')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. 50000')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. 5000')).toBeInTheDocument();
+    expect(screen.getByLabelText('Total Staff Budget (£/month)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Agency Cap (£/month)')).toBeInTheDocument();
+  });
+
+  it('blocks negative default budgets before saving', async () => {
+    const user = userEvent.setup();
+    renderAdmin(SCHED_DATA_WITH_BUDGET);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Set Budget' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Set Budget' }));
+    await user.clear(screen.getByLabelText('Total Staff Budget (£/month)'));
+    await user.type(screen.getByLabelText('Total Staff Budget (£/month)'), '-1');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Total staff budget must be zero or more.')).toBeInTheDocument();
+    expect(api.saveConfig).not.toHaveBeenCalled();
+  });
+
+  it('validates per-month budget edits and can reset to default', async () => {
+    const user = userEvent.setup();
+    const schedData = {
+      ...SCHED_DATA_WITH_BUDGET,
+      config: {
+        ...SCHED_DATA_WITH_BUDGET.config,
+        budget_overrides: { '2026-05': 52000 },
+      },
+    };
+    renderAdmin(schedData);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /Edit budget for/i }).length).toBe(12));
+
+    await user.click(screen.getAllByRole('button', { name: /Edit budget for/i })[0]);
+    await user.clear(screen.getByLabelText('Monthly Budget (£)'));
+    await user.type(screen.getByLabelText('Monthly Budget (£)'), '-25');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Monthly budget must be zero or more.')).toBeInTheDocument();
+    expect(api.saveConfig).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText('Monthly Budget (£)'));
+    await user.type(screen.getByLabelText('Monthly Budget (£)'), '51000');
+    await user.click(screen.getByRole('button', { name: 'Use Default' }));
+    await waitFor(() => expect(api.saveConfig).toHaveBeenCalledOnce());
   });
 
   it('variance display shows over/under status with budget set', async () => {
