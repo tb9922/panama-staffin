@@ -106,7 +106,7 @@ export async function getFinanceDocs(homeId) {
     ...expenses.flatMap((expense) => (attachmentBuckets.get(`finance_expense:${expense.id}`) || []).map((attachment) => ({
       type: 'expense',
       parent_id: expense.id,
-      supplier: expense.supplier_name || '—',
+      supplier: expense.supplier_name || '-',
       month: monthKey(expense.expense_date),
       category: expense.category,
       status: expense.status,
@@ -115,7 +115,7 @@ export async function getFinanceDocs(homeId) {
     ...schedules.flatMap((schedule) => (attachmentBuckets.get(`finance_payment_schedule:${schedule.id}`) || []).map((attachment) => ({
       type: 'payment_schedule',
       parent_id: schedule.id,
-      supplier: schedule.supplier_name || '—',
+      supplier: schedule.supplier_name || '-',
       month: monthKey(schedule.next_due),
       category: schedule.category,
       status: schedule.on_hold ? 'on_hold' : 'active',
@@ -145,7 +145,7 @@ export async function getFinanceDocs(homeId) {
     expenses,
     schedules,
     byMonth: groupCounts(documents, (item) => item.month),
-    bySupplier: groupCounts(documents, (item) => item.supplier || '—'),
+    bySupplier: groupCounts(documents, (item) => item.supplier || '-'),
     byCategory: groupCounts(documents, (item) => item.category || 'other'),
     byStatus: groupCounts(documents, (item) => item.status || 'unknown'),
   };
