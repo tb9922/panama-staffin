@@ -60,6 +60,7 @@ function renderViewer() {
 describe('CostTracker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCurrentHome.mockReturnValue('test-home');
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   });
 
@@ -86,6 +87,14 @@ describe('CostTracker', () => {
       expect(screen.getByText('Server unavailable')).toBeInTheDocument()
     );
     expect(screen.queryByText('Cost Tracker')).not.toBeInTheDocument();
+  });
+
+  it('does not call the scheduling API when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<CostTracker />, { user: { username: 'admin', role: 'admin' } });
+
+    await waitFor(() => expect(screen.getByText('No home selected')).toBeInTheDocument());
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('viewer sees "Admin access required" message instead of cost data', async () => {
@@ -137,9 +146,8 @@ describe('CostTracker', () => {
       expect(screen.getByText('Cost Tracker')).toBeInTheDocument()
     );
 
-    // Check nav arrows are rendered (← and →)
-    const prevBtn = screen.getByRole('button', { name: /←/ });
-    const nextBtn = screen.getByRole('button', { name: /→/ });
+    const prevBtn = screen.getByRole('button', { name: 'Previous month' });
+    const nextBtn = screen.getByRole('button', { name: 'Next month' });
     expect(prevBtn).toBeInTheDocument();
     expect(nextBtn).toBeInTheDocument();
 

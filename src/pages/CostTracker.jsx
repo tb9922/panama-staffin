@@ -35,6 +35,7 @@ export default function CostTracker() {
   const canEdit = canWrite('finance');
   const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
+  const [loadedHomeSlug, setLoadedHomeSlug] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
@@ -49,11 +50,22 @@ export default function CostTracker() {
   }, [today]);
 
   useEffect(() => {
-    if (!homeSlug) return;
+    let cancelled = false;
+    if (!homeSlug) return () => { cancelled = true; };
     getSchedulingData(homeSlug)
-      .then(setSchedData)
-      .catch(e => setError(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
+      .then(data => {
+        if (cancelled) return;
+        setSchedData(data);
+        setLoadedHomeSlug(homeSlug);
+        setError(null);
+      })
+      .catch(e => {
+        if (cancelled) return;
+        setError(e.message || 'Failed to load');
+        setLoadedHomeSlug(homeSlug);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [homeSlug]);
 
   if (!canEdit) {
@@ -67,7 +79,14 @@ export default function CostTracker() {
     );
   }
 
-  if (loading) return <LoadingState message="Loading cost data..." className="px-6 py-6" />;
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState title="No home selected" description="Choose a home before viewing daily costs and agency impact." />
+      </div>
+    );
+  }
+  if (loading || loadedHomeSlug !== homeSlug) return <LoadingState message="Loading cost data..." className="px-6 py-6" />;
   if (error || !schedData) {
     return (
       <div className={PAGE.container}>
@@ -141,20 +160,20 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
         <div>
           <h1 className={PAGE.title}>Cost Tracker</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button onClick={() => setMonthOffset(monthOffset - 1)}
+            <button type="button" aria-label="Previous month" onClick={() => setMonthOffset(monthOffset - 1)}
               className={`${BTN.ghost} ${BTN.xs}`}>&larr;</button>
             {monthOffset !== 0 && (
-              <button onClick={() => setMonthOffset(0)}
+              <button type="button" onClick={() => setMonthOffset(0)}
                 className="px-2 py-1 text-xs font-medium text-[var(--accent)] hover:underline">Current</button>
             )}
-            <button onClick={() => setMonthOffset(monthOffset + 1)}
+            <button type="button" aria-label="Next month" onClick={() => setMonthOffset(monthOffset + 1)}
               className={`${BTN.ghost} ${BTN.xs}`}>&rarr;</button>
             <span className="text-sm font-medium text-[var(--ink-2)]">{monthLabel}</span>
             <span className="text-xs text-[var(--ink-4)]">({days} days)</span>
           </div>
         </div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             const headers = ['Day#', 'Day', 'Date', 'Base £', 'OT Prem £', 'AG Day £', 'AG Night £', 'BH Prem £', 'Total £', 'Cumulative £'];
             const rows = dayData.map(d => [
               d.dayNum,
@@ -170,7 +189,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
             ]);
             downloadCSV(`costs_${monthLabel.replace(' ', '_')}.csv`, headers, rows);
           }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export CSV</button>
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             const headers = ['Day#', 'Day', 'Date', 'Base £', 'OT Prem £', 'AG Day £', 'AG Night £', 'BH Prem £', 'Total £', 'Cumulative £'];
             const rows = dayData.map(d => [
               d.dayNum,
@@ -186,7 +205,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
             ]);
             downloadXLSX(`costs_${monthLabel.replace(' ', '_')}`, [{ name: 'Daily Costs', headers, rows }]);
           }} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Export Excel</button>
-          <button onClick={() => window.print()} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
+          <button type="button" onClick={() => window.print()} className={`${BTN.secondary} flex-1 whitespace-nowrap sm:flex-none`}>Print</button>
         </div>
       </div>
 
