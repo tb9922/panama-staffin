@@ -89,9 +89,9 @@ describe('ClockInAudit', () => {
     renderWithProviders(<ClockInAudit />, { canWrite: true });
 
     await screen.findByText('Manual clock-in');
-    fireEvent.change(screen.getByLabelText('Staff ID'), { target: { value: 'S003' } });
+    fireEvent.change(screen.getByLabelText('Staff ID'), { target: { value: ' S003 ' } });
     fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'out' } });
-    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Manager correction' } });
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: ' Manager correction ' } });
     fireEvent.click(screen.getByRole('button', { name: /Add manual entry/i }));
 
     await waitFor(() => {
@@ -101,6 +101,32 @@ describe('ClockInAudit', () => {
         note: 'Manager correction',
       }));
     });
+  });
+
+  it('keeps whitespace-only manual submissions on the form', async () => {
+    renderWithProviders(<ClockInAudit />, { canWrite: true });
+
+    await screen.findByText('Manual clock-in');
+    fireEvent.change(screen.getByLabelText('Staff ID'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add manual entry/i }));
+
+    expect(await screen.findByText('Staff ID is required.')).toBeInTheDocument();
+    expect(createManualClockIn).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Staff ID'), { target: { value: 'S004' } });
+    expect(screen.queryByText('Staff ID is required.')).not.toBeInTheDocument();
+  });
+
+  it('shows manual create failures beside the manual form', async () => {
+    createManualClockIn.mockRejectedValueOnce(new Error('Staff member not found'));
+    renderWithProviders(<ClockInAudit />, { canWrite: true });
+
+    await screen.findByText('Manual clock-in');
+    fireEvent.change(screen.getByLabelText('Staff ID'), { target: { value: 'S999' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add manual entry/i }));
+
+    expect(await screen.findByText('Staff member not found')).toBeInTheDocument();
+    expect(screen.queryByText('Clock-in audit error')).not.toBeInTheDocument();
   });
 
   it('does not request the daily list with an empty date', async () => {

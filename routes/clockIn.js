@@ -17,15 +17,15 @@ const recordClockSchema = z.object({
 });
 
 const manualClockSchema = z.object({
-  staffId: z.string().min(1).max(20),
+  staffId: z.string().trim().min(1).max(20),
   clockType: z.enum(['in', 'out']),
   shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  note: z.string().max(1000).optional(),
+  note: z.string().trim().max(1000).optional(),
   clientTime: z.string().datetime().optional(),
 });
 
 const approveClockSchema = z.object({
-  note: z.string().max(1000).optional(),
+  note: z.string().trim().max(1000).optional(),
 });
 
 function ensureStaffPortalEnabled(req, res, next) {

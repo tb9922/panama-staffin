@@ -37,6 +37,22 @@ function formatLocation(item) {
   return parts.join(' | ');
 }
 
+function buildManualPayload(manual) {
+  const staffId = manual.staffId.trim();
+  const note = manual.note.trim();
+  const shiftDate = /^\d{4}-\d{2}-\d{2}$/.test(manual.shiftDate) ? manual.shiftDate : '';
+  if (!staffId) return { error: 'Staff ID is required.' };
+  if (!shiftDate) return { error: 'Choose a valid shift date.' };
+  return {
+    payload: {
+      staffId,
+      clockType: manual.clockType,
+      shiftDate,
+      note: note || undefined,
+    },
+  };
+}
+
 export default function ClockInAudit() {
   const { activeHomeObj, canWrite } = useData();
   const canEdit = canWrite('payroll');
@@ -49,6 +65,7 @@ export default function ClockInAudit() {
   const [date, setDate] = useState(() => todayLocalISO());
   const [daily, setDaily] = useState([]);
   const [manual, setManual] = useState(makeManualDefaults);
+  const [manualError, setManualError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -94,14 +111,20 @@ export default function ClockInAudit() {
   async function handleManual(event) {
     event.preventDefault();
     if (!actionsEnabled) return;
+    const { payload, error: validationError } = buildManualPayload(manual);
+    if (validationError) {
+      setManualError(validationError);
+      return;
+    }
     setSubmitting(true);
     setError('');
+    setManualError('');
     try {
-      await createManualClockIn(homeSlug, manual);
+      await createManualClockIn(homeSlug, payload);
       setManual(makeManualDefaults());
       await load();
     } catch (err) {
-      setError(err.message);
+      setManualError(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -180,7 +203,10 @@ export default function ClockInAudit() {
                     id="clock-manual-staff-id"
                     className={INPUT.base}
                     value={manual.staffId}
-                    onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))}
+                    onChange={(e) => {
+                      setManualError('');
+                      setManual((current) => ({ ...current, staffId: e.target.value }));
+                    }}
                     required
                     disabled={submitting}
                   />
@@ -191,7 +217,10 @@ export default function ClockInAudit() {
                     id="clock-manual-type"
                     className={INPUT.select}
                     value={manual.clockType}
-                    onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}
+                    onChange={(e) => {
+                      setManualError('');
+                      setManual((current) => ({ ...current, clockType: e.target.value }));
+                    }}
                     disabled={submitting}
                   >
                     <option value="in">Clock in</option>
@@ -205,7 +234,10 @@ export default function ClockInAudit() {
                     type="date"
                     className={INPUT.base}
                     value={manual.shiftDate}
-                    onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value || todayLocalISO() }))}
+                    onChange={(e) => {
+                      setManualError('');
+                      setManual((current) => ({ ...current, shiftDate: e.target.value || todayLocalISO() }));
+                    }}
                     required
                     disabled={submitting}
                   />
@@ -216,11 +248,19 @@ export default function ClockInAudit() {
                     id="clock-manual-note"
                     className={INPUT.base}
                     value={manual.note}
-                    onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))}
+                    onChange={(e) => {
+                      setManualError('');
+                      setManual((current) => ({ ...current, note: e.target.value }));
+                    }}
                     disabled={submitting}
                   />
                 </div>
               </div>
+              {manualError && (
+                <InlineNotice variant="error" className="mt-4">
+                  {manualError}
+                </InlineNotice>
+              )}
               <div className="mt-5 flex justify-end">
                 <button type="submit" className={BTN.secondary} disabled={submitting}>
                   {submitting ? 'Saving...' : 'Add manual entry'}
