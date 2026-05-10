@@ -179,9 +179,31 @@ describe('FinanceDashboard', () => {
     expect(downloadXLSX).toHaveBeenCalledWith(
       expect.stringMatching(/^finance_dashboard_.*_to_.*\.xlsx$/),
       expect.arrayContaining([
+        expect.objectContaining({ name: 'KPIs' }),
         expect.objectContaining({ name: 'Monthly Summary' }),
         expect.objectContaining({ name: 'Expenses by Category' }),
       ]),
+    );
+  });
+
+  it('exports a KPI workbook even when detail tables are empty', async () => {
+    const user = userEvent.setup();
+    api.getFinanceDashboard.mockResolvedValue({
+      ...MOCK_DASHBOARD,
+      ageing: { total_outstanding: 0, buckets: {}, overdue_items: [] },
+      expenses_by_category: [],
+      income_trend: [],
+      expense_trend: [],
+    });
+    renderWithProviders(<FinanceDashboard />);
+
+    await waitFor(() => expect(screen.getByText('Income (Invoiced)')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
+
+    await waitFor(() => expect(downloadXLSX).toHaveBeenCalledTimes(1));
+    expect(downloadXLSX).toHaveBeenCalledWith(
+      expect.stringMatching(/^finance_dashboard_.*_to_.*\.xlsx$/),
+      [expect.objectContaining({ name: 'KPIs' })],
     );
   });
 
@@ -189,7 +211,9 @@ describe('FinanceDashboard', () => {
     api.getCurrentHome.mockReturnValue(null);
     renderWithProviders(<FinanceDashboard />);
 
-    await waitFor(() => expect(screen.getByText('No finance dashboard data for this range')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('No home selected')).toBeInTheDocument());
     expect(screen.queryByText(/loading finance data/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Excel' })).toBeDisabled();
   });
 });

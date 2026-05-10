@@ -20,7 +20,7 @@ const DEGRADED_METRIC_LABELS = {
 };
 
 function formatPercent(value, digits = 1) {
-  if (value == null || Number.isNaN(Number(value))) return '—';
+  if (value == null || Number.isNaN(Number(value))) return '-';
   return `${Number(value).toFixed(digits)}%`;
 }
 
@@ -87,7 +87,22 @@ export default function FinanceDashboard() {
     setError(null);
     try {
       const { downloadXLSX } = await import('../lib/excel.js');
-      const sheets = [];
+      const sheets = [{
+        name: 'KPIs',
+        headers: ['Metric', 'Value'],
+        rows: [
+          ['Income invoiced', dashboard.income?.total_invoiced ?? 0],
+          ['Invoice count', dashboard.income?.invoice_count ?? 0],
+          ['Total expenses', dashboard.expenses?.total_all ?? 0],
+          ['Staff costs', dashboard.expenses?.staff_costs ?? 0],
+          ['Agency costs', dashboard.expenses?.agency_costs ?? 0],
+          ['Net position', dashboard.net_position ?? 0],
+          ['Margin %', dashboard.margin ?? ''],
+          ['Occupancy %', dashboard.occupancy?.rate ?? ''],
+          ['Occupied beds', dashboard.occupancy?.active ?? 0],
+          ['Registered beds', dashboard.occupancy?.registered_beds ?? ''],
+        ],
+      }];
       const trendRows = buildTrendRows(dashboard.income_trend, dashboard.expense_trend);
       if (trendRows.length) {
         sheets.push({
@@ -123,9 +138,7 @@ export default function FinanceDashboard() {
           ]),
         });
       }
-      if (sheets.length) {
-        downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
-      }
+      downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
     } catch (err) {
       setError(err.message || 'Failed to export finance dashboard');
     } finally {
@@ -170,8 +183,8 @@ export default function FinanceDashboard() {
             min={period.from}
             className={`${INPUT.sm} min-w-0 flex-[1_1_8.5rem] sm:w-auto sm:flex-none`}
           />
-          <button type="button" onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`} disabled={datesReversed}>Refresh</button>
-          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`} disabled={!dashboard || datesReversed || exporting}>{exporting ? 'Exporting...' : 'Export Excel'}</button>
+          <button type="button" onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`} disabled={!home || datesReversed}>Refresh</button>
+          <button type="button" onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} flex-1 whitespace-nowrap sm:flex-none`} disabled={!home || !dashboard || datesReversed || exporting}>{exporting ? 'Exporting...' : 'Export Excel'}</button>
         </div>
       </div>
 
@@ -198,8 +211,8 @@ export default function FinanceDashboard() {
       {!canShowDashboard ? (
         <div className={CARD.flush}>
           <EmptyState
-            title={datesReversed ? 'Adjust the date range' : 'No finance dashboard data for this range'}
-            description={datesReversed ? 'The dashboard is hidden while the range is invalid.' : 'Try a broader date range or refresh once finance records have been added.'}
+            title={datesReversed ? 'Adjust the date range' : !home ? 'No home selected' : 'No finance dashboard data for this range'}
+            description={datesReversed ? 'The dashboard is hidden while the range is invalid.' : !home ? 'Choose a home before viewing finance dashboard data.' : 'Try a broader date range or refresh once finance records have been added.'}
           />
         </div>
       ) : (
