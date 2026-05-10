@@ -120,9 +120,47 @@ describe('PayrollDashboard', () => {
     await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /new payroll run/i }));
     expect(screen.getByText('New Payroll Run')).toBeInTheDocument();
-    expect(screen.getByText('Pay Frequency')).toBeInTheDocument();
-    expect(screen.getByText('Period Start')).toBeInTheDocument();
-    expect(screen.getByText('Payment Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Pay Frequency')).toBeInTheDocument();
+    expect(screen.getByLabelText('Period Start')).toBeInTheDocument();
+    expect(screen.getByLabelText('Payment Date')).toBeInTheDocument();
+  });
+
+  it('does not spin forever when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<PayrollDashboard />);
+
+    await waitFor(() => expect(screen.getByText('No home selected')).toBeInTheDocument());
+    expect(screen.queryByText('Loading payroll runs...')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new payroll run/i })).not.toBeInTheDocument();
+    expect(api.getPayrollRuns).not.toHaveBeenCalled();
+  });
+
+  it('shows a form error instead of silently returning on invalid run dates', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PayrollDashboard />);
+    await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /new payroll run/i }));
+
+    await user.clear(screen.getByLabelText('Period Start'));
+    await user.type(screen.getByLabelText('Period Start'), '2026-04-30');
+    await user.clear(screen.getByLabelText('Period End'));
+    await user.type(screen.getByLabelText('Period End'), '2026-04-01');
+    await user.click(screen.getByRole('button', { name: 'Create Run' }));
+
+    expect(screen.getByText('Period start must be on or before period end.')).toBeInTheDocument();
+    expect(api.createPayrollRun).not.toHaveBeenCalled();
+  });
+
+  it('keeps create failures inside the modal as form errors', async () => {
+    const user = userEvent.setup();
+    api.createPayrollRun.mockRejectedValue(new Error('Duplicate payroll period'));
+    renderWithProviders(<PayrollDashboard />);
+    await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /new payroll run/i }));
+    await user.click(screen.getByRole('button', { name: 'Create Run' }));
+
+    await waitFor(() => expect(screen.getByText('Duplicate payroll period')).toBeInTheDocument());
+    expect(screen.getByText('New Payroll Run')).toBeInTheDocument();
   });
 
   it('loads additional payroll pages so older runs still appear in the table', async () => {

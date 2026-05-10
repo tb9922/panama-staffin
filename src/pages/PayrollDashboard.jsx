@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
@@ -40,23 +40,29 @@ const FREQ_LABEL = {
 };
 
 function formatMoney(value) {
-  if (value == null) return '—';
+  if (value == null) return '-';
   return `£${parseFloat(value).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`;
 }
 
 export default function PayrollDashboard() {
   const homeSlug = getCurrentHome();
   const { canWrite, homeRole } = useData();
-  const canEdit = canWrite('payroll');
+  const isOwnDataPayroll = homeRole === 'staff_member';
+  const canEdit = Boolean(homeSlug && !isOwnDataPayroll && canWrite('payroll'));
   const navigate = useNavigate();
   const { confirm, ConfirmDialog } = useConfirm();
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { showToast } = useToast();
-  const isOwnDataPayroll = homeRole === 'staff_member';
+  const frequencyId = useId();
+  const periodStartId = useId();
+  const periodEndId = useId();
+  const payDateId = useId();
+  const notesId = useId();
 
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ period_start: '', period_end: '', pay_date: '', pay_frequency: 'monthly', notes: '' });
   const [creating, setCreating] = useState(false);
@@ -64,7 +70,11 @@ export default function PayrollDashboard() {
   useDirtyGuard(showCreate);
 
   const load = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug) {
+      setRuns([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -93,6 +103,7 @@ export default function PayrollDashboard() {
   }, [load]);
 
   function handleFreqChange(freq) {
+    setFormError(null);
     const lastRun = runs.length > 0 ? runs[0] : null;
     const next = suggestNextPeriod(lastRun, freq);
     setForm(current => ({
@@ -106,17 +117,39 @@ export default function PayrollDashboard() {
     }));
   }
 
+  function openCreateModal() {
+    setFormError(null);
+    setShowCreate(true);
+  }
+
+  function closeCreateModal() {
+    setFormError(null);
+    setShowCreate(false);
+  }
+
   async function handleCreate() {
-    if (!form.period_start || !form.period_end || !form.pay_date) return;
+    setFormError(null);
+    if (!homeSlug) {
+      setFormError('Choose a home before creating a payroll run.');
+      return;
+    }
+    if (!form.period_start || !form.period_end || !form.pay_date) {
+      setFormError('Period start, period end, and payment date are required.');
+      return;
+    }
+    if (form.period_start > form.period_end) {
+      setFormError('Period start must be on or before period end.');
+      return;
+    }
     setCreating(true);
     try {
       const run = await createPayrollRun(homeSlug, form);
-      setShowCreate(false);
+      closeCreateModal();
       showNotice('Payroll run created. Continue into the run to calculate, review, and approve it.', { variant: 'success' });
       showToast({ title: 'Payroll run created', message: `${form.period_start} to ${form.period_end}` });
       navigate(`/payroll/${run.id}`);
     } catch (e) {
-      setError(e.message);
+      setFormError(e.message || 'Failed to create payroll run.');
     } finally {
       setCreating(false);
     }
@@ -211,7 +244,7 @@ export default function PayrollDashboard() {
                         <span className={STATUS_BADGE[run.status] || BADGE.gray}>{STATUS_LABEL[run.status] || run.status}</span>
                       </td>
                       <td className={TABLE.td}>
-                        <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>Open</button>
+                        <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>Open</button>
                       </td>
                     </tr>
                   ))}
@@ -233,7 +266,7 @@ export default function PayrollDashboard() {
           <p className={PAGE.subtitle}>Gross pay calculation, approval, and export to Sage/Xero</p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={() => setShowCreate(true)}>+ New Payroll Run</button>
+          <button type="button" className={BTN.primary} onClick={openCreateModal}>+ New Payroll Run</button>
         )}
       </div>
 
@@ -257,7 +290,7 @@ export default function PayrollDashboard() {
           </div>
           <div className={CARD.padded}>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Staff</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{latest.staff_count ?? '—'}</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{latest.staff_count ?? '-'}</p>
           </div>
         </div>
       )}
@@ -265,10 +298,10 @@ export default function PayrollDashboard() {
       <div className={CARD.flush}>
         {runs.length === 0 ? (
           <EmptyState
-            title="No payroll runs yet"
-            description="Create your first payroll run to calculate pay, review exceptions, and export it."
+            title={!homeSlug ? 'No home selected' : 'No payroll runs yet'}
+            description={!homeSlug ? 'Choose a home before viewing payroll runs.' : 'Create your first payroll run to calculate pay, review exceptions, and export it.'}
             actionLabel={canEdit ? 'Create Payroll Run' : undefined}
-            onAction={canEdit ? () => setShowCreate(true) : undefined}
+            onAction={canEdit ? openCreateModal : undefined}
           />
         ) : (
           <div className={TABLE.wrapper}>
@@ -296,15 +329,15 @@ export default function PayrollDashboard() {
                     <td className={TABLE.td}>
                       <span className={STATUS_BADGE[run.status] || BADGE.gray}>{STATUS_LABEL[run.status] || run.status}</span>
                     </td>
-                    <td className={TABLE.td}>{run.staff_count ?? '—'}</td>
+                    <td className={TABLE.td}>{run.staff_count ?? '-'}</td>
                     <td className={`${TABLE.td} font-mono`}>{formatMoney(run.total_gross)}</td>
                     <td className={`${TABLE.td} font-mono`}>{formatMoney(run.total_enhancements)}</td>
-                    <td className={TABLE.td + ' text-xs text-gray-500'}>{run.exported_at ? run.exported_at.slice(0, 10) : '—'}</td>
+                    <td className={TABLE.td + ' text-xs text-gray-500'}>{run.exported_at ? run.exported_at.slice(0, 10) : '-'}</td>
                     <td className={TABLE.td}>
                       <div className="flex gap-1">
-                        <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>View</button>
+                        <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>View</button>
                         {canEdit && ['draft', 'calculated'].includes(run.status) && (
-                          <button
+                          <button type="button"
                             className={`${BTN.danger} ${BTN.sm}`}
                             onClick={() => void handleVoid(run)}
                             disabled={voidingRunId === run.id}
@@ -322,33 +355,40 @@ export default function PayrollDashboard() {
         )}
       </div>
 
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="New Payroll Run" size="lg">
+      <Modal isOpen={showCreate} onClose={closeCreateModal} title="New Payroll Run" size="lg">
         <div className="space-y-4">
+          {formError && <InlineNotice variant="error">{formError}</InlineNotice>}
           <div>
-            <label className={INPUT.label}>Pay Frequency</label>
-            <select className={INPUT.select} value={form.pay_frequency} onChange={e => handleFreqChange(e.target.value)}>
+            <label htmlFor={frequencyId} className={INPUT.label}>Pay Frequency</label>
+            <select id={frequencyId} className={INPUT.select} value={form.pay_frequency} onChange={e => handleFreqChange(e.target.value)}>
               <option value="weekly">Weekly</option>
               <option value="fortnightly">Fortnightly</option>
               <option value="monthly">Monthly</option>
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className={INPUT.label}>Period Start</label>
+              <label htmlFor={periodStartId} className={INPUT.label}>Period Start</label>
               <input
+                id={periodStartId}
                 type="date"
                 className={INPUT.base}
                 value={form.period_start}
-                onChange={e => setForm(current => ({ ...current, period_start: e.target.value }))}
+                onChange={e => {
+                  setFormError(null);
+                  setForm(current => ({ ...current, period_start: e.target.value }));
+                }}
               />
             </div>
             <div>
-              <label className={INPUT.label}>Period End</label>
+              <label htmlFor={periodEndId} className={INPUT.label}>Period End</label>
               <input
+                id={periodEndId}
                 type="date"
                 className={INPUT.base}
                 value={form.period_end}
                 onChange={e => {
+                  setFormError(null);
                   const nextEnd = e.target.value;
                   setForm(current => ({
                     ...current,
@@ -362,27 +402,35 @@ export default function PayrollDashboard() {
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Payment Date</label>
+            <label htmlFor={payDateId} className={INPUT.label}>Payment Date</label>
             <input
+              id={payDateId}
               type="date"
               className={INPUT.base}
               value={form.pay_date}
-              onChange={e => setForm(current => ({ ...current, pay_date: e.target.value }))}
+              onChange={e => {
+                setFormError(null);
+                setForm(current => ({ ...current, pay_date: e.target.value }));
+              }}
             />
           </div>
           <div>
-            <label className={INPUT.label}>Notes (optional)</label>
+            <label htmlFor={notesId} className={INPUT.label}>Notes (optional)</label>
             <input
+              id={notesId}
               className={INPUT.sm}
               value={form.notes}
-              onChange={e => setForm(current => ({ ...current, notes: e.target.value }))}
+              onChange={e => {
+                setFormError(null);
+                setForm(current => ({ ...current, notes: e.target.value }));
+              }}
               placeholder="e.g. May 2026 monthly payroll"
             />
           </div>
         </div>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setShowCreate(false)}>Cancel</button>
-          <button className={BTN.primary} onClick={handleCreate} disabled={creating}>
+          <button type="button" className={BTN.secondary} onClick={closeCreateModal}>Cancel</button>
+          <button type="button" className={BTN.primary} onClick={handleCreate} disabled={creating}>
             {creating ? 'Creating...' : 'Create Run'}
           </button>
         </div>
