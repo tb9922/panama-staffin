@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import PayablesManager from '../PayablesManager.jsx';
@@ -29,6 +29,7 @@ vi.mock('../../lib/excel.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import * as excel from '../../lib/excel.js';
 
 const in3Days = (() => { const d = new Date(); d.setDate(d.getDate() + 3); return d.toISOString().slice(0, 10); })();
 
@@ -75,7 +76,7 @@ describe('PayablesManager', () => {
     api.getCurrentHome.mockReturnValue('test-home');
   });
 
-  it('smoke test — renders without crashing', async () => {
+  it('smoke test - renders without crashing', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('Payables')).toBeInTheDocument()
@@ -94,6 +95,16 @@ describe('PayablesManager', () => {
     await waitFor(() =>
       expect(screen.getByText('Server error')).toBeInTheDocument()
     );
+  });
+
+  it('does not hang forever when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('No home selected')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Loading payment schedules...')).not.toBeInTheDocument();
+    expect(api.getPaymentSchedules).not.toHaveBeenCalled();
   });
 
   it('renders KPI cards after load', async () => {
@@ -138,6 +149,84 @@ describe('PayablesManager', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Add Schedule' }));
     expect(screen.getByText('Add Payment Schedule')).toBeInTheDocument();
-    expect(screen.getByText('Supplier *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Supplier *')).toBeInTheDocument();
+  });
+
+  it('keeps payment schedule validation inside the modal', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Add Schedule' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Schedule' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Add Schedule' }));
+
+    expect(within(dialog).getByText('Please fill in all required fields')).toBeInTheDocument();
+    expect(screen.queryByText('Some payable actions could not be completed')).not.toBeInTheDocument();
+  });
+
+  it('blocks non-positive amounts before save', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Add Schedule' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Schedule' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Supplier *'), '  New Supplier  ');
+    await user.clear(within(dialog).getByLabelText('Amount *'));
+    await user.type(within(dialog).getByLabelText('Amount *'), '-1');
+    await user.click(within(dialog).getByRole('button', { name: 'Add Schedule' }));
+
+    expect(within(dialog).getByText('Amount must be greater than 0')).toBeInTheDocument();
+    expect(api.createPaymentSchedule).not.toHaveBeenCalled();
+  });
+
+  it('normalizes payload values before creating a schedule', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Add Schedule' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Schedule' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Supplier *'), '  New Supplier  ');
+    await user.type(within(dialog).getByLabelText('Amount *'), '123.45');
+    await user.click(within(dialog).getByLabelText('On hold'));
+    await user.type(within(dialog).getByLabelText('Hold Reason'), '  Awaiting invoice  ');
+    await user.click(within(dialog).getByRole('button', { name: 'Add Schedule' }));
+
+    await waitFor(() => expect(api.createPaymentSchedule).toHaveBeenCalledTimes(1));
+    expect(api.createPaymentSchedule).toHaveBeenCalledWith('test-home', expect.objectContaining({
+      supplier: 'New Supplier',
+      amount: 123.45,
+      description: null,
+      hold_reason: 'Awaiting invoice',
+      notes: null,
+      on_hold: true,
+    }));
+  });
+
+  it('disables export when empty and exports populated rows', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderAdmin();
+    await waitFor(() =>
+      expect(screen.getAllByText('ABC Cleaning').length).toBeGreaterThanOrEqual(1)
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
+    await waitFor(() => expect(excel.downloadXLSX).toHaveBeenCalledTimes(1));
+    expect(excel.downloadXLSX).toHaveBeenCalledWith('payment_schedules.xlsx', expect.any(Array));
+
+    unmount();
+    vi.clearAllMocks();
+    setupMocks({ rows: [], total: 0 });
+    renderWithProviders(<PayablesManager />);
+    const emptyExport = await screen.findByRole('button', { name: 'Export Excel' });
+    expect(emptyExport).toBeDisabled();
   });
 });
