@@ -142,11 +142,53 @@ describe('PayRatesConfig', () => {
     // Modal dialog should appear with the form title
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Add Pay Rate Rule')).toBeInTheDocument();
-    // "Rule Name", "Applies To", "Rate Type" appear in both table headers and modal labels,
-    // so use getAllByText to verify they're present (table header + modal label = 2 each)
-    expect(screen.getAllByText('Rule Name').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Applies To').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Rate Type').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText('Rule Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Applies To')).toBeInTheDocument();
+    expect(screen.getByLabelText('Rate Type')).toBeInTheDocument();
+  });
+
+  it('does not call the API when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    setupMocks();
+    renderWithProviders(<PayRatesConfig />);
+
+    await waitFor(() => expect(screen.getByText('No home selected')).toBeInTheDocument());
+    expect(screen.queryByText(/Loading rules/)).not.toBeInTheDocument();
+    expect(api.getPayRateRules).not.toHaveBeenCalled();
+    expect(api.getNMWRates).not.toHaveBeenCalled();
+  });
+
+  it('shows validation inside the modal for invalid rule amounts', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<PayRatesConfig />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Add Rule' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '+ Add Rule' }));
+    await user.type(screen.getByLabelText('Rule Name'), 'Bad amount');
+    await user.clear(screen.getByLabelText('Amount (%)'));
+    await user.type(screen.getByLabelText('Amount (%)'), '-1');
+    await user.click(screen.getByRole('button', { name: 'Add Rule' }));
+
+    expect(screen.getByText('Amount must be a zero or positive number.')).toBeInTheDocument();
+    expect(api.createPayRateRule).not.toHaveBeenCalled();
+  });
+
+  it('keeps save failures inside the modal as form errors', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    api.createPayRateRule.mockRejectedValue(new Error('Duplicate rule'));
+    renderWithProviders(<PayRatesConfig />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Add Rule' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '+ Add Rule' }));
+    await user.type(screen.getByLabelText('Rule Name'), 'Night duplicate');
+    await user.clear(screen.getByLabelText('Amount (%)'));
+    await user.type(screen.getByLabelText('Amount (%)'), '10');
+    await user.click(screen.getByRole('button', { name: 'Add Rule' }));
+
+    await waitFor(() => expect(screen.getByText('Duplicate rule')).toBeInTheDocument());
+    expect(screen.getByText('Add Pay Rate Rule')).toBeInTheDocument();
   });
 
   it('lets admins save a rule with amount 0', async () => {

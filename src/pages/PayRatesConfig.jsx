@@ -5,6 +5,7 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
   getCurrentHome, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
@@ -35,12 +36,13 @@ const EMPTY_RULE = {
 export default function PayRatesConfig() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
-  const canEdit = canWrite('payroll');
+  const canEdit = Boolean(homeSlug && canWrite('payroll'));
 
   const [rules, setRules] = useState([]);
   const [nmwRates, setNmwRates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
   const [modal, setModal] = useState(null); // null | { mode: 'add' | 'edit', rule? }
   const [form, setForm] = useState(EMPTY_RULE);
   const [saving, setSaving] = useState(false);
@@ -48,7 +50,12 @@ export default function PayRatesConfig() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const load = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug) {
+      setRules([]);
+      setNmwRates([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -64,8 +71,14 @@ export default function PayRatesConfig() {
 
   useEffect(() => { load(); }, [load]);
 
+  function closeModal() {
+    setFormError(null);
+    setModal(null);
+  }
+
   function openAdd() {
-    setForm(EMPTY_RULE);
+    setForm({ ...EMPTY_RULE });
+    setFormError(null);
     setModal({ mode: 'add' });
   }
 
@@ -74,24 +87,39 @@ export default function PayRatesConfig() {
       name: rule.name, rate_type: rule.rate_type,
       amount: rule.amount, applies_to: rule.applies_to, priority: rule.priority,
     });
+    setFormError(null);
     setModal({ mode: 'edit', rule });
   }
 
   async function handleSave() {
+    if (!modal) return;
     const parsedAmount = Number(form.amount);
-    if (!form.name || form.amount === '' || Number.isNaN(parsedAmount) || parsedAmount < 0) return;
+    const name = form.name.trim();
+    setFormError(null);
+    if (!homeSlug) {
+      setFormError('Choose a home before saving pay rate rules.');
+      return;
+    }
+    if (!name) {
+      setFormError('Rule name is required.');
+      return;
+    }
+    if (form.amount === '' || Number.isNaN(parsedAmount) || parsedAmount < 0) {
+      setFormError('Amount must be a zero or positive number.');
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, amount: parsedAmount };
+      const payload = { ...form, name, amount: parsedAmount };
       if (modal.mode === 'add') {
         await createPayRateRule(homeSlug, payload);
       } else {
         await updatePayRateRule(homeSlug, modal.rule.id, payload);
       }
-      setModal(null);
+      closeModal();
       await load();
     } catch (e) {
-      setError(e.message);
+      setFormError(e.message || 'Failed to save pay rate rule.');
     } finally {
       setSaving(false);
     }
@@ -127,7 +155,12 @@ export default function PayRatesConfig() {
 
   if (!homeSlug) return (
     <div className={PAGE.container}>
-      <p className="text-gray-500">Select a home to manage pay rate rules.</p>
+      <div className={CARD.flush}>
+        <EmptyState
+          title="No home selected"
+          description="Choose a home before managing pay rate rules."
+        />
+      </div>
     </div>
   );
 
@@ -167,7 +200,7 @@ export default function PayRatesConfig() {
           <p className="mt-0.5 text-xs text-[var(--ink-3)]">Enhancements stack additively. A Sunday night shift gets night% + Sunday%, not multiplied.</p>
         </div>
         {loading ? (
-          <LoadingState message="Loading rules…" compact />
+          <LoadingState message="Loading rules..." compact />
         ) : (
           <div className={TABLE.wrapper} tabIndex={0} aria-label="Active enhancement rules table">
             <table className={TABLE.table}>
@@ -248,19 +281,26 @@ export default function PayRatesConfig() {
       </div>
 
       {/* Add/Edit Modal */}
-      <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal?.mode === 'add' ? 'Add Pay Rate Rule' : 'Edit Pay Rate Rule'} size="lg">
+      <Modal isOpen={!!modal} onClose={closeModal} title={modal?.mode === 'add' ? 'Add Pay Rate Rule' : 'Edit Pay Rate Rule'} size="lg">
         <div className="space-y-4">
+          {formError && <InlineNotice variant="error">{formError}</InlineNotice>}
           <div>
             <label htmlFor="pay-rate-rule-name" className={INPUT.label}>Rule Name</label>
             <input id="pay-rate-rule-name" className={INPUT.base} value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onChange={e => {
+                setFormError(null);
+                setForm(f => ({ ...f, name: e.target.value }));
+              }}
               placeholder="e.g. Night Enhancement" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="pay-rate-rule-applies-to" className={INPUT.label}>Applies To</label>
               <select id="pay-rate-rule-applies-to" className={INPUT.select} value={form.applies_to}
-                onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
+                onChange={e => {
+                  setFormError(null);
+                  setForm(f => ({ ...f, applies_to: e.target.value }));
+                }}>
                 {Object.entries(APPLIES_TO_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
@@ -269,7 +309,10 @@ export default function PayRatesConfig() {
             <div>
               <label htmlFor="pay-rate-rule-rate-type" className={INPUT.label}>Rate Type</label>
               <select id="pay-rate-rule-rate-type" className={INPUT.select} value={form.rate_type}
-                onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
+                onChange={e => {
+                  setFormError(null);
+                  setForm(f => ({ ...f, rate_type: e.target.value }));
+                }}>
                 {Object.entries(RATE_TYPE_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
@@ -281,11 +324,14 @@ export default function PayRatesConfig() {
               Amount {form.rate_type === 'percentage' ? '(%)' : form.rate_type === 'flat_per_shift' ? '(£ flat)' : '(£/hr)'}
             </label>
             <input id="pay-rate-rule-amount" className={INPUT.base} type="number" step="0.01" min="0" inputMode="decimal" value={form.amount}
-              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+              onChange={e => {
+                setFormError(null);
+                setForm(f => ({ ...f, amount: e.target.value }));
+              }}
               placeholder={form.rate_type === 'percentage' ? 'e.g. 15' : 'e.g. 2.00'} />
             {form.rate_type === 'percentage' && form.amount && (
               <p className="text-xs text-gray-500 mt-1">
-                Example: 12hr night shift at £12.00/hr → +£{(12 * 12 * parseFloat(form.amount || 0) / 100).toFixed(2)} enhancement
+                Example: 12hr night shift at £12.00/hr gives +£{(12 * 12 * parseFloat(form.amount || 0) / 100).toFixed(2)} enhancement
               </p>
             )}
           </div>
@@ -308,9 +354,9 @@ export default function PayRatesConfig() {
           />
         </div>
         <div className={MODAL.footer}>
-          <button type="button" className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>
+          <button type="button" className={BTN.secondary} onClick={closeModal}>Cancel</button>
           <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : modal?.mode === 'add' ? 'Add Rule' : 'Save Changes'}
+            {saving ? 'Saving...' : modal?.mode === 'add' ? 'Add Rule' : 'Save Changes'}
           </button>
         </div>
       </Modal>
@@ -318,12 +364,12 @@ export default function PayRatesConfig() {
       {/* Delete Confirm Modal */}
       <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Remove Rule" size="sm">
         <p className="text-sm text-gray-600">
-          Remove <strong>{deleteConfirm?.name}</strong>? This deactivates the rule — it remains visible in historical payroll records but will no longer apply to new calculations.
+          Remove <strong>{deleteConfirm?.name}</strong>? This deactivates the rule - it remains visible in historical payroll records but will no longer apply to new calculations.
         </p>
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={() => setDeleteConfirm(null)}>Cancel</button>
           <button type="button" className={BTN.danger} onClick={() => deleteConfirm && handleDelete(deleteConfirm.id)} disabled={saving}>
-            {saving ? 'Removing…' : 'Remove Rule'}
+            {saving ? 'Removing...' : 'Remove Rule'}
           </button>
         </div>
       </Modal>
