@@ -3,9 +3,11 @@ import { PAGE, CARD, TABLE, BTN, INPUT, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getSuppliers, createSupplier, updateSupplier, mergeSuppliers } from '../lib/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 
 const EMPTY_FORM = { name: '', vat_number: '', default_category: '', aliasesText: '', active: true };
 
@@ -14,6 +16,7 @@ export default function SuppliersManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
   const { showToast } = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,6 +40,12 @@ export default function SuppliersManager() {
   const activeInputId = useId();
 
   const load = useCallback(async () => {
+    if (!home) {
+      setRows([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -75,6 +84,13 @@ export default function SuppliersManager() {
       _version: row.version,
     });
     setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
   }
 
   async function handleSave() {
@@ -116,6 +132,15 @@ export default function SuppliersManager() {
       setMergeError('Choose two different suppliers to merge.');
       return;
     }
+    const source = rows.find((row) => String(row.id) === String(mergeSourceId));
+    const target = rows.find((row) => String(row.id) === String(mergeTargetId));
+    const confirmed = await confirm({
+      title: 'Merge suppliers?',
+      message: `Merge ${source?.name || 'the source supplier'} into ${target?.name || 'the target supplier'}? This repoints linked finance records and deactivates the source supplier.`,
+      confirmLabel: 'Merge suppliers',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     setMerging(true);
     setMergeError(null);
     setError(null);
@@ -146,6 +171,7 @@ export default function SuppliersManager() {
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {!home && <EmptyState title="No home selected" description="Choose a home before managing suppliers." className="mb-4" />}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className={CARD.padded}><div className="text-xs text-gray-500">Total</div><div className="mt-1 text-2xl font-bold">{totals.total}</div></div>
@@ -188,7 +214,7 @@ export default function SuppliersManager() {
       <div className={CARD.flush}>
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
-            <thead className={TABLE.thead}><tr><th className={TABLE.th}>Name</th><th className={TABLE.th}>VAT</th><th className={TABLE.th}>Default Category</th><th className={TABLE.th}>Aliases</th><th className={TABLE.th}>Status</th><th className={TABLE.th}></th></tr></thead>
+            <thead className={TABLE.thead}><tr><th scope="col" className={TABLE.th}>Name</th><th scope="col" className={TABLE.th}>VAT</th><th scope="col" className={TABLE.th}>Default Category</th><th scope="col" className={TABLE.th}>Aliases</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}></th></tr></thead>
             <tbody>
               {rows.length === 0 && (
                 <tr><td className={TABLE.empty} colSpan={6}>No suppliers found.</td></tr>
@@ -208,7 +234,7 @@ export default function SuppliersManager() {
         </div>
       </div>
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Edit Supplier' : 'Add Supplier'}>
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Supplier' : 'Add Supplier'}>
         <div className="space-y-3">
           {formError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</div>}
           <div><label htmlFor={nameInputId} className={INPUT.label}>Name</label><input id={nameInputId} className={INPUT.base} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} maxLength={200} required /></div>
@@ -218,10 +244,11 @@ export default function SuppliersManager() {
           <label htmlFor={activeInputId} className="flex items-center gap-2 text-sm"><input id={activeInputId} type="checkbox" checked={form.active} onChange={(e) => setForm((current) => ({ ...current, active: e.target.checked }))} />Active supplier</label>
         </div>
         <div className={MODAL.footer}>
-          <button type="button" onClick={() => setShowModal(false)} className={BTN.secondary} disabled={saving}>Cancel</button>
+          <button type="button" onClick={closeModal} className={BTN.secondary} disabled={saving}>Cancel</button>
           <button type="button" onClick={handleSave} className={BTN.primary} disabled={saving || !form.name.trim()}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Supplier'}</button>
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

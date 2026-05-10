@@ -64,6 +64,14 @@ describe('SuppliersManager', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
+  it('does not call the supplier API when no home is selected', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('No home selected')).toBeInTheDocument());
+    expect(api.getSuppliers).not.toHaveBeenCalled();
+  });
+
   it('validates and submits create supplier from the modal', async () => {
     const user = userEvent.setup();
     renderPage();
@@ -105,8 +113,23 @@ describe('SuppliersManager', () => {
     await user.selectOptions(screen.getByLabelText('Source supplier'), '1');
     await user.selectOptions(screen.getByLabelText('Target supplier'), '2');
     await user.click(screen.getByRole('button', { name: 'Merge' }));
+    expect(api.mergeSuppliers).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Merge suppliers' }));
 
     await waitFor(() => expect(api.mergeSuppliers).toHaveBeenCalledWith('test-home', 1, 2));
     expect(api.mergeSuppliers).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a merge without calling the API', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('ABC Cleaning').length).toBeGreaterThanOrEqual(1));
+    await user.selectOptions(screen.getByLabelText('Source supplier'), '1');
+    await user.selectOptions(screen.getByLabelText('Target supplier'), '2');
+    await user.click(screen.getByRole('button', { name: 'Merge' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(api.mergeSuppliers).not.toHaveBeenCalled();
   });
 });
