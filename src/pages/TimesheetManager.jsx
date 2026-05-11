@@ -34,6 +34,10 @@ function todayStr() {
   return todayLocalISO();
 }
 
+function isDateString(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value || '');
+}
+
 function normalizeTimesheetError(message) {
   if (!message) return 'Something went wrong.';
   if (/conflict|version|modified by another user/i.test(message)) {
@@ -52,15 +56,20 @@ export default function TimesheetManager() {
   const { showToast } = useToast();
 
   const [schedData, setSchedData] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(() => searchParams.get('date') || todayStr());
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const queryDate = searchParams.get('date');
+    return isDateString(queryDate) ? queryDate : todayStr();
+  });
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [modalError, setModalError] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const actionsEnabled = Boolean(homeSlug && canEdit);
 
   useDirtyGuard(!!editModal);
 
@@ -84,10 +93,15 @@ export default function TimesheetManager() {
 
   const loadEntries = useCallback(async () => {
     if (!homeSlug) return;
+    const safeDate = isDateString(selectedDate) ? selectedDate : todayStr();
+    if (safeDate !== selectedDate) {
+      setSelectedDate(safeDate);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const data = await getTimesheets(homeSlug, selectedDate);
+      const data = await getTimesheets(homeSlug, safeDate);
       setEntries(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(normalizeTimesheetError(err.message));
@@ -102,7 +116,7 @@ export default function TimesheetManager() {
 
   useEffect(() => {
     const queryDate = searchParams.get('date');
-    if (queryDate && queryDate !== selectedDate) {
+    if (isDateString(queryDate) && queryDate !== selectedDate) {
       setSelectedDate(queryDate);
     }
   }, [searchParams, selectedDate]);
@@ -212,10 +226,12 @@ export default function TimesheetManager() {
       break_minutes: entry?.break_minutes ?? 30,
       notes: entry?.notes || '',
     });
+    setModalError('');
     setEditModal({ staff, entry });
   }
 
   function handleActualChange(field, value) {
+    setModalError('');
     setEditForm((current) => {
       const updated = { ...current, [field]: value };
       const snapStart = snapToShift(updated.scheduled_start, updated.actual_start, snapConfig.window, snapConfig.enabled);
@@ -235,9 +251,17 @@ export default function TimesheetManager() {
   }
 
   async function handleSaveEntry() {
-    if (!editModal) return;
+    if (!editModal || !actionsEnabled) return;
+    if (!editForm.actual_start || !editForm.actual_end) {
+      setModalError('Actual start and end times are required.');
+      return;
+    }
+    if (!Number.isFinite(Number(editForm.break_minutes)) || Number(editForm.break_minutes) < 0 || Number(editForm.break_minutes) > 120) {
+      setModalError('Break must be between 0 and 120 minutes.');
+      return;
+    }
     setSaving(true);
-    setError(null);
+    setModalError('');
     try {
       const snapStart = snapToShift(editForm.scheduled_start, editForm.actual_start, snapConfig.window, snapConfig.enabled);
       const snapEnd = snapToShift(editForm.scheduled_end, editForm.actual_end, snapConfig.window, snapConfig.enabled);
@@ -266,13 +290,15 @@ export default function TimesheetManager() {
       setEditModal(null);
       await loadEntries();
     } catch (err) {
-      setError(normalizeTimesheetError(err.message));
+      setModalError(normalizeTimesheetError(err.message));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleApprove(entry) {
+    if (!actionsEnabled) return;
+    if (!window.confirm(`Approve timesheet for ${entry.staff_id}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -288,6 +314,13 @@ export default function TimesheetManager() {
   }
 
   async function handleBulkApprove() {
+    if (!actionsEnabled) return;
+    const pendingCount = entries.filter((entry) => entry.status === 'pending').length;
+    if (pendingCount === 0) {
+      showNotice('There are no pending timesheets to approve.');
+      return;
+    }
+    if (!window.confirm(`Approve ${pendingCount} pending timesheet ${pendingCount === 1 ? 'entry' : 'entries'} for ${selectedDate}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -303,11 +336,17 @@ export default function TimesheetManager() {
   }
 
   async function handleConfirmAll() {
+    if (!actionsEnabled) return;
+    const entryMap = Object.fromEntries(entries.map((entry) => [entry.staff_id, entry]));
+    const missing = rows.filter((row) => !entryMap[row.staff.id]);
+    if (missing.length === 0) {
+      showNotice('All scheduled staff already have timesheet entries.');
+      return;
+    }
+    if (!window.confirm(`Record ${missing.length} missing timesheet ${missing.length === 1 ? 'entry' : 'entries'} as scheduled for ${selectedDate}?`)) return;
     setSaving(true);
     setError(null);
     try {
-      const entryMap = Object.fromEntries(entries.map((entry) => [entry.staff_id, entry]));
-      const missing = rows.filter((row) => !entryMap[row.staff.id]);
       await Promise.all(missing.map((row) => {
         const start = row.shiftStart || '';
         const end = row.shiftEnd || '';
@@ -356,15 +395,17 @@ export default function TimesheetManager() {
           <p className={PAGE.subtitle}>Record actual attendance with snap-to-shift to prevent early clock-in waste</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className={BTN.secondary} onClick={() => setSelectedDate(formatDate(addDays(selectedDate, -1)))} aria-label="Previous day">&larr;</button>
+          <button type="button" className={BTN.secondary} onClick={() => setSelectedDate(formatDate(addDays(selectedDate, -1)))} aria-label="Previous day">&larr;</button>
+          <label htmlFor="timesheet-selected-date" className="sr-only">Timesheet date</label>
           <input
+            id="timesheet-selected-date"
             type="date"
             className={INPUT.sm}
             style={{ width: '160px' }}
             value={selectedDate}
-            onChange={(event) => setSelectedDate(event.target.value)}
+            onChange={(event) => setSelectedDate(event.target.value || todayStr())}
           />
-          <button className={BTN.secondary} onClick={() => setSelectedDate(formatDate(addDays(selectedDate, 1)))} aria-label="Next day">&rarr;</button>
+          <button type="button" className={BTN.secondary} onClick={() => setSelectedDate(formatDate(addDays(selectedDate, 1)))} aria-label="Next day">&rarr;</button>
         </div>
       </div>
 
@@ -381,6 +422,12 @@ export default function TimesheetManager() {
           onRetry={() => void loadEntries()}
           className="mb-4"
         />
+      )}
+
+      {!homeSlug && (
+        <InlineNotice variant="info" className="mb-4">
+          Select a home before reviewing timesheets.
+        </InlineNotice>
       )}
 
       <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
@@ -430,12 +477,12 @@ export default function TimesheetManager() {
         </div>
       </div>
 
-      {canEdit && (
+      {actionsEnabled && (
         <div className="flex gap-3 mb-4">
-          <button className={BTN.secondary} onClick={handleConfirmAll} disabled={saving}>
+          <button type="button" className={BTN.secondary} onClick={handleConfirmAll} disabled={saving}>
             Confirm All as Scheduled
           </button>
-          <button className={BTN.success} onClick={handleBulkApprove} disabled={saving}>
+          <button type="button" className={BTN.success} onClick={handleBulkApprove} disabled={saving}>
             Approve All Pending
           </button>
         </div>
@@ -443,19 +490,20 @@ export default function TimesheetManager() {
 
       <div className={`${CARD.padded} mb-4`}>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr),minmax(14rem,1fr)]">
-          <label>
-            <span className={INPUT.label}>Search staff or notes</span>
+          <div>
+            <label htmlFor="timesheet-search" className={INPUT.label}>Search staff or notes</label>
             <input
+              id="timesheet-search"
               type="search"
               className={INPUT.base}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by staff name, role, shift, or notes"
             />
-          </label>
-          <label>
-            <span className={INPUT.label}>Show</span>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={INPUT.select}>
+          </div>
+          <div>
+            <label htmlFor="timesheet-status-filter" className={INPUT.label}>Show</label>
+            <select id="timesheet-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={INPUT.select}>
               <option value="all">All scheduled staff</option>
               <option value="needs_attention">Needs attention</option>
               <option value="missing">Missing only</option>
@@ -463,7 +511,7 @@ export default function TimesheetManager() {
               <option value="disputed">Disputed only</option>
               <option value="approved">Approved only</option>
             </select>
-          </label>
+          </div>
         </div>
       </div>
 
@@ -495,8 +543,8 @@ export default function TimesheetManager() {
                       <span className="text-xs font-mono text-gray-500">{row.staff.shift}</span>
                     </div>
                     <div className="mt-1 text-xs text-gray-500">
-                      {row.staff.role} · {row.shiftStart || '-'} to {row.shiftEnd || '-'}
-                      {row.entry?.dispute_reason ? ` · ${row.entry.dispute_reason}` : ''}
+                      {row.staff.role} - {row.shiftStart || '-'} to {row.shiftEnd || '-'}
+                      {row.entry?.dispute_reason ? ` - ${row.entry.dispute_reason}` : ''}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -551,7 +599,7 @@ export default function TimesheetManager() {
                   <th scope="col" className={TABLE.th}>Saved</th>
                   <th scope="col" className={TABLE.th}>Payable Hrs</th>
                   <th scope="col" className={TABLE.th}>Status</th>
-                  {canEdit && <th scope="col" className={TABLE.th}></th>}
+                  {actionsEnabled && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -560,8 +608,7 @@ export default function TimesheetManager() {
                   return (
                     <tr key={staff.id} className={TABLE.tr}>
                       <td className={TABLE.td}>
-                        <button
-                          type="button"
+                        <button type="button"
                           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                           onClick={() => navigate(`/payroll/monthly-timesheet/${staff.id}`)}
                         >
@@ -600,14 +647,14 @@ export default function TimesheetManager() {
                           <span className="text-xs text-gray-400">not recorded</span>
                         )}
                       </td>
-                      {canEdit && (
+                      {actionsEnabled && (
                         <td className={TABLE.td}>
                           <div className="flex gap-2">
-                            <button className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(row)}>
+                            <button type="button" className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(row)}>
                               {entry ? 'Edit' : 'Record'}
                             </button>
                             {entry && entry.status === 'pending' && (
-                              <button className={`${BTN.success} ${BTN.xs}`} onClick={() => handleApprove(entry)} disabled={saving}>
+                              <button type="button" className={`${BTN.success} ${BTN.xs}`} onClick={() => handleApprove(entry)} disabled={saving}>
                                 Approve
                               </button>
                             )}
@@ -631,13 +678,14 @@ export default function TimesheetManager() {
       >
         {editModal && (
           <>
-            <p className="text-sm text-gray-500 -mt-2 mb-4">{editModal.staff.role} · Shift: {editModal.staff.shift}</p>
+            <p className="text-sm text-gray-500 -mt-2 mb-4">{editModal.staff.role} - Shift: {editModal.staff.shift}</p>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Actual Start</label>
+                  <label htmlFor="timesheet-actual-start" className={INPUT.label}>Actual Start</label>
                   <input
+                    id="timesheet-actual-start"
                     type="time"
                     className={INPUT.base}
                     value={editForm.actual_start}
@@ -650,8 +698,9 @@ export default function TimesheetManager() {
                   )}
                 </div>
                 <div>
-                  <label className={INPUT.label}>Actual End</label>
+                  <label htmlFor="timesheet-actual-end" className={INPUT.label}>Actual End</label>
                   <input
+                    id="timesheet-actual-end"
                     type="time"
                     className={INPUT.base}
                     value={editForm.actual_end}
@@ -661,8 +710,9 @@ export default function TimesheetManager() {
               </div>
 
               <div>
-                <label className={INPUT.label}>Break (minutes)</label>
+                <label htmlFor="timesheet-break-minutes" className={INPUT.label}>Break (minutes)</label>
                 <input
+                  id="timesheet-break-minutes"
                   type="number"
                   className={INPUT.base}
                   min="0"
@@ -684,19 +734,29 @@ export default function TimesheetManager() {
               )}
 
               <div>
-                <label className={INPUT.label}>Notes</label>
+                <label htmlFor="timesheet-notes" className={INPUT.label}>Notes</label>
                 <input
+                  id="timesheet-notes"
                   className={INPUT.sm}
                   value={editForm.notes}
-                  onChange={(event) => setEditForm((current) => ({ ...current, notes: event.target.value }))}
+                  onChange={(event) => {
+                    setModalError('');
+                    setEditForm((current) => ({ ...current, notes: event.target.value }));
+                  }}
                   placeholder="Optional notes"
                 />
               </div>
             </div>
 
+            {modalError && (
+              <InlineNotice variant="error" className="mt-4">
+                {modalError}
+              </InlineNotice>
+            )}
+
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setEditModal(null)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSaveEntry} disabled={saving}>
+              <button type="button" className={BTN.secondary} onClick={() => setEditModal(null)}>Cancel</button>
+              <button type="button" className={BTN.primary} onClick={handleSaveEntry} disabled={saving}>
                 {saving ? 'Saving...' : 'Save Entry'}
               </button>
             </div>

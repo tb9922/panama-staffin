@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import TimesheetManager from '../TimesheetManager.jsx';
 
@@ -79,6 +79,11 @@ describe('TimesheetManager', () => {
     api.upsertTimesheet.mockResolvedValue({});
     api.approveTimesheet.mockResolvedValue({});
     api.bulkApproveTimesheets.mockResolvedValue({});
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders page heading', async () => {
@@ -117,10 +122,42 @@ describe('TimesheetManager', () => {
     expect(screen.getByRole('button', { name: /approve all pending/i })).toBeInTheDocument();
   });
 
+  it('asks for confirmation before bulk approving pending entries', async () => {
+    renderWithProviders(<TimesheetManager />, { route: '/?date=2026-03-08' });
+    await waitFor(() => expect(screen.getByRole('button', { name: /approve all pending/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /approve all pending/i }));
+
+    expect(window.confirm).toHaveBeenCalledWith('Approve 1 pending timesheet entry for 2026-03-08?');
+    expect(api.bulkApproveTimesheets).not.toHaveBeenCalled();
+  });
+
+  it('keeps save validation inside the edit modal', async () => {
+    renderWithProviders(<TimesheetManager />, { route: '/?date=2026-03-08' });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Review$/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /^Review$/i }));
+    fireEvent.change(screen.getByLabelText('Actual Start'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Entry/i }));
+
+    expect(await screen.findByText('Actual start and end times are required.')).toBeInTheDocument();
+    expect(api.upsertTimesheet).not.toHaveBeenCalled();
+  });
+
   it('hides bulk action buttons for viewers', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     renderWithProviders(<TimesheetManager />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('Scheduled')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /confirm all as scheduled/i })).not.toBeInTheDocument();
+  });
+
+  it('does not load timesheet data or expose write actions without an active home', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<TimesheetManager />);
+
+    expect(await screen.findByText('Select a home before reviewing timesheets.')).toBeInTheDocument();
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
+    expect(api.getTimesheets).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /confirm all as scheduled/i })).not.toBeInTheDocument();
   });
 
