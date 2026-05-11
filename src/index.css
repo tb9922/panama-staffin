@@ -384,7 +384,12 @@ button, a, input, select, textarea {
   }
 }
 
-/* ── Print styles ─────────────────────────────────────────────────────────── */
+/* Print styles */
+@page roster-landscape {
+  size: A4 landscape;
+  margin: 6mm;
+}
+
 @media print {
   aside, .print\:hidden,
   input[type="button"],
@@ -462,5 +467,110 @@ button, a, input, select, textarea {
 
   .mobile-topbar {
     display: none !important;
+  }
+
+  .roster-print-page {
+    page: roster-landscape;
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #111827 !important;
+  }
+
+  .roster-print-page .print-header {
+    margin-bottom: 6px !important;
+    border-bottom-color: #64748b !important;
+  }
+
+  .roster-print-surface {
+    display: block !important;
+    overflow: visible !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+  }
+
+  .roster-print-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 7px !important;
+    line-height: 1.05 !important;
+    color: #111827 !important;
+  }
+
+  .roster-print-table th,
+  .roster-print-table td {
+    min-width: 0 !important;
+    padding: 1px !important;
+    border: 1px solid #d7dee8 !important;
+    vertical-align: middle !important;
+  }
+
+  .roster-print-table th:first-child,
+  .roster-print-table td:first-child {
+    width: 72px !important;
+    max-width: 72px !important;
+  }
+
+  .roster-print-table th:nth-child(2),
+  .roster-print-table td:nth-child(2) {
+    width: 18px !important;
+    max-width: 18px !important;
+  }
+
+  .roster-print-table th:nth-last-child(-n + 4),
+  .roster-print-table td:nth-last-child(-n + 4) {
+    width: 26px !important;
+    max-width: 26px !important;
+  }
+
+  .roster-print-table .truncate {
+    max-width: 68px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  .roster-print-table button,
+  .roster-print-table td button,
+  .roster-shift-cell {
+    display: inline-flex !important;
+    min-height: 16px !important;
+    width: 100% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 4px !important;
+    border-style: solid !important;
+    border-width: 1px !important;
+    padding: 1px !important;
+    font-size: 7px !important;
+    line-height: 1.05 !important;
+    font-weight: 700 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .roster-shift-cell span {
+    font-size: 6px !important;
+    line-height: 1 !important;
+  }
+
+  .roster-print-legend {
+    display: flex !important;
+    gap: 4px !important;
+    margin-top: 6px !important;
+    page-break-inside: avoid !important;
+  }
+
+  .roster-legend-chip {
+    border-radius: 4px !important;
+    padding: 2px 4px !important;
+    font-size: 7px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

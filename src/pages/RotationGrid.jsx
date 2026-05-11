@@ -31,7 +31,7 @@ import { generateHorizonRoster } from '../lib/rotationAnalysis.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import InlineNotice from '../components/InlineNotice.jsx';
 
-/** Resolve staff ID → two-char initials for compact grid display. */
+/** Resolve staff ID to two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
   const name = staffMap.get(staffId)?.name;
   if (!name) return '??';
@@ -144,7 +144,7 @@ export default function RotationGrid() {
     return list;
   }, [schedData, filterTeam]);
 
-  // O(1) lookup for ALL staff — cover arrows need to resolve IDs for staff
+  // O(1) lookup for ALL staff; cover arrows need to resolve IDs for staff
   // on other teams (filtered out), agency virtual staff, or leavers.
   const staffMap = useMemo(() => {
     const m = new Map();
@@ -262,17 +262,17 @@ export default function RotationGrid() {
       const after = coverageAfter[period];
       if (!before || !after) return;
       if (after.coverage.headCount < before.coverage.headCount) {
-        const msg = `${period} heads: ${before.coverage.headCount} → ${after.coverage.headCount}`;
+        const msg = `${period} heads: ${before.coverage.headCount} -> ${after.coverage.headCount}`;
         if (after.coverage.headCount < after.coverage.required.heads) errors.push(msg + ` (below min ${after.coverage.required.heads})`);
         else warnings.push(msg);
       }
       if (after.coverage.skillPoints < before.coverage.skillPoints) {
-        const msg = `${period} skill: ${before.coverage.skillPoints.toFixed(1)} → ${after.coverage.skillPoints.toFixed(1)}`;
+        const msg = `${period} skill: ${before.coverage.skillPoints.toFixed(1)} -> ${after.coverage.skillPoints.toFixed(1)}`;
         if (after.coverage.skillPoints < after.coverage.required.skill_points) errors.push(msg + ` (below min ${after.coverage.required.skill_points})`);
         else warnings.push(msg);
       }
       if (after.escalation.level > before.escalation.level) {
-        warnings.push(`${period} escalation: ${before.escalation.status} → ${after.escalation.status}`);
+        warnings.push(`${period} escalation: ${before.escalation.status} -> ${after.escalation.status}`);
       }
     });
 
@@ -345,7 +345,7 @@ export default function RotationGrid() {
     const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date, schedData.config);
 
     // Guard: only persist cover link for OC shifts.
-    // Without this, changing from OC-EL → E could save a stale replaces_staff_id
+    // Without this, changing from OC-EL to E could save a stale replaces_staff_id
     // because not all editor mutation paths clear it (e.g. "Revert to Scheduled").
     const replacesId = editing.replacesStaffId
       && isOTShift(proposedShift)
@@ -441,7 +441,7 @@ export default function RotationGrid() {
     if (!schedData || autoSolving) return;
     setAutoSolving(true);
     try {
-      // Synchronous solve — fast enough for a month (40 staff × 28 days × 3 periods).
+      // Synchronous solve - fast enough for a month (40 staff x 28 days x 3 periods).
       // Move to a worker if it ever slows down.
       const dates = monthDates.map(d => formatDate(d));
       const plan = generateHorizonRoster({
@@ -453,7 +453,7 @@ export default function RotationGrid() {
       const noAssignments = plan.assignments.length === 0;
       const noGaps = (plan.summary?.gapSlotsTotal ?? 0) === 0 && (plan.residualGaps ?? 0) === 0;
       if (noAssignments && noGaps) {
-        showNotice(`Coverage is already fully met for ${monthLabel} — no auto-roster proposal needed.`, { variant: 'success', duration: 4000 });
+        showNotice(`Coverage is already fully met for ${monthLabel} - no auto-roster proposal needed.`, { variant: 'success', duration: 4000 });
       } else {
         setAutoPlan(plan);
       }
@@ -508,7 +508,7 @@ export default function RotationGrid() {
     if (!schedData) return;
     const headers = ['ID', 'Name', 'Team', 'Role', 'Pref',
       ...monthDates.map(d => formatDate(d)),
-      'Hours', 'Pay £', 'OT Hrs', 'WTR'];
+      'Hours', 'Pay GBP', 'OT Hrs', 'WTR'];
     const rows = activeStaff.map(s => {
       const stats = staffStats[s.id];
       return [
@@ -546,7 +546,7 @@ export default function RotationGrid() {
     if (!schedData?.staff?.length) {
       return (
         <div className="p-6 max-w-5xl mx-auto">
-          <EmptyState title="No rota link available" description="We couldn’t find a linked staff record for this account yet." />
+          <EmptyState title="No rota link available" description="We couldn't find a linked staff record for this account yet." />
         </div>
       );
     }
@@ -559,7 +559,7 @@ export default function RotationGrid() {
 
 
   return (
-    <div className="max-w-full overflow-x-hidden p-4">
+    <div className="roster-print-page max-w-full overflow-x-hidden p-4">
       {error && (
         <ErrorState
           title="Some roster actions could not be completed"
@@ -570,7 +570,7 @@ export default function RotationGrid() {
       )}
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{schedData.config.home_name} — Roster: {monthLabel}</h1>
+        <h1 className="text-xl font-bold">{schedData.config.home_name} - Roster: {monthLabel}</h1>
         <p className="text-xs text-gray-500">{monthDates.length} days | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -614,7 +614,7 @@ export default function RotationGrid() {
           {canEdit && <button type="button" onClick={handleAutoRoster} disabled={saving || autoSolving}
             className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}
             title="Analyse the visible month and propose float / OT / agency cover for every gap">
-            {autoSolving ? 'Solving…' : 'Auto-Roster'}</button>}
+            {autoSolving ? 'Solving...' : 'Auto-Roster'}</button>}
           {canEdit && <button type="button" onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
             className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>}
           <button type="button" onClick={exportCSV}
@@ -663,8 +663,8 @@ export default function RotationGrid() {
         </div>
       )}
 
-      <div className={`${CARD.flush} max-w-full overflow-x-auto`}>
-        <table className="min-w-max border-collapse text-[11px]">
+      <div className={`${CARD.flush} roster-print-surface max-w-full overflow-x-auto`}>
+        <table className="roster-print-table min-w-max border-collapse text-[11px]">
           <thead>
             <tr className="sticky top-0 z-20 bg-[var(--paper-2)] text-[var(--ink-2)] shadow-[inset_0_-1px_0_var(--line)]">
               <th scope="col" className="sticky left-0 z-30 min-w-[150px] bg-[var(--paper-2)] px-3 py-2 text-left font-semibold">Staff</th>
@@ -682,7 +682,7 @@ export default function RotationGrid() {
                 );
               })}
               <th scope="col" className="min-w-[50px] px-2 py-2 text-right font-semibold">Hrs</th>
-              <th scope="col" className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[55px]">Pay GBP</th>
               <th scope="col" className="min-w-[40px] px-2 py-2 text-right font-semibold">OT</th>
               <th scope="col" className="min-w-[50px] px-2 py-2 text-center font-semibold">WTR</th>
             </tr>
@@ -729,11 +729,11 @@ export default function RotationGrid() {
                           onClick={() => canEdit && openEditor(s.id, dateKey)}
                           disabled={saving || !canEdit}
                           aria-label={`${s.name} ${dateKey} ${shift}${isOverride ? ' override' : ''}`}
-                          className={`inline-block min-h-[24px] w-full rounded-md px-0.5 py-0.5 text-[10px] font-semibold ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-[var(--accent)]' : 'cursor-default'} transition-all ${
+                          className={`roster-shift-cell inline-block min-h-[24px] w-full rounded-md px-0.5 py-0.5 text-[10px] font-semibold ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-[var(--accent)]' : 'cursor-default'} transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
                           } ${isOverride ? 'ring-1 ring-[var(--info)]' : ''} ${isEditing ? 'ring-2 ring-[var(--accent)]' : ''} disabled:cursor-not-allowed`}
                           title={[
-                            `${s.name} — ${shift}${isOverride ? ' (override)' : ''}`,
+                            `${s.name} - ${shift}${isOverride ? ' (override)' : ''}`,
                             isOverride ? `Scheduled: ${s.scheduledPattern?.[i] || actual.scheduledShift || 'OFF'}` : '',
                             schedData.overrides[dateKey]?.[s.id]?.sleep_in ? '+Sleep In' : '',
                             actual.replaces_staff_id
@@ -749,15 +749,15 @@ export default function RotationGrid() {
                           {actual.replaces_staff_id && (
                             <span className="text-[7px] block leading-none opacity-70"
                               aria-label={`covers ${staffMap.get(actual.replaces_staff_id)?.name || 'another staff member'}`}>
-                              →{getInitials(staffMap, actual.replaces_staff_id)}
+                              -&gt;{getInitials(staffMap, actual.replaces_staff_id)}
                             </span>
                           )}
                           {coverMap[dateKey]?.[s.id] && (
                             <span className="text-[7px] block leading-none opacity-70"
                               aria-label={`covered by ${coverMap[dateKey][s.id].map(c => staffMap.get(c.coveredBy)?.name || '?').join(', ')}`}>
                               {coverMap[dateKey][s.id].length === 1
-                                ? `←${getInitials(staffMap, coverMap[dateKey][s.id][0].coveredBy)}`
-                                : `←${coverMap[dateKey][s.id].length}`}
+                                ? `<-${getInitials(staffMap, coverMap[dateKey][s.id][0].coveredBy)}`
+                                : `<-${coverMap[dateKey][s.id].length}`}
                             </span>
                           )}
                         </button>
@@ -765,7 +765,7 @@ export default function RotationGrid() {
                     );
                   })}
                   <td className="px-2 py-1 text-right font-mono text-[var(--ink-2)]" title={stats?.alHours > 0 ? `${stats.totalHours.toFixed(1)}h worked + ${stats.alHours.toFixed(1)}h AL` : undefined}>{stats?.paidHours.toFixed(1)}</td>
-                  <td className="py-1 px-2 text-right font-mono">£{stats?.totalPay.toFixed(0)}</td>
+                  <td className="py-1 px-2 text-right font-mono">GBP {stats?.totalPay.toFixed(0)}</td>
                   <td className="px-2 py-1 text-right font-mono text-[var(--warn)]">{stats?.otHours > 0 ? stats.otHours.toFixed(1) : '-'}</td>
                   <td className="px-2 py-1 text-center">
                     <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
@@ -788,7 +788,7 @@ export default function RotationGrid() {
                   aria-expanded={summaryExpanded}
                   aria-label={`${summaryExpanded ? 'Collapse' : 'Expand'} absent summary`}
                 >
-                  {summaryExpanded ? '▾' : '▸'} Absent
+                  {summaryExpanded ? 'v' : '>'} Absent
                 </button>
               </td>
               <td></td>
@@ -819,7 +819,7 @@ export default function RotationGrid() {
                   aria-expanded={summaryExpanded}
                   aria-label={`${summaryExpanded ? 'Collapse' : 'Expand'} cover summary`}
                 >
-                  {summaryExpanded ? '▾' : '▸'} Cover
+                  {summaryExpanded ? 'v' : '>'} Cover
                 </button>
               </td>
               <td></td>
@@ -830,7 +830,7 @@ export default function RotationGrid() {
                 const counts = {};
                 cov.forEach(c => { counts[c.shift] = (counts[c.shift] || 0) + 1; });
                 const collapsed = Object.entries(counts).map(([s, n]) => `${n}${s}`).join(' ');
-                const expanded = cov.map(c => `${c.name} → ${c.replacesName} (${c.shift})`).join('\n');
+                const expanded = cov.map(c => `${c.name} -> ${c.replacesName} (${c.shift})`).join('\n');
                 return (
                   <td key={i} className="py-0.5 px-0.5 text-center text-[9px]" title={expanded}>
                     <span className="font-medium text-[var(--info)]">{summaryExpanded ? cov.map((c, j) => <div key={j}>{c.name.split(' ')[0]}</div>) : collapsed}</span>
@@ -844,13 +844,13 @@ export default function RotationGrid() {
       </div>
 
       {/* Legend */}
-      <div className="mt-4 flex flex-wrap gap-2 text-[10px]">
+      <div className="roster-print-legend mt-4 flex flex-wrap gap-2 text-[10px]">
         {[
           ['EL', 'Full Day'], ['E', 'Early'], ['L', 'Late'], ['N', 'Night'],
           ['OFF', 'Off'], ['AVL', 'Available'], ['AL', 'Ann. Leave'], ['SICK', 'Sick'],
           ['OC-*', 'On-Call/OT'], ['AG-*', 'Agency'], ['BH-*', 'Bank Holiday'],
         ].map(([code, label]) => (
-          <span key={code} className={`rounded-md border px-1.5 py-0.5 ${SHIFT_COLORS[code] || 'border-[var(--line)] bg-[var(--paper-2)] text-[var(--ink-3)]'}`}>
+          <span key={code} className={`roster-legend-chip rounded-md border px-1.5 py-0.5 ${SHIFT_COLORS[code] || 'border-[var(--line)] bg-[var(--paper-2)] text-[var(--ink-3)]'}`}>
             {code} = {label}
           </span>
         ))}

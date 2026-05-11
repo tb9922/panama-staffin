@@ -150,6 +150,22 @@ describe('RotationGrid', () => {
     expect(await screen.findByRole('button', { name: 'Print' }, { timeout: 20_000 })).toBeInTheDocument();
   }, 20_000);
 
+  it('marks the roster grid for colour-preserving print output', async () => {
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    expect(document.querySelector('.roster-print-page')).toBeInTheDocument();
+    expect(document.querySelector('.roster-print-surface')).toBeInTheDocument();
+    expect(document.querySelector('.roster-print-table')).toBeInTheDocument();
+    expect(screen.getByText('Pay GBP')).toBeInTheDocument();
+
+    const shiftCell = document.querySelector('.roster-shift-cell');
+    expect(shiftCell).toBeInTheDocument();
+    expect(shiftCell.className).toMatch(/bg-(blue|indigo|emerald|purple|gray|amber|red|pink|cyan|teal|orange)-/);
+  });
+
   it('renders Export CSV button', async () => {
     renderAdmin();
     await waitFor(() => {
