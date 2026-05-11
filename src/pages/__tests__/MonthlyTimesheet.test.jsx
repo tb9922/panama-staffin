@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import MonthlyTimesheet from '../MonthlyTimesheet.jsx';
@@ -147,6 +147,10 @@ describe('MonthlyTimesheet', () => {
     api.getCurrentHome.mockReturnValue('test-home');
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('smoke test -- renders without crashing', async () => {
     renderAdmin();
     await waitFor(() =>
@@ -238,6 +242,32 @@ describe('MonthlyTimesheet', () => {
     expect(select).toBeInTheDocument();
   });
 
+  it('requires confirmation before approving all pending entries', async () => {
+    const dateStr = currentMonthDate(2);
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderAdmin([{ ...MOCK_ENTRIES[0], date: dateStr, status: 'pending' }]);
+
+    await screen.findByText('Monthly Timesheet');
+    await waitFor(() => expect(screen.getByRole('button', { name: /Approve 1 Pending/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Approve 1 Pending/i }));
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(api.approveTimesheetRange).not.toHaveBeenCalled();
+  });
+
+  it('does not load monthly data without an active home', async () => {
+    api.getCurrentHome.mockReturnValue(null);
+    renderWithProviders(<MonthlyTimesheet />, {
+      route: '/payroll/monthly-timesheet/S001',
+      path: '/payroll/monthly-timesheet/:staffId?',
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    expect(await screen.findByText('Select a home before reviewing monthly timesheets')).toBeInTheDocument();
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
+    expect(api.getTimesheetPeriod).not.toHaveBeenCalled();
+  });
+
   it('lets a manager resolve a shortfall with hourly annual leave', async () => {
     const dateStr = currentMonthDate(2);
     api.getSchedulingData.mockResolvedValue({
@@ -292,6 +322,7 @@ describe('MonthlyTimesheet', () => {
   });
 
   it('lets a manager remove an existing hourly shortfall adjustment', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const dateStr = currentMonthDate(2);
     api.getSchedulingData.mockResolvedValue({
       ...MOCK_SCHED_DATA,
@@ -331,5 +362,45 @@ describe('MonthlyTimesheet', () => {
     await waitFor(() => {
       expect(api.deleteTimesheetHourAdjustment).toHaveBeenCalledWith('test-home', 'S001', dateStr);
     });
+  });
+
+  it('keeps hourly adjustment removal behind confirmation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const dateStr = currentMonthDate(2);
+    api.getSchedulingData.mockResolvedValue({
+      ...MOCK_SCHED_DATA,
+      hour_adjustments: {
+        [dateStr]: {
+          S001: { kind: 'annual_leave', hours: 0.5, note: 'Existing adjustment' },
+        },
+      },
+      overrides: {
+        [dateStr]: {
+          S001: { shift: 'EL' },
+        },
+      },
+    });
+    api.getTimesheetPeriod.mockResolvedValue([
+      {
+        ...MOCK_ENTRIES[0],
+        date: dateStr,
+        payable_hours: 11.5,
+      },
+    ]);
+
+    renderWithProviders(<MonthlyTimesheet />, {
+      route: '/payroll/monthly-timesheet/S001',
+      path: '/payroll/monthly-timesheet/:staffId?',
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await screen.findByText('Monthly Timesheet');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Adjust' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Adjust' }));
+    await screen.findByText('Resolve Shortfall');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(api.deleteTimesheetHourAdjustment).not.toHaveBeenCalled();
   });
 });

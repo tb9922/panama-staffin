@@ -60,6 +60,7 @@ export default function MonthlyTimesheet() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const actionsEnabled = Boolean(homeSlug && canEdit);
 
   const [schedData, setSchedData] = useState(null);
   const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -83,12 +84,15 @@ export default function MonthlyTimesheet() {
   // Edit modal state
   const [editModal, setEditModal] = useState(null); // { row }
   const [editForm, setEditForm] = useState({});
+  const [editError, setEditError] = useState('');
 
   // Dispute modal state
   const [disputeModal, setDisputeModal] = useState(null); // { entry }
   const [disputeReason, setDisputeReason] = useState('');
+  const [disputeError, setDisputeError] = useState('');
   const [adjustmentModal, setAdjustmentModal] = useState(null); // { row }
   const [adjustmentForm, setAdjustmentForm] = useState({ kind: 'annual_leave', hours: '', note: '' });
+  const [adjustmentError, setAdjustmentError] = useState('');
   useDirtyGuard(!!editModal || !!disputeModal || !!adjustmentModal);
 
   // Snap config from schedData
@@ -246,7 +250,7 @@ export default function MonthlyTimesheet() {
     };
   }, [rows]);
 
-  // ── Per-row actions ──────────────────────────────────────────────────────────
+  // Per-row actions
 
   function openEdit(row) {
     const times = getShiftTimes(row.rosterShift, schedData?.config);
@@ -260,10 +264,12 @@ export default function MonthlyTimesheet() {
       break_minutes:   row.entry?.break_minutes ?? (row.rosterShift === 'N' ? 0 : (row.rosterHours > 6 ? 30 : 0)),
       notes:           row.entry?.notes || '',
     });
+    setEditError('');
     setEditModal({ row });
   }
 
   function handleEditChange(field, value) {
+    setEditError('');
     setEditForm(f => {
       const updated = { ...f, [field]: value };
       const snapStart = snapToShift(updated.scheduled_start, updated.actual_start, snapConfig.window, snapConfig.enabled);
@@ -278,9 +284,17 @@ export default function MonthlyTimesheet() {
   }
 
   async function handleSaveEntry() {
-    if (saving) return;
+    if (saving || !actionsEnabled) return;
+    if (!editForm.actual_start || !editForm.actual_end) {
+      setEditError('Actual start and end times are required.');
+      return;
+    }
+    if (!Number.isFinite(Number(editForm.break_minutes)) || Number(editForm.break_minutes) < 0 || Number(editForm.break_minutes) > 120) {
+      setEditError('Break must be between 0 and 120 minutes.');
+      return;
+    }
     setSaving(true);
-    setError(null);
+    setEditError('');
     try {
       const snapStart = snapToShift(editForm.scheduled_start, editForm.actual_start, snapConfig.window, snapConfig.enabled);
       const snapEnd   = snapToShift(editForm.scheduled_end,   editForm.actual_end,   snapConfig.window, snapConfig.enabled);
@@ -299,14 +313,15 @@ export default function MonthlyTimesheet() {
       await fetchEntries();
       showNotice('Timesheet entry saved.');
     } catch (e) {
-      setError(e.message || 'Failed to save entry');
+      setEditError(e.message || 'Failed to save entry');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleApproveOne(entry) {
-    if (saving || !entry?.id) return;
+    if (saving || !actionsEnabled || !entry?.id) return;
+    if (!window.confirm(`Approve timesheet entry for ${entry.date || 'this day'}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -322,6 +337,7 @@ export default function MonthlyTimesheet() {
 
   function openDispute(entry) {
     setDisputeReason('');
+    setDisputeError('');
     setDisputeModal({ entry });
   }
 
@@ -333,20 +349,25 @@ export default function MonthlyTimesheet() {
         : (row.shortfallHours != null ? row.shortfallHours.toFixed(2).replace(/\.00$/, '') : ''),
       note: row.adjustment?.note || '',
     });
+    setAdjustmentError('');
     setAdjustmentModal({ row });
   }
 
   async function handleDisputeSubmit() {
-    if (saving || !disputeModal?.entry?.id || !disputeReason.trim()) return;
+    if (saving || !actionsEnabled || !disputeModal?.entry?.id) return;
+    if (!disputeReason.trim()) {
+      setDisputeError('Enter a reason before disputing this entry.');
+      return;
+    }
     setSaving(true);
-    setError(null);
+    setDisputeError('');
     try {
       await disputeTimesheet(homeSlug, disputeModal.entry.id, disputeReason.trim());
       setDisputeModal(null);
       await fetchEntries();
       showNotice('Timesheet entry disputed.');
     } catch (e) {
-      setError(e.message || 'Failed to dispute entry');
+      setDisputeError(e.message || 'Failed to dispute entry');
     } finally {
       setSaving(false);
     }
@@ -364,24 +385,24 @@ export default function MonthlyTimesheet() {
   }, [adjustmentModal, schedData, selectedStaffId, staff]);
 
   async function handleSaveAdjustment() {
-    if (saving || !adjustmentModal) return;
+    if (saving || !actionsEnabled || !adjustmentModal) return;
     const hours = parseFloat(adjustmentForm.hours);
     const maxShortfall = adjustmentModal.row.shortfallHours ?? 0;
     if (!(hours > 0)) {
-      setError('Enter a positive number of hours for the paid adjustment');
+      setAdjustmentError('Enter a positive number of hours for the paid adjustment');
       return;
     }
     if (hours > maxShortfall + 0.05) {
-      setError(`Adjustment cannot exceed the current shortfall (${maxShortfall.toFixed(2)}h)`);
+      setAdjustmentError(`Adjustment cannot exceed the current shortfall (${maxShortfall.toFixed(2)}h)`);
       return;
     }
     if (adjustmentForm.kind === 'annual_leave' && adjustmentAccrual && hours > adjustmentAccrual.remainingHours + 0.05) {
-      setError(`Only ${adjustmentAccrual.remainingHours.toFixed(1)}h of earned leave is available for that date`);
+      setAdjustmentError(`Only ${adjustmentAccrual.remainingHours.toFixed(1)}h of earned leave is available for that date`);
       return;
     }
 
     setSaving(true);
-    setError(null);
+    setAdjustmentError('');
     try {
       await upsertTimesheetHourAdjustment(homeSlug, {
         staff_id: selectedStaffId,
@@ -397,30 +418,32 @@ export default function MonthlyTimesheet() {
         ? 'Hourly annual leave applied to the shortfall.'
         : 'Paid authorised absence applied to the shortfall.');
     } catch (e) {
-      setError(e.message || 'Failed to save hourly adjustment');
+      setAdjustmentError(e.message || 'Failed to save hourly adjustment');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDeleteAdjustment() {
-    if (saving || !adjustmentModal?.row?.adjustment) return;
+    if (saving || !actionsEnabled || !adjustmentModal?.row?.adjustment) return;
+    if (!window.confirm(`Remove the paid shortfall adjustment for ${adjustmentModal.row.dateStr}?`)) return;
     setSaving(true);
-    setError(null);
+    setAdjustmentError('');
     try {
       await deleteTimesheetHourAdjustment(homeSlug, selectedStaffId, adjustmentModal.row.dateStr);
       setAdjustmentModal(null);
       setRefreshKey((value) => value + 1);
       showNotice('Hourly adjustment removed.');
     } catch (e) {
-      setError(e.message || 'Failed to remove hourly adjustment');
+      setAdjustmentError(e.message || 'Failed to remove hourly adjustment');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleRecordOne(row) {
-    if (saving) return;
+    if (saving || !actionsEnabled) return;
+    if (!window.confirm(`Record ${row.dateStr} as scheduled for ${staff?.name || selectedStaffId}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -449,39 +472,39 @@ export default function MonthlyTimesheet() {
     }
   }
 
-  // ── Bulk actions ─────────────────────────────────────────────────────────────
+  // Bulk actions
 
   async function handleConfirmAll() {
-    if (!staff || !schedData?.config || saving) return;
+    if (!staff || !schedData?.config || saving || !actionsEnabled) return;
+    const entriesToCreate = [];
+    for (const row of rows) {
+      if (row.rowType === 'missing' || (row.rowType === 'future' && WORKING_SHIFTS.includes(row.rosterShift) && !row.entry)) {
+        const times = getShiftTimes(row.rosterShift, schedData?.config);
+        entriesToCreate.push({
+          staff_id: selectedStaffId,
+          date: row.dateStr,
+          scheduled_start: times.start,
+          scheduled_end: times.end,
+          actual_start: times.start,
+          actual_end: times.end,
+          snapped_start: times.start,
+          snapped_end: times.end,
+          snap_applied: false,
+          snap_minutes_saved: 0,
+          break_minutes: row.rosterShift === 'N' ? 0 : (row.rosterHours > 6 ? 30 : 0),
+          payable_hours: row.rosterHours,
+          status: 'pending',
+        });
+      }
+    }
+    if (entriesToCreate.length === 0) {
+      setError('No missing entries to confirm');
+      return;
+    }
+    if (!window.confirm(`Record ${entriesToCreate.length} missing monthly timesheet ${entriesToCreate.length === 1 ? 'entry' : 'entries'} as scheduled for ${staff.name}?`)) return;
     setSaving(true);
     setError(null);
     try {
-      const entriesToCreate = [];
-      for (const row of rows) {
-        if (row.rowType === 'missing' || (row.rowType === 'future' && WORKING_SHIFTS.includes(row.rosterShift) && !row.entry)) {
-          const times = getShiftTimes(row.rosterShift, schedData?.config);
-          entriesToCreate.push({
-            staff_id: selectedStaffId,
-            date: row.dateStr,
-            scheduled_start: times.start,
-            scheduled_end: times.end,
-            actual_start: times.start,
-            actual_end: times.end,
-            snapped_start: times.start,
-            snapped_end: times.end,
-            snap_applied: false,
-            snap_minutes_saved: 0,
-            break_minutes: row.rosterShift === 'N' ? 0 : (row.rosterHours > 6 ? 30 : 0),
-            payable_hours: row.rosterHours,
-            status: 'pending',
-          });
-        }
-      }
-      if (entriesToCreate.length === 0) {
-        setError('No missing entries to confirm');
-        setSaving(false);
-        return;
-      }
       await batchUpsertTimesheets(homeSlug, entriesToCreate);
       await fetchEntries();
       showNotice('Missing timesheet entries confirmed.');
@@ -493,7 +516,12 @@ export default function MonthlyTimesheet() {
   }
 
   async function handleApproveAll() {
-    if (!selectedStaffId || saving) return;
+    if (!selectedStaffId || saving || !actionsEnabled) return;
+    if (pendingCount === 0) {
+      setError('No pending entries to approve');
+      return;
+    }
+    if (!window.confirm(`Approve ${pendingCount} pending monthly timesheet ${pendingCount === 1 ? 'entry' : 'entries'} for ${staff?.name || selectedStaffId}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -510,7 +538,7 @@ export default function MonthlyTimesheet() {
     }
   }
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
+  // Navigation
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
@@ -521,7 +549,7 @@ export default function MonthlyTimesheet() {
     else setMonth(m => m + 1);
   }
 
-  // ── Row styling helpers ──────────────────────────────────────────────────────
+  // Row styling helpers
 
   function rowBg(row) {
     if (row.entry?.status === 'approved' || row.entry?.status === 'locked') return 'bg-green-50';
@@ -553,21 +581,21 @@ export default function MonthlyTimesheet() {
   }
 
   function rowActions(row) {
-    if (!canEdit) return null;
+    if (!actionsEnabled) return null;
     const e = row.entry;
 
-    // Locked — no actions
+    // Locked - no actions
     if (e?.status === 'locked') return null;
-    // Future without entry — no actions
+    // Future without entry - no actions
     if (row.rowType === 'future' && !e) return null;
-    // Off/absence without entry — no actions
+    // Off/absence without entry - no actions
     if ((row.rowType === 'off' || row.rowType === 'absence') && !e) return null;
 
     return (
       <div className="flex gap-1">
-        {/* Missing day — Record button */}
+        {/* Missing day - Record button */}
         {row.rowType === 'missing' && !e && (
-          <button
+          <button type="button"
             className={`${BTN.secondary} ${BTN.xs}`}
             onClick={() => handleRecordOne(row)}
             disabled={saving}
@@ -575,9 +603,9 @@ export default function MonthlyTimesheet() {
           >Record</button>
         )}
 
-        {/* Entry exists — Edit */}
+        {/* Entry exists - Edit */}
         {e && e.status !== 'locked' && (
-          <button
+          <button type="button"
             className={`${BTN.ghost} ${BTN.xs}`}
             onClick={() => openEdit(row)}
             disabled={saving}
@@ -585,9 +613,9 @@ export default function MonthlyTimesheet() {
           >Edit</button>
         )}
 
-        {/* Pending — Approve */}
+        {/* Pending - Approve */}
         {e?.status === 'pending' && (
-          <button
+          <button type="button"
             className={`${BTN.success} ${BTN.xs}`}
             onClick={() => handleApproveOne(e)}
             disabled={saving}
@@ -595,9 +623,9 @@ export default function MonthlyTimesheet() {
           >Approve</button>
         )}
 
-        {/* Pending or Approved — Dispute */}
+        {/* Pending or Approved - Dispute */}
         {(e?.status === 'pending' || e?.status === 'approved') && (
-          <button
+          <button type="button"
             className={`${BTN.danger} ${BTN.xs}`}
             onClick={() => openDispute(e)}
             disabled={saving}
@@ -606,7 +634,7 @@ export default function MonthlyTimesheet() {
         )}
 
         {(e && WORKING_SHIFTS.includes(row.rosterShift) && ((row.shortfallHours ?? 0) > 0.05 || row.adjustment)) && (
-          <button
+          <button type="button"
             className={`${BTN.secondary} ${BTN.xs}`}
             onClick={() => openAdjustment(row)}
             disabled={saving}
@@ -631,6 +659,17 @@ export default function MonthlyTimesheet() {
   function retryLoad() {
     setError(null);
     setRefreshKey((value) => value + 1);
+  }
+
+  if (!homeSlug) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="Select a home before reviewing monthly timesheets"
+          description="Monthly timesheets need an active home so staff, rota, and payroll entries can be loaded together."
+        />
+      </div>
+    );
   }
 
   if (scheduleLoading && !schedData) {
@@ -658,13 +697,13 @@ export default function MonthlyTimesheet() {
     <div className={PAGE.container}>
       <div className="flex items-center justify-between mb-6 print:mb-2">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/payroll/timesheets')} className={BTN.ghost + ' ' + BTN.sm}>
-            <svg className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+          <button type="button" onClick={() => navigate('/payroll/timesheets')} className={BTN.ghost + ' ' + BTN.sm}>
+            <svg className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
             Back
           </button>
           <h1 className={PAGE.title + ' !mb-0'}>Monthly Timesheet</h1>
         </div>
-        <button onClick={() => window.print()} className={BTN.ghost + ' ' + BTN.sm + ' print:hidden'}>Print</button>
+        <button type="button" onClick={() => window.print()} className={BTN.ghost + ' ' + BTN.sm + ' print:hidden'}>Print</button>
       </div>
 
       {/* Staff + month selector */}
@@ -681,20 +720,20 @@ export default function MonthlyTimesheet() {
             }}
           >
             {activeStaff.map(s => (
-              <option key={s.id} value={s.id}>{s.id} — {s.name} ({s.role})</option>
+              <option key={s.id} value={s.id}>{s.id} - {s.name} ({s.role})</option>
             ))}
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className={BTN.ghost + ' ' + BTN.sm}>&#8592;</button>
+          <button type="button" onClick={prevMonth} className={BTN.ghost + ' ' + BTN.sm} aria-label="Previous month">&#8592;</button>
           <span className="font-semibold text-gray-700 min-w-[140px] text-center">{monthName}</span>
-          <button onClick={nextMonth} className={BTN.ghost + ' ' + BTN.sm}>&#8594;</button>
+          <button type="button" onClick={nextMonth} className={BTN.ghost + ' ' + BTN.sm} aria-label="Next month">&#8594;</button>
         </div>
       </div>
 
       {/* Print header */}
       <div className="hidden print:block mb-4">
-        <p className="text-lg font-bold">{staff?.name} ({staff?.id}) — {staff?.role}</p>
+        <p className="text-lg font-bold">{staff?.name} ({staff?.id}) - {staff?.role}</p>
         <p className="text-sm text-gray-600">{monthName}</p>
       </div>
 
@@ -737,16 +776,16 @@ export default function MonthlyTimesheet() {
       {error && <InlineNotice variant="error" className="mb-4" onDismiss={() => setError(null)} role="alert">{error}</InlineNotice>}
 
       {/* Action buttons */}
-      {canEdit && (
+      {actionsEnabled && (
         <div className="flex gap-3 mb-4 print:hidden">
-          <button
+          <button type="button"
             className={BTN.secondary + ' ' + BTN.sm}
             onClick={handleConfirmAll}
             disabled={saving || missingCount === 0}
           >
             {saving ? 'Saving...' : `Confirm ${missingCount > 0 ? missingCount : 'All'} as Scheduled`}
           </button>
-          <button
+          <button type="button"
             className={BTN.primary + ' ' + BTN.sm}
             onClick={handleApproveAll}
             disabled={saving || pendingCount === 0}
@@ -776,7 +815,7 @@ export default function MonthlyTimesheet() {
                 <th scope="col" className={TABLE.th + ' text-right'}>Paid Hrs</th>
                 <th scope="col" className={TABLE.th + ' text-right'}>Variance</th>
                 <th scope="col" className={TABLE.th}>Status</th>
-                {canEdit && <th scope="col" className={TABLE.th + ' print:hidden'}>Actions</th>}
+                {actionsEnabled && <th scope="col" className={TABLE.th + ' print:hidden'}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -823,7 +862,7 @@ export default function MonthlyTimesheet() {
                       <span className="text-xs text-red-500 ml-1" title={row.entry.dispute_reason}>!</span>
                     )}
                   </td>
-                  {canEdit && <td className={TABLE.td + ' print:hidden'}>{rowActions(row)}</td>}
+                  {actionsEnabled && <td className={TABLE.td + ' print:hidden'}>{rowActions(row)}</td>}
                 </tr>
               ))}
               {/* Totals row */}
@@ -843,7 +882,7 @@ export default function MonthlyTimesheet() {
                 <td className={TABLE.td}>
                   <span className="text-xs text-gray-500">{stats.approvedCount}/{stats.workingDays}</span>
                 </td>
-                {canEdit && <td className={TABLE.td + ' print:hidden'}></td>}
+                {actionsEnabled && <td className={TABLE.td + ' print:hidden'}></td>}
               </tr>
             </tbody>
           </table>
@@ -865,10 +904,10 @@ export default function MonthlyTimesheet() {
       </div>
 
       {/* Edit Modal */}
-      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title={editModal ? `${staff?.name} — ${editModal.row.dateStr}` : ''} size="lg">
+      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title={editModal ? `${staff?.name} - ${editModal.row.dateStr}` : ''} size="lg">
           {editModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
-              {staff?.role} — Roster: {editModal.row.rosterShift}
+              {staff?.role} - Roster: {editModal.row.rosterShift}
               {editModal.row.entry?.status === 'disputed' && (
                 <span className="ml-2 text-red-500">Disputed: {editModal.row.entry.dispute_reason}</span>
               )}
@@ -876,20 +915,20 @@ export default function MonthlyTimesheet() {
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className={INPUT.label}>Actual Start</label>
-                <input type="time" className={INPUT.base} value={editForm.actual_start}
+                <label htmlFor="monthly-edit-actual-start" className={INPUT.label}>Actual Start</label>
+                <input id="monthly-edit-actual-start" type="time" className={INPUT.base} value={editForm.actual_start}
                   onChange={e => handleEditChange('actual_start', e.target.value)} />
               </div>
               <div>
-                <label className={INPUT.label}>Actual End</label>
-                <input type="time" className={INPUT.base} value={editForm.actual_end}
+                <label htmlFor="monthly-edit-actual-end" className={INPUT.label}>Actual End</label>
+                <input id="monthly-edit-actual-end" type="time" className={INPUT.base} value={editForm.actual_end}
                   onChange={e => handleEditChange('actual_end', e.target.value)} />
               </div>
             </div>
 
             <div className="mb-4">
-              <label className={INPUT.label}>Break (minutes)</label>
-              <input type="number" className={INPUT.base + ' w-24'} min="0" max="120" value={editForm.break_minutes}
+              <label htmlFor="monthly-edit-break-minutes" className={INPUT.label}>Break (minutes)</label>
+              <input id="monthly-edit-break-minutes" type="number" className={INPUT.base + ' w-24'} min="0" max="120" value={editForm.break_minutes}
                 onChange={e => handleEditChange('break_minutes', parseInt(e.target.value) || 0)} />
             </div>
 
@@ -899,20 +938,29 @@ export default function MonthlyTimesheet() {
                   Payable hours: {parseFloat(editPayable || 0).toFixed(2)}h
                 </p>
                 <p className="text-xs text-gray-500">
-                  Scheduled: {editForm.scheduled_start} — {editForm.scheduled_end} ({editModal.row.rosterHours.toFixed(1)}h)
+                  Scheduled: {editForm.scheduled_start} - {editForm.scheduled_end} ({editModal.row.rosterHours.toFixed(1)}h)
                 </p>
               </div>
             )}
 
             <div className="mb-4">
-              <label className={INPUT.label}>Notes</label>
-              <input className={INPUT.base} value={editForm.notes} placeholder="Optional notes"
-                onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+              <label htmlFor="monthly-edit-notes" className={INPUT.label}>Notes</label>
+              <input id="monthly-edit-notes" className={INPUT.base} value={editForm.notes} placeholder="Optional notes"
+                onChange={e => {
+                  setEditError('');
+                  setEditForm(f => ({ ...f, notes: e.target.value }));
+                }} />
             </div>
 
+            {editError && (
+              <InlineNotice variant="error" className="mb-4" role="alert">
+                {editError}
+              </InlineNotice>
+            )}
+
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setEditModal(null)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSaveEntry} disabled={saving}>
+              <button type="button" className={BTN.secondary} onClick={() => setEditModal(null)}>Cancel</button>
+              <button type="button" className={BTN.primary} onClick={handleSaveEntry} disabled={saving}>
                 {saving ? 'Saving...' : 'Save'}
               </button>
             </div>
@@ -923,24 +971,34 @@ export default function MonthlyTimesheet() {
       <Modal isOpen={!!disputeModal} onClose={() => setDisputeModal(null)} title="Dispute Entry">
           {disputeModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
-              {staff?.name} — {disputeModal.entry.date}
+              {staff?.name} - {disputeModal.entry.date}
             </p>
 
             <div className="mb-4">
-              <label className={INPUT.label}>Reason for dispute</label>
+              <label htmlFor="monthly-dispute-reason" className={INPUT.label}>Reason for dispute</label>
               <textarea
+                id="monthly-dispute-reason"
                 className={INPUT.base + ' min-h-[80px]'}
                 value={disputeReason}
-                onChange={e => setDisputeReason(e.target.value)}
+                onChange={e => {
+                  setDisputeError('');
+                  setDisputeReason(e.target.value);
+                }}
                 placeholder="Describe the issue with this timesheet entry..."
                 maxLength={500}
               />
               <p className="text-xs text-gray-400 mt-1">{disputeReason.length}/500</p>
             </div>
 
+            {disputeError && (
+              <InlineNotice variant="error" className="mb-4" role="alert">
+                {disputeError}
+              </InlineNotice>
+            )}
+
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setDisputeModal(null)}>Cancel</button>
-              <button
+              <button type="button" className={BTN.secondary} onClick={() => setDisputeModal(null)}>Cancel</button>
+              <button type="button"
                 className={BTN.danger}
                 onClick={handleDisputeSubmit}
                 disabled={saving || !disputeReason.trim()}
@@ -969,7 +1027,10 @@ export default function MonthlyTimesheet() {
                   id="shortfall-adjustment-kind"
                   className={INPUT.select}
                   value={adjustmentForm.kind}
-                  onChange={e => setAdjustmentForm(current => ({ ...current, kind: e.target.value }))}
+                  onChange={e => {
+                    setAdjustmentError('');
+                    setAdjustmentForm(current => ({ ...current, kind: e.target.value }));
+                  }}
                 >
                   <option value="annual_leave">Use annual leave hours</option>
                   <option value="paid_authorised_absence">Pay authorised absence hours</option>
@@ -986,7 +1047,10 @@ export default function MonthlyTimesheet() {
                   max={adjustmentModal.row.shortfallHours || undefined}
                   className={INPUT.base}
                   value={adjustmentForm.hours}
-                  onChange={e => setAdjustmentForm(current => ({ ...current, hours: e.target.value }))}
+                  onChange={e => {
+                    setAdjustmentError('');
+                    setAdjustmentForm(current => ({ ...current, hours: e.target.value }));
+                  }}
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   Maximum available on this row: {(adjustmentModal.row.shortfallHours || 0).toFixed(1)}h
@@ -1007,20 +1071,29 @@ export default function MonthlyTimesheet() {
                   id="shortfall-adjustment-note"
                   className={INPUT.base}
                   value={adjustmentForm.note}
-                  onChange={e => setAdjustmentForm(current => ({ ...current, note: e.target.value }))}
+                  onChange={e => {
+                    setAdjustmentError('');
+                    setAdjustmentForm(current => ({ ...current, note: e.target.value }));
+                  }}
                   placeholder="Optional explanation for payroll history"
                 />
               </div>
             </div>
 
+            {adjustmentError && (
+              <InlineNotice variant="error" className="mt-4" role="alert">
+                {adjustmentError}
+              </InlineNotice>
+            )}
+
             <div className={MODAL.footer}>
               {adjustmentModal.row.adjustment && (
-                <button className={BTN.danger} onClick={handleDeleteAdjustment} disabled={saving}>
+                <button type="button" className={BTN.danger} onClick={handleDeleteAdjustment} disabled={saving}>
                   {saving ? 'Removing...' : 'Remove'}
                 </button>
               )}
-              <button className={BTN.secondary} onClick={() => setAdjustmentModal(null)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSaveAdjustment} disabled={saving}>
+              <button type="button" className={BTN.secondary} onClick={() => setAdjustmentModal(null)}>Cancel</button>
+              <button type="button" className={BTN.primary} onClick={handleSaveAdjustment} disabled={saving}>
                 {saving ? 'Saving...' : adjustmentModal.row.adjustment ? 'Update' : 'Apply'}
               </button>
             </div>
