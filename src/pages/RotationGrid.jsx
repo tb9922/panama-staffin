@@ -668,7 +668,7 @@ export default function RotationGrid() {
           <thead>
             <tr className="sticky top-0 z-20 bg-[var(--paper-2)] text-[var(--ink-2)] shadow-[inset_0_-1px_0_var(--line)]">
               <th scope="col" className="sticky left-0 z-30 min-w-[150px] bg-[var(--paper-2)] px-3 py-2 text-left font-semibold">Staff</th>
-              <th scope="col" className="min-w-[38px] px-1 py-2 text-left font-semibold">Pref</th>
+              <th scope="col" className="roster-print-pref min-w-[38px] px-1 py-2 text-left font-semibold">Pref</th>
               {monthDates.map((d, i) => {
                 const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
                 const isMonday = d.getUTCDay() === 1 && i > 0;
@@ -714,7 +714,7 @@ export default function RotationGrid() {
                     })()}
                     <div className="text-[9px] text-[var(--ink-4)]">{s.role}</div>
                   </td>
-                  <td className="px-1 py-1 text-[10px] text-[var(--ink-3)]">{s.pref}</td>
+                  <td className="roster-print-pref px-1 py-1 text-[10px] text-[var(--ink-3)]">{s.pref}</td>
                   {monthDates.map((date, i) => {
                     const dateKey = formatDate(date);
                     const actual = getActualShift(s, date, schedData.overrides, schedData.config.cycle_start_date, schedData.config);
@@ -791,7 +791,7 @@ export default function RotationGrid() {
                   {summaryExpanded ? 'v' : '>'} Absent
                 </button>
               </td>
-              <td></td>
+              <td className="roster-print-pref"></td>
               {monthDates.map((date, i) => {
                 const ds = daySummaries[formatDate(date)];
                 const abs = ds?.absences || [];
@@ -822,7 +822,7 @@ export default function RotationGrid() {
                   {summaryExpanded ? 'v' : '>'} Cover
                 </button>
               </td>
-              <td></td>
+              <td className="roster-print-pref"></td>
               {monthDates.map((date, i) => {
                 const ds = daySummaries[formatDate(date)];
                 const cov = ds?.covers || [];

@@ -522,6 +522,7 @@ button, a, input, select, textarea {
     max-width: 18px !important;
   }
 
+  .roster-print-table .roster-print-pref,
   .roster-print-table .roster-print-metric {
     display: none !important;
   }
