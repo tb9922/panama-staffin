@@ -18,6 +18,18 @@ function statusLabel(status) {
   return STATUS_DISPLAY[status]?.label || String(status || '').replace(/_/g, ' ');
 }
 
+function needsAttention(section) {
+  return section?.needs_attention ?? section?.missing_required_document;
+}
+
+function attentionReasonLabel(row) {
+  const reasons = row?.attention_reasons || [];
+  if (reasons.includes('status_not_completed') && reasons.includes('document_missing')) return 'Status and document missing';
+  if (reasons.includes('status_not_completed')) return 'Status not completed';
+  if (reasons.includes('document_missing')) return 'Document missing';
+  return 'Needs review';
+}
+
 export default function OnboardingDocsTracker() {
   const home = getCurrentHome();
   const { homeRole, isPlatformAdmin, isScanTargetEnabled = () => false } = useData();
@@ -62,10 +74,10 @@ export default function OnboardingDocsTracker() {
         <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900">By Staff</div>
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
-            <thead className={TABLE.thead}><tr><th className={TABLE.th}>Staff</th><th className={TABLE.th}>Role</th><th className={TABLE.th}>Documents</th><th className={TABLE.th}>Outstanding</th></tr></thead>
+            <thead className={TABLE.thead}><tr><th className={TABLE.th}>Staff</th><th className={TABLE.th}>Role</th><th className={TABLE.th}>Documents</th><th className={TABLE.th}>Needs Attention</th></tr></thead>
             <tbody>
               {data.byStaff.map((row) => {
-                const outstanding = row.sections.filter((section) => section.missing_required_document).length;
+                const outstanding = row.sections.filter(needsAttention).length;
                 return (
                   <tr key={row.staff_id} className={TABLE.tr}>
                     <td className={TABLE.td}>{row.staff_name}</td>
@@ -83,11 +95,14 @@ export default function OnboardingDocsTracker() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className={CARD.flush}>
           <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900">By Section</div>
-          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Section</th><th className={TABLE.th}>Documents</th><th className={TABLE.th}>Missing Required</th></tr></thead><tbody>{data.bySection.map((row) => <tr key={row.section} className={TABLE.tr}><td className={TABLE.td}>{sectionLabel(row.section)}</td><td className={TABLE.td}>{row.attachment_count}</td><td className={TABLE.td}>{row.missing_required_count > 0 ? <span className={BADGE.red}>{row.missing_required_count}</span> : <span className={BADGE.green}>0</span>}</td></tr>)}</tbody></table></div>
+          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Section</th><th className={TABLE.th}>Documents</th><th className={TABLE.th}>Needs Attention</th></tr></thead><tbody>{data.bySection.map((row) => {
+            const needsAttentionCount = row.needs_attention_count ?? row.missing_required_count;
+            return <tr key={row.section} className={TABLE.tr}><td className={TABLE.td}>{sectionLabel(row.section)}</td><td className={TABLE.td}>{row.attachment_count}</td><td className={TABLE.td}>{needsAttentionCount > 0 ? <span className={BADGE.red}>{needsAttentionCount}</span> : <span className={BADGE.green}>0</span>}</td></tr>;
+          })}</tbody></table></div>
         </div>
         <div className={CARD.flush}>
           <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900">Outstanding Mandatory Sections</div>
-          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Staff</th><th className={TABLE.th}>Section</th><th className={TABLE.th}>Status</th></tr></thead><tbody>{data.outstandingMandatory.map((row, index) => <tr key={`${row.staff_id}:${row.section}:${index}`} className={TABLE.tr}><td className={TABLE.td}>{row.staff_name}</td><td className={TABLE.td}>{sectionLabel(row.section)}</td><td className={TABLE.td}><span className={BADGE.amber}>{statusLabel(row.status)}</span></td></tr>)}</tbody></table></div>
+          <div className={TABLE.wrapper}><table className={TABLE.table}><thead className={TABLE.thead}><tr><th className={TABLE.th}>Staff</th><th className={TABLE.th}>Section</th><th className={TABLE.th}>Status</th><th className={TABLE.th}>Reason</th></tr></thead><tbody>{data.outstandingMandatory.map((row, index) => <tr key={`${row.staff_id}:${row.section}:${index}`} className={TABLE.tr}><td className={TABLE.td}>{row.staff_name}</td><td className={TABLE.td}>{sectionLabel(row.section)}</td><td className={TABLE.td}><span className={BADGE.amber}>{statusLabel(row.status)}</span></td><td className={TABLE.td}>{attentionReasonLabel(row)}</td></tr>)}</tbody></table></div>
         </div>
       </div>
     </div>

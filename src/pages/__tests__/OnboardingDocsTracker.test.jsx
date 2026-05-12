@@ -28,16 +28,22 @@ beforeEach(() => {
         attachment_count: 1,
         sections: [
           { section: 'dbs_check', missing_required_document: false },
-          { section: 'right_to_work', missing_required_document: true },
+          { section: 'right_to_work', missing_required_document: true, needs_attention: true },
         ],
       },
     ],
     bySection: [
-      { section: 'dbs_check', attachment_count: 1, missing_required_count: 0 },
-      { section: 'right_to_work', attachment_count: 0, missing_required_count: 1 },
+      { section: 'dbs_check', attachment_count: 1, missing_required_count: 0, needs_attention_count: 0 },
+      { section: 'right_to_work', attachment_count: 0, missing_required_count: 1, needs_attention_count: 1 },
     ],
     outstandingMandatory: [
-      { staff_id: 'S001', staff_name: 'Alice Smith', section: 'right_to_work', status: 'in_progress' },
+      {
+        staff_id: 'S001',
+        staff_name: 'Alice Smith',
+        section: 'right_to_work',
+        status: 'in_progress',
+        attention_reasons: ['document_missing'],
+      },
     ],
   });
 });
@@ -55,6 +61,7 @@ describe('OnboardingDocsTracker', () => {
     expect(screen.getByText('Enhanced DBS Check')).toBeInTheDocument();
     expect(screen.getAllByText('Right to Work').length).toBeGreaterThan(0);
     expect(screen.getByText('In Progress')).toBeInTheDocument();
+    expect(screen.getByText('Document missing')).toBeInTheDocument();
     expect(screen.queryByText('dbs_check')).not.toBeInTheDocument();
     expect(screen.queryByText('in_progress')).not.toBeInTheDocument();
   });

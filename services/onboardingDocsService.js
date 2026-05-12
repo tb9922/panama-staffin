@@ -22,7 +22,7 @@ export async function getOnboardingDocs(homeId, { roleId, isPlatformAdmin = fals
     onboardingAttachmentsRepo.findByHome(homeId),
     staffRepo.findByHome(homeId),
   ]);
-  const staff = staffResult.rows;
+  const staff = staffResult.rows.filter((member) => member.active !== false);
   const visibleSections = visibleOnboardingSectionsForRole(REQUIRED_SECTIONS, roleId, { isPlatformAdmin });
   const attachmentsByStaffSection = new Map();
   for (const attachment of attachments) {
@@ -37,12 +37,22 @@ export async function getOnboardingDocs(homeId, { roleId, isPlatformAdmin = fals
     const sections = visibleSections.map((section) => {
       const docs = attachmentsByStaffSection.get(`${member.id}:${section}`) || [];
       const sectionData = onboardingData[section] || null;
+      const status = sectionData?.status || 'not_started';
+      const missingRequiredDocument = docs.length === 0;
+      const statusIncomplete = status !== 'completed';
+      const attentionReasons = [
+        statusIncomplete ? 'status_not_completed' : null,
+        missingRequiredDocument ? 'document_missing' : null,
+      ].filter(Boolean);
       return {
         section,
-        status: sectionData?.status || 'not_started',
+        status,
         expiry: sectionData?.expiry || null,
         attachment_count: docs.length,
-        missing_required_document: docs.length === 0 && ['in_progress', 'completed'].includes(sectionData?.status),
+        missing_required_document: missingRequiredDocument,
+        status_incomplete: statusIncomplete,
+        needs_attention: attentionReasons.length > 0,
+        attention_reasons: attentionReasons,
       };
     });
     return {
@@ -60,17 +70,22 @@ export async function getOnboardingDocs(homeId, { roleId, isPlatformAdmin = fals
       section,
       attachment_count: staffEntries.reduce((sum, entry) => sum + (entry?.attachment_count || 0), 0),
       missing_required_count: staffEntries.filter((entry) => entry?.missing_required_document).length,
+      needs_attention_count: staffEntries.filter((entry) => entry?.needs_attention).length,
     };
   });
 
   const outstandingMandatory = byStaff.flatMap((entry) =>
     entry.sections
-      .filter((section) => section.missing_required_document)
+      .filter((section) => section.needs_attention)
       .map((section) => ({
         staff_id: entry.staff_id,
         staff_name: entry.staff_name,
         section: section.section,
         status: section.status,
+        attachment_count: section.attachment_count,
+        missing_required_document: section.missing_required_document,
+        status_incomplete: section.status_incomplete,
+        attention_reasons: section.attention_reasons,
       }))
   );
 
