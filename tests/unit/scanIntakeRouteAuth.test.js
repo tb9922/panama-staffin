@@ -66,6 +66,21 @@ function handoverPayload(category) {
   };
 }
 
+function cqcPayload(overrides = {}) {
+  return {
+    target: 'cqc',
+    cqc: {
+      create_evidence: {
+        quality_statement: 'S1',
+        type: 'qualitative',
+        title: 'CQC scan evidence',
+        evidence_category: 'processes',
+        ...overrides,
+      },
+    },
+  };
+}
+
 describe('scan intake handover category authorization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -132,6 +147,49 @@ describe('scan intake handover category authorization', () => {
       .set('x-home-role', 'shift_coordinator')
       .send(handoverPayload('operational'))
       .expect(403);
+
+    expect(scanIntakeService.confirmScanIntake).not.toHaveBeenCalled();
+  });
+
+  it('files CQC scans with controlled statement and category values', async () => {
+    await request(app)
+      .post('/api/scan-intake/7/confirm?home=home-a')
+      .set('x-home-role', 'home_manager')
+      .send(cqcPayload())
+      .expect(200);
+
+    expect(scanIntakeService.confirmScanIntake).toHaveBeenCalledWith(
+      1,
+      7,
+      expect.objectContaining({
+        target: 'cqc',
+        cqc: expect.objectContaining({
+          create_evidence: expect.objectContaining({
+            quality_statement: 'S1',
+            evidence_category: 'processes',
+          }),
+        }),
+      }),
+      'scan-route-tester',
+    );
+  });
+
+  it('rejects CQC scans with invalid categories before filing', async () => {
+    await request(app)
+      .post('/api/scan-intake/7/confirm?home=home-a')
+      .set('x-home-role', 'home_manager')
+      .send(cqcPayload({ evidence_category: 'Feedback from Staff and Leaders' }))
+      .expect(400);
+
+    expect(scanIntakeService.confirmScanIntake).not.toHaveBeenCalled();
+  });
+
+  it('rejects CQC scans where Evidence To is before Evidence From', async () => {
+    await request(app)
+      .post('/api/scan-intake/7/confirm?home=home-a')
+      .set('x-home-role', 'home_manager')
+      .send(cqcPayload({ date_from: '2026-05-12', date_to: '2026-05-11' }))
+      .expect(400);
 
     expect(scanIntakeService.confirmScanIntake).not.toHaveBeenCalled();
   });

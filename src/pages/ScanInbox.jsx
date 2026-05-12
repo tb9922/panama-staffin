@@ -26,11 +26,14 @@ import { SCAN_INTAKE_TARGETS, SCAN_INTAKE_STATUS_LABELS } from '../../shared/sca
 import { describeScanLaunchContext, parseScanLaunchParams } from '../lib/scanRouting.js';
 import { todayLocalISO } from '../lib/localDates.js';
 import { canManageSensitiveStaffFields } from '../../shared/staffPolicy.js';
+import { QUALITY_STATEMENTS } from '../lib/cqc.js';
+import { getAllEvidenceCategories } from '../lib/cqcEvidenceCategories.js';
 
 const ONBOARDING_SECTIONS = [
   'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
   'qualifications', 'contract', 'employment_history', 'day1_induction', 'policy_acknowledgement',
 ];
+const CQC_EVIDENCE_CATEGORY_OPTIONS = getAllEvidenceCategories();
 
 function targetLabel(id) {
   return SCAN_INTAKE_TARGETS.find((target) => target.id === id)?.label || id || 'Unclassified';
@@ -726,10 +729,36 @@ export default function ScanInbox() {
                       <Field id={controlId('cqc-existing-evidence')} label="Existing evidence"><select id={controlId('cqc-existing-evidence')} className={INPUT.select} value={cqcForm.evidence_id} onChange={(e) => setCqcForm((current) => ({ ...current, evidence_id: e.target.value }))}><option value="">Create new evidence item</option>{cqcEvidence.map((item) => <option key={item.id} value={item.id}>{item.quality_statement} - {item.title}</option>)}</select></Field>
                       {!cqcForm.evidence_id && (
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <Field id={controlId('cqc-statement')} label="Statement"><input id={controlId('cqc-statement')} className={INPUT.base} value={cqcForm.create_evidence.quality_statement} onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, quality_statement: e.target.value } }))} /></Field>
+                          <Field id={controlId('cqc-statement')} label="Statement">
+                            <select
+                              id={controlId('cqc-statement')}
+                              className={INPUT.select}
+                              value={cqcForm.create_evidence.quality_statement}
+                              onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, quality_statement: e.target.value } }))}
+                            >
+                              <option value="">Select statement</option>
+                              {QUALITY_STATEMENTS.map((statement) => (
+                                <option key={statement.id} value={statement.id}>
+                                  {statement.id} - {statement.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
                           <Field id={controlId('cqc-type')} label="Type"><select id={controlId('cqc-type')} className={INPUT.select} value={cqcForm.create_evidence.type} onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, type: e.target.value } }))}><option value="qualitative">Qualitative</option><option value="quantitative">Quantitative</option></select></Field>
                           <Field id={controlId('cqc-title')} label="Title" className="md:col-span-2"><input id={controlId('cqc-title')} className={INPUT.base} value={cqcForm.create_evidence.title} onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, title: e.target.value } }))} /></Field>
-                          <Field id={controlId('cqc-evidence-category')} label="Evidence category"><input id={controlId('cqc-evidence-category')} className={INPUT.base} value={cqcForm.create_evidence.evidence_category} onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, evidence_category: e.target.value } }))} /></Field>
+                          <Field id={controlId('cqc-evidence-category')} label="Evidence category">
+                            <select
+                              id={controlId('cqc-evidence-category')}
+                              className={INPUT.select}
+                              value={cqcForm.create_evidence.evidence_category}
+                              onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, evidence_category: e.target.value } }))}
+                            >
+                              <option value="">No category</option>
+                              {CQC_EVIDENCE_CATEGORY_OPTIONS.map((category) => (
+                                <option key={category.id} value={category.id}>{category.label}</option>
+                              ))}
+                            </select>
+                          </Field>
                           <Field id={controlId('cqc-owner')} label="Owner"><input id={controlId('cqc-owner')} className={INPUT.base} value={cqcForm.create_evidence.evidence_owner} onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, evidence_owner: e.target.value } }))} /></Field>
                         </div>
                       )}

@@ -106,7 +106,8 @@ describe('ScanInbox contextual launch', () => {
     await waitFor(() => expect(screen.getAllByText('incident-note.pdf').length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getByLabelText('Destination')).toHaveValue('cqc'));
     expect(screen.getByLabelText('Statement')).toHaveValue('S4');
-    expect(screen.getByDisplayValue('S4')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /S4 - Involving People to Manage Risks/i, selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: "People's Experience" })).toBeInTheDocument();
   });
 
   it('does not call scan APIs when scan intake is disabled for the home', async () => {

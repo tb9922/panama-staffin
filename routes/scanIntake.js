@@ -14,11 +14,13 @@ import { SCAN_INTAKE_ACCESS_MODULES, SCAN_INTAKE_TARGET_IDS, getScanTarget } fro
 import { SCAN_INTAKE_UPLOAD_POLICY } from '../shared/uploadPolicies.js';
 import { validateDeclaredUploadType, validateDetectedUploadType } from '../lib/uploadValidation.js';
 import { assertFilePassedMalwareScan } from '../lib/malwareScan.js';
+import { nullableDateInput, nullableEnumInput } from '../lib/zodHelpers.js';
 import {
   RECORD_ATTACHMENT_MODULE_IDS,
   RECORD_ATTACHMENT_PERMISSION_BY_MODULE,
   canWriteRecordAttachmentModule,
 } from '../shared/recordAttachmentModules.js';
+import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCategories.js';
 import * as documentIntakeRepo from '../repositories/documentIntakeRepo.js';
 import * as scanIntakeService from '../services/scanIntakeService.js';
 import * as auditService from '../services/auditService.js';
@@ -31,6 +33,8 @@ import {
 const router = Router();
 
 const idSchema = z.coerce.number().int().positive();
+const cqcStatementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/);
+const cqcEvidenceCategorySchema = nullableEnumInput(ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES).optional();
 const listQuerySchema = z.object({
   status: z.string().optional(),
   target: z.enum(SCAN_INTAKE_TARGET_IDS).optional(),
@@ -116,15 +120,15 @@ const confirmBodySchema = z.object({
     evidence_id: z.string().min(1).max(100).optional(),
     description: z.string().max(500).nullable().optional(),
     create_evidence: z.object({
-      quality_statement: z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/),
+      quality_statement: cqcStatementIdSchema,
       type: z.enum(['quantitative', 'qualitative']),
       title: z.string().min(1).max(500),
       description: z.string().max(10000).nullable().optional(),
-      date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-      date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-      evidence_category: z.string().max(50).nullable().optional(),
+      date_from: nullableDateInput.optional(),
+      date_to: nullableDateInput.optional(),
+      evidence_category: cqcEvidenceCategorySchema,
       evidence_owner: z.string().max(200).nullable().optional(),
-      review_due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      review_due: nullableDateInput.optional(),
     }).optional(),
   }).optional(),
   handover: z.object({
@@ -144,6 +148,11 @@ function safePath(segment) {
 
 function isScanEnabled(req) {
   return Boolean(req.home?.config?.scan_intake_enabled);
+}
+
+function hasInvalidCqcEvidenceDateOrder(cqcBody) {
+  const evidence = cqcBody?.create_evidence;
+  return Boolean(evidence?.date_from && evidence?.date_to && evidence.date_to < evidence.date_from);
 }
 
 function getConfiguredTargets(req) {
@@ -425,6 +434,9 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
     }
     if (parsed.data.target === 'cqc' && !parsed.data.cqc) {
       return res.status(400).json({ error: 'CQC confirm data is required' });
+    }
+    if (parsed.data.target === 'cqc' && hasInvalidCqcEvidenceDateOrder(parsed.data.cqc)) {
+      return res.status(400).json({ error: 'Evidence To cannot be before Evidence From' });
     }
     if (parsed.data.target === 'handover' && !parsed.data.handover) {
       return res.status(400).json({ error: 'Handover confirm data is required' });
