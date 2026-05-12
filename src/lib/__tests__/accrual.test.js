@@ -127,6 +127,17 @@ describe('sumALHoursInLeaveYear', () => {
     };
     expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourAdjustments)).toBe(11);
   });
+
+  it('ignores malformed stored AL hour values instead of poisoning totals', () => {
+    const overrides = {
+      '2025-05-01': { S1: { shift: 'AL', al_hours: 'not-a-number' } },
+      '2025-05-02': { S1: { shift: 'AL', al_hours: 8 } },
+    };
+    const hourAdjustments = {
+      '2025-05-03': { S1: { kind: 'annual_leave', hours: 'bad' } },
+    };
+    expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourAdjustments)).toBe(8);
+  });
 });
 
 // ── calculateAccrual (hours-based) ──────────────────────────────────────────

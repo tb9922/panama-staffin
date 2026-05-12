@@ -151,15 +151,20 @@ export function getCqcNotificationDeadlineKind(incident) {
 export function getCqcNotificationDeadline(incident, asOfDate = new Date()) {
   if (!incident.cqc_notifiable || !incident.date) return { deadline: null, hoursAllowed: null, isOverdue: false };
 
-  // "without_delay" (Reg 18) = same day for deaths, within hours for others.
-  // We use 4h as the measurable window for "without delay".
+  // "without_delay" (Reg 18) = as soon as reasonably practicable. Panama uses a
+  // 24h default unless a record/type carries an explicit operational window.
   // Legacy "immediate" and "72h" are kept for backward compatibility with older records.
   const dl = getCqcNotificationDeadlineKind(incident);
-  const hoursAllowed = (dl === 'without_delay' || dl === 'immediate')
-    ? 4
+  const configuredHours = Number(incident.cqc_notification_hours_allowed);
+  const hoursAllowed = Number.isFinite(configuredHours) && configuredHours > 0
+    ? configuredHours
+    : dl === 'without_delay'
+      ? 24
+      : dl === 'immediate'
+        ? 4
     : dl === '72h'
       ? 72
-      : 4;
+      : 24;
   const incidentDate = parseUtcDateTime(incident.date, incident.time);
   if (!incidentDate) return { deadline: null, hoursAllowed: null, isOverdue: false };
 

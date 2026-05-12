@@ -1,3 +1,5 @@
+import { apiFetch, authHeaders } from './api.js';
+
 export const BANK_HOLIDAY_REGIONS = [
   { value: 'england-and-wales', label: 'England & Wales' },
   { value: 'scotland', label: 'Scotland' },
@@ -149,9 +151,9 @@ export function getFallbackBankHolidays(yearFrom, yearTo, region = 'england-and-
 }
 
 export async function fetchGovUKBankHolidays(region = 'england-and-wales') {
-  const res = await fetch(`/api/bank-holidays?region=${encodeURIComponent(region)}`);
-  if (!res.ok) throw new Error('Failed to fetch from GOV.UK');
-  return res.json();
+  return apiFetch(`/api/bank-holidays?region=${encodeURIComponent(region)}`, {
+    headers: authHeaders(),
+  });
 }
 
 export function mergeBankHolidays(existing, newHolidays) {

@@ -10,27 +10,27 @@ RUN npm run build
 FROM node:22.22.2-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+RUN addgroup -S app && adduser -S app -G app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev \
   && npm cache clean --force \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server.js ./
-COPY --from=builder /app/config.js ./
-COPY --from=builder /app/db.js ./
-COPY --from=builder /app/logger.js ./
-COPY --from=builder /app/errors.js ./
-COPY --from=builder /app/metrics.js ./
-COPY --from=builder /app/requestContext.js ./
-COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/middleware ./middleware
-COPY --from=builder /app/routes ./routes
-COPY --from=builder /app/services ./services
-COPY --from=builder /app/repositories ./repositories
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/shared ./shared
-COPY --from=builder /app/scripts ./scripts
-RUN addgroup -S app && adduser -S app -G app
+COPY --from=builder --chown=app:app /app/dist ./dist
+COPY --from=builder --chown=app:app /app/server.js ./
+COPY --from=builder --chown=app:app /app/config.js ./
+COPY --from=builder --chown=app:app /app/db.js ./
+COPY --from=builder --chown=app:app /app/logger.js ./
+COPY --from=builder --chown=app:app /app/errors.js ./
+COPY --from=builder --chown=app:app /app/metrics.js ./
+COPY --from=builder --chown=app:app /app/requestContext.js ./
+COPY --from=builder --chown=app:app /app/migrations ./migrations
+COPY --from=builder --chown=app:app /app/middleware ./middleware
+COPY --from=builder --chown=app:app /app/routes ./routes
+COPY --from=builder --chown=app:app /app/services ./services
+COPY --from=builder --chown=app:app /app/repositories ./repositories
+COPY --from=builder --chown=app:app /app/lib ./lib
+COPY --from=builder --chown=app:app /app/shared ./shared
+COPY --from=builder --chown=app:app /app/scripts ./scripts
 RUN mkdir -p uploads && chown app:app uploads
 USER app
 EXPOSE 3001

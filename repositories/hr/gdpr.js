@@ -210,6 +210,7 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
     let unlinkFailures = 0;
     for (const file of filesToUnlink) {
       try {
+        await markFilePurge(client, file.queueId, 'processing');
         await unlinkStoredAttachment(file.filePath);
         await markFilePurge(client, file.queueId, 'deleted');
       } catch (err) {

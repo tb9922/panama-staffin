@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { idSchema } from './schemas.js';
 import { splitVersion } from '../../lib/versionedPayload.js';
 import { withTransaction } from '../../db.js';
+import { readRateLimiter, writeRateLimiter } from '../../lib/rateLimiter.js';
 
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
@@ -37,7 +38,7 @@ export function registerCaseRoutes(router, {
   const prefix = auditPrefix || type;
 
   // GET list
-  router.get(path, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+  router.get(path, readRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
     try {
       const f = {};
       for (const [queryParam, filterKey] of Object.entries(filters || {})) {
@@ -51,7 +52,7 @@ export function registerCaseRoutes(router, {
   });
 
   // POST create
-  router.post(path, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+  router.post(path, writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
     try {
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed);
@@ -67,7 +68,7 @@ export function registerCaseRoutes(router, {
 
   // GET by ID
   if (hasGetById) {
-    router.get(`${path}/:id`, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+    router.get(`${path}/:id`, readRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
       try {
         const parsed = idSchema.safeParse(req.params.id);
         if (!parsed.success) return res.status(400).json({ error: 'Invalid case ID' });
@@ -79,7 +80,7 @@ export function registerCaseRoutes(router, {
   }
 
   // PUT update — with optimistic locking + field-diff audit
-  router.put(`${path}/:id`, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+  router.put(`${path}/:id`, writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
     try {
       const idParsed = idSchema.safeParse(req.params.id);
       if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
@@ -111,7 +112,7 @@ export function registerCaseRoutes(router, {
 
   // DELETE soft-delete
   if (table) {
-    router.delete(`${path}/:id`, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+    router.delete(`${path}/:id`, writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
       try {
         const idParsed = idSchema.safeParse(req.params.id);
         if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });

@@ -6,6 +6,13 @@ const { Pool } = pg;
 
 // Return DATE columns as ISO strings ('YYYY-MM-DD'), not JS Date objects.
 pg.types.setTypeParser(1082, (val) => val);
+// Return NUMERIC columns as numbers so payroll/finance code cannot forget to
+// parse money, NI, SSP, or percentage values on new repository paths.
+pg.types.setTypeParser(1700, (val) => Number(val));
+
+const isTestProcess = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+const isClearlyTestDb = /(^|[_-])(test|vitest|ci)($|[_-])/i.test(config.db.name || '');
+const allowAuditLogDelete = isTestProcess && isClearlyTestDb;
 
 /**
  * Convert a DATE value to 'YYYY-MM-DD' string. Works with both Date objects
@@ -26,7 +33,7 @@ export const pool = new Pool({
   max: config.db.poolMax,
   idleTimeoutMillis: config.db.idleTimeoutMs,
   connectionTimeoutMillis: config.db.connectionTimeoutMs,
-  options: `-c timezone=UTC -c statement_timeout=${30_000} -c lock_timeout=${10_000} -c idle_in_transaction_session_timeout=${config.db.idleInTransactionTimeoutMs}${process.env.VITEST === 'true' || process.env.NODE_ENV === 'test' ? ' -c app.audit_log_allow_delete=on' : ''}`,
+  options: `-c timezone=UTC -c statement_timeout=${30_000} -c lock_timeout=${10_000} -c idle_in_transaction_session_timeout=${config.db.idleInTransactionTimeoutMs}${allowAuditLogDelete ? ' -c app.audit_log_allow_delete=on' : ''}`,
   ...(config.db.ssl ? { ssl: config.db.ssl } : {}),
 });
 

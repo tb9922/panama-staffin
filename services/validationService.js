@@ -62,8 +62,11 @@ function validateALEntitlement(data, warnings) {
 function validateNLW(data, warnings) {
   for (const s of data.staff.filter(s => s.active !== false)) {
     if (s.hourly_rate == null) continue;
+    const hourlyRate = Number(s.hourly_rate);
+    if (!Number.isFinite(hourlyRate)) continue;
+    s.hourly_rate = hourlyRate;
     const { rate, label } = getMinimumWageRate(s.date_of_birth, data.config);
-    if (s.hourly_rate < rate) {
+    if (hourlyRate < rate) {
       warnings.push(`${s.name}: rate £${s.hourly_rate.toFixed(2)} is below ${label} £${rate.toFixed(2)}`);
     }
   }

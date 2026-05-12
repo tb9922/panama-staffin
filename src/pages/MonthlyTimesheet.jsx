@@ -73,8 +73,8 @@ export default function MonthlyTimesheet() {
   );
 
   const [selectedStaffId, setSelectedStaffId] = useState(urlStaffId || '');
-  const [year, setYear] = useState(() => new Date().getFullYear());
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  const [year, setYear] = useState(() => Number(todayLocalISO().slice(0, 4)));
+  const [month, setMonth] = useState(() => Number(todayLocalISO().slice(5, 7)));
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -691,7 +691,7 @@ export default function MonthlyTimesheet() {
     );
   }
 
-  const monthName = new Date(year, month - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  const monthName = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   return (
     <div className={PAGE.container}>

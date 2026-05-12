@@ -42,7 +42,7 @@ module.exports = {
       // pm2 set pm2-logrotate:compress true
 
       // Graceful shutdown
-      kill_timeout: 5000,        // Matches server.js 5s force-exit timeout.
+      kill_timeout: 8000,        // Gives server.js 5s force-exit timeout room to flush logs.
       listen_timeout: 10000,
       shutdown_with_message: true,
 
@@ -52,7 +52,7 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         HOST: '127.0.0.1',
-        ENABLE_WEBHOOK_RETRY_WORKER: 'true',
+        ENABLE_WEBHOOK_RETRY_WORKER: 'false',
       },
     },
     {
@@ -70,7 +70,7 @@ module.exports = {
       out_file: './logs/panama-webhooks-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
-      kill_timeout: 5000,
+      kill_timeout: 8000,
       env: {
         NODE_ENV: 'development',
         ENABLE_WEBHOOK_RETRY_WORKER: 'true',

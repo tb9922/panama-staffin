@@ -100,6 +100,24 @@ const PORTFOLIO_HOMES = [
   },
 ];
 
+const RELEASE_MATRIX_HOMES = [
+  {
+    slug: 'e2e-empty-home',
+    name: 'E2E Empty Home',
+    config: { ...CONFIG, home_name: 'E2E Empty Home', registered_beds: 24 },
+  },
+  {
+    slug: 'e2e-normal-home',
+    name: 'E2E Normal Home',
+    config: { ...CONFIG, home_name: 'E2E Normal Home', registered_beds: 36 },
+  },
+  {
+    slug: 'e2e-messy-home',
+    name: 'E2E Messy Home',
+    config: { ...CONFIG, home_name: 'E2E Messy Home', registered_beds: 48 },
+  },
+];
+
 async function upsertHome(client, slug, name, config) {
   const { rows: [home] } = await client.query(
     `INSERT INTO homes (slug, name, config)
@@ -111,6 +129,98 @@ async function upsertHome(client, slug, name, config) {
     [slug, name, JSON.stringify(config)],
   );
   return home.id;
+}
+
+async function assignSeedHomeRoles(client, userRows, homeIds) {
+  for (const homeId of homeIds) {
+    await client.query(
+      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+       SELECT username, $1, role_id, 'seed-e2e'
+       FROM jsonb_to_recordset($2::jsonb) AS roles(username text, role_id text)
+       ON CONFLICT (username, home_id) DO UPDATE
+         SET role_id = EXCLUDED.role_id,
+             staff_id = NULL,
+             granted_by = EXCLUDED.granted_by`,
+      [
+        homeId,
+        JSON.stringify(userRows.map(user => ({ username: user.username, role_id: user.homeRole }))),
+      ],
+    );
+  }
+}
+
+async function seedReleaseMatrixHomes(client, homeIdsBySlug) {
+  const emptyId = homeIdsBySlug.get('e2e-empty-home');
+  const normalId = homeIdsBySlug.get('e2e-normal-home');
+  const messyId = homeIdsBySlug.get('e2e-messy-home');
+  const matrixHomeIds = [emptyId, normalId, messyId].filter(Boolean);
+
+  await client.query(`DELETE FROM staff WHERE home_id = $1 AND name LIKE 'E2E Matrix %'`, [emptyId]);
+  await client.query(`UPDATE cqc_evidence SET deleted_at = NOW() WHERE home_id = ANY($1::int[]) AND title LIKE 'E2E Matrix %' AND deleted_at IS NULL`, [matrixHomeIds]);
+  await client.query(`DELETE FROM action_items WHERE home_id = ANY($1::int[]) AND source_id = 'e2e-release-matrix'`, [matrixHomeIds]);
+  await client.query(`DELETE FROM incidents WHERE home_id = ANY($1::int[]) AND id LIKE 'e2e-matrix-%'`, [matrixHomeIds]);
+  await client.query(`DELETE FROM complaints WHERE home_id = ANY($1::int[]) AND id LIKE 'e2e-matrix-%'`, [matrixHomeIds]);
+
+  await client.query(
+    `INSERT INTO staff (
+       id, home_id, name, role, team, pref, skill, hourly_rate,
+       active, start_date, contract_hours, willing_extras,
+       willing_other_homes, max_weekly_hours_topup, max_travel_radius_km,
+       home_postcode, internal_bank_status
+     )
+     VALUES
+       ('S001', $1, 'E2E Normal Senior', 'Senior Carer', 'Day A', 'E', 3, 14.50, true, '2025-01-01', 37.5, true, true, 8, 25, 'AB1 1AA', 'available'),
+       ('S002', $1, 'E2E Normal Carer', 'Carer', 'Day B', 'L', 2, 12.50, true, '2025-01-01', 37.5, true, false, 6, 10, 'AB1 1AA', 'available'),
+       ('S001', $2, 'E2E Messy Senior', 'Senior Carer', 'Day A', 'E', 3, 14.50, true, '2025-01-01', 37.5, true, true, 8, 25, 'AB1 1AA', 'available')
+     ON CONFLICT (home_id, id) DO UPDATE
+       SET name = EXCLUDED.name,
+           role = EXCLUDED.role,
+           team = EXCLUDED.team,
+           pref = EXCLUDED.pref,
+           skill = EXCLUDED.skill,
+           hourly_rate = EXCLUDED.hourly_rate,
+           active = EXCLUDED.active,
+           start_date = EXCLUDED.start_date,
+           contract_hours = EXCLUDED.contract_hours,
+           willing_extras = EXCLUDED.willing_extras,
+           willing_other_homes = EXCLUDED.willing_other_homes,
+           max_weekly_hours_topup = EXCLUDED.max_weekly_hours_topup,
+           max_travel_radius_km = EXCLUDED.max_travel_radius_km,
+           home_postcode = EXCLUDED.home_postcode,
+           internal_bank_status = EXCLUDED.internal_bank_status`,
+    [normalId, messyId],
+  );
+
+  await client.query(
+    `INSERT INTO action_items (
+       home_id, source_type, source_id, source_action_key, title,
+       category, priority, due_date, status, escalation_level
+     )
+     VALUES
+       ($1, 'standalone', 'e2e-release-matrix', 'messy-action', 'E2E Matrix overdue action', 'governance', 'high', CURRENT_DATE - INTERVAL '4 days', 'open', 3)
+     ON CONFLICT (home_id, source_type, source_id, source_action_key)
+       WHERE deleted_at IS NULL AND source_id IS NOT NULL AND source_action_key IS NOT NULL
+     DO UPDATE SET
+       title = EXCLUDED.title,
+       category = EXCLUDED.category,
+       priority = EXCLUDED.priority,
+       due_date = EXCLUDED.due_date,
+       status = EXCLUDED.status,
+       escalation_level = EXCLUDED.escalation_level,
+       updated_at = NOW()`,
+    [messyId],
+  );
+
+  await client.query(
+    `INSERT INTO incidents (
+       id, home_id, date, time, location, type, severity, person_affected_name,
+       investigation_status, investigation_review_date, root_cause
+     )
+     VALUES
+       ('e2e-matrix-fall-1', $1, CURRENT_DATE - INTERVAL '2 days', '08:00', 'Lounge', 'Fall', 'moderate', 'Resident Matrix', 'open', CURRENT_DATE - INTERVAL '1 day', 'Environment')
+     ON CONFLICT (home_id, id) DO NOTHING`,
+    [messyId],
+  );
 }
 
 async function resetPortfolioSeedData(client, primaryHomeId, portfolioHomeIds) {
@@ -327,9 +437,11 @@ async function seed() {
     const homeId = await upsertHome(client, 'e2e-test-home', 'E2E Test Home', CONFIG);
     const portfolioHomeIds = [];
     const homeIdsBySlug = new Map([['e2e-test-home', homeId]]);
-    for (const home of PORTFOLIO_HOMES) {
+    for (const home of [...PORTFOLIO_HOMES, ...RELEASE_MATRIX_HOMES]) {
       const id = await upsertHome(client, home.slug, home.name, home.config);
-      portfolioHomeIds.push(id);
+      if (PORTFOLIO_HOMES.some(portfolioHome => portfolioHome.slug === home.slug)) {
+        portfolioHomeIds.push(id);
+      }
       homeIdsBySlug.set(home.slug, id);
     }
     await resetPortfolioSeedData(client, homeId, portfolioHomeIds);
@@ -417,21 +529,10 @@ async function seed() {
       [payrollRunId]
     );
 
-    await client.query(
-      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
-       SELECT username, $1, role_id, 'seed-e2e'
-       FROM jsonb_to_recordset($2::jsonb) AS roles(username text, role_id text)
-       ON CONFLICT (username, home_id) DO UPDATE
-         SET role_id = EXCLUDED.role_id,
-             staff_id = NULL,
-             granted_by = EXCLUDED.granted_by`,
-      [
-        homeId,
-        JSON.stringify(userRows.map(user => ({ username: user.username, role_id: user.homeRole }))),
-      ]
-    );
+    await assignSeedHomeRoles(client, userRows, [...homeIdsBySlug.values()]);
 
     await seedPortfolioSignals(client, homeIdsBySlug);
+    await seedReleaseMatrixHomes(client, homeIdsBySlug);
 
     await client.query(
       `INSERT INTO finance_residents (home_id, resident_name, room_number, care_type, weekly_fee, funding_type, status, created_by)

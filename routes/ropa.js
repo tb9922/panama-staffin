@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
+import { withTransaction } from '../db.js';
 import * as ropaRepo from '../repositories/ropaRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -71,8 +72,11 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = bodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const result = await ropaRepo.create(req.home.id, { ...parsed.data, created_by: req.user.username });
-    await auditService.log('ropa_create', req.home.slug, req.user.username, { id: result.id, purpose: result.purpose });
+    const result = await withTransaction(async (client) => {
+      const created = await ropaRepo.create(req.home.id, { ...parsed.data, created_by: req.user.username }, client);
+      await auditService.log('ropa_create', req.home.slug, req.user.username, { id: created.id, purpose: created.purpose }, client);
+      return created;
+    });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -84,14 +88,21 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!idP.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const existing = await ropaRepo.findById(idP.data, req.home.id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-    const statusError = validateRopaStatusChange(existing, parsed.data);
-    if (statusError) return res.status(400).json({ error: statusError });
     const { version, payload } = splitVersion(parsed.data);
-    const result = await ropaRepo.update(idP.data, req.home.id, payload, null, version);
-    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    await auditService.log('ropa_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) });
+    const outcome = await withTransaction(async (client) => {
+      const existing = await ropaRepo.findById(idP.data, req.home.id, client);
+      if (!existing) return { status: 'not_found' };
+      const statusError = validateRopaStatusChange(existing, parsed.data);
+      if (statusError) return { status: 'invalid', error: statusError };
+      const result = await ropaRepo.update(idP.data, req.home.id, payload, client, version);
+      if (result === null) return { status: 'conflict' };
+      await auditService.log('ropa_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) }, client);
+      return { status: 'ok', result };
+    });
+    if (outcome.status === 'not_found') return res.status(404).json({ error: 'Not found' });
+    if (outcome.status === 'invalid') return res.status(400).json({ error: outcome.error });
+    if (outcome.status === 'conflict') return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    const { result } = outcome;
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -101,9 +112,13 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid ID' });
-    const result = await ropaRepo.softDelete(idP.data, req.home.id);
+    const result = await withTransaction(async (client) => {
+      const deleted = await ropaRepo.softDelete(idP.data, req.home.id, client);
+      if (!deleted) return null;
+      await auditService.log('ropa_delete', req.home.slug, req.user.username, { id: idP.data }, client);
+      return deleted;
+    });
     if (!result) return res.status(404).json({ error: 'Not found' });
-    await auditService.log('ropa_delete', req.home.slug, req.user.username, { id: idP.data });
     res.json({ deleted: true });
   } catch (err) { next(err); }
 });

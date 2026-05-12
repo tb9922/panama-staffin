@@ -26,6 +26,7 @@ import {
   ACTION_ITEM_SOURCE_TYPES,
   ACTION_ITEM_STATUSES,
 } from '../../lib/actionItems.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const EMPTY_FORM = {
   source_type: 'standalone',
@@ -281,8 +282,9 @@ export default function ManagerActions() {
 
   const stats = useMemo(() => {
     const source = allItems;
+    const today = todayLocalISO();
     const open = source.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status)).length;
-    const overdue = source.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status) && item.due_date && item.due_date < new Date().toISOString().slice(0, 10)).length;
+    const overdue = source.filter(item => !['completed', 'verified', 'cancelled'].includes(item.status) && item.due_date && item.due_date < today).length;
     const escalated = source.filter(item => (item.escalation_level || 0) >= 3).length;
     const completed = source.filter(item => ['completed', 'verified'].includes(item.status)).length;
     return { open, overdue, escalated, completed };

@@ -60,7 +60,7 @@ export default defineConfig({
       command: 'node server.js',
       port: apiPort,
       reuseExistingServer: false,
-      timeout: 30_000,
+      timeout: 90_000,
       env: {
         ...process.env,
         NODE_ENV: 'test',
@@ -75,7 +75,7 @@ export default defineConfig({
       command: `npx vite --host 127.0.0.1 --port ${uiPort}`,
       port: uiPort,
       reuseExistingServer: false,
-      timeout: 30_000,
+      timeout: 90_000,
       env: { ...process.env, VITE_DEV_API_TARGET: apiBaseURL },
     },
   ],

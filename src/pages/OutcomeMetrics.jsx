@@ -15,7 +15,7 @@ import {
   updateOutcomeMetric,
   upsertOutcomeMetric,
 } from '../lib/api.js';
-import { todayLocalISO } from '../lib/localDates.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const MANUAL_METRICS = [
   'prn_antipsychotic_pct',
@@ -41,10 +41,8 @@ function titleCase(value) {
 
 function defaultPeriod() {
   const end = todayLocalISO();
-  const startDate = new Date(`${end}T00:00:00`);
-  startDate.setDate(startDate.getDate() - 27);
   return {
-    period_start: startDate.toISOString().slice(0, 10),
+    period_start: addDaysLocalISO(end, -27),
     period_end: end,
   };
 }

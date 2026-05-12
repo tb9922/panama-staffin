@@ -1,34 +1,6 @@
+import { apiFetch, authHeaders } from './api.js';
+
 const API_BASE = '/api';
-
-function getCsrfToken() {
-  const match = document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/);
-  return match ? match[1] : '';
-}
-
-function authHeaders(extra = {}) {
-  return {
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',
-    'X-CSRF-Token': getCsrfToken(),
-    ...extra,
-  };
-}
-
-async function parseResponse(res) {
-  if (res.status === 204) return null;
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) return res.json();
-  return res.text();
-}
-
-async function apiFetch(url, options = {}) {
-  const res = await fetch(url, { credentials: 'same-origin', ...options });
-  if (!res.ok) {
-    const body = await parseResponse(res).catch(() => null);
-    throw new Error(typeof body === 'string' && body.trim() ? body : body?.error || `Request failed (${res.status})`);
-  }
-  return parseResponse(res);
-}
 
 function queryString(filters = {}) {
   const params = new URLSearchParams();

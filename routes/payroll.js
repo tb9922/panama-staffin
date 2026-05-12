@@ -714,6 +714,7 @@ router.post('/runs', writeRateLimiter, requireAuth, requireHomeAccess, requireMo
     // Wrap check+create in a transaction to prevent TOCTOU: without this, two
     // concurrent requests can both pass the overlap check and create duplicate runs.
     const run = await withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(20260406, $1)', [req.home.id]);
       const overlap = await payrollRunRepo.hasOverlap(req.home.id, parsed.data.period_start, parsed.data.period_end, client);
       if (overlap) return null;
       return payrollRunRepo.create(req.home.id, parsed.data, client);

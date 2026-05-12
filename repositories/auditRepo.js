@@ -13,6 +13,27 @@ export async function log(action, homeSlug, username, details, client) {
   );
 }
 
+export async function bulkLog(entries, client) {
+  if (!entries?.length) return 0;
+  const conn = client || pool;
+  const values = [];
+  const placeholders = entries.map((entry, idx) => {
+    const base = idx * 4;
+    values.push(
+      entry.action,
+      entry.homeSlug || null,
+      entry.username || null,
+      entry.details != null ? JSON.stringify(entry.details) : null,
+    );
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+  });
+  const { rowCount } = await conn.query(
+    `INSERT INTO audit_log (action, home_slug, user_name, details) VALUES ${placeholders.join(', ')}`,
+    values,
+  );
+  return rowCount;
+}
+
 export async function getRecent(limit = 100) {
   const { rows } = await pool.query(
     `SELECT id, ts, action, home_slug, user_name, details

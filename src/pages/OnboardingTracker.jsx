@@ -37,6 +37,12 @@ import {
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
+function dateOnlyMs(value) {
+  const [year, month, day] = String(value || '').split('-').map(Number);
+  if (!year || !month || !day) return NaN;
+  return Date.UTC(year, month - 1, day);
+}
+
 export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite, homeRole, isPlatformAdmin } = useData();
@@ -676,8 +682,8 @@ export default function OnboardingTracker() {
           .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
         const detectedGaps = [];
         for (let i = 0; i < sortedEntries.length - 1; i++) {
-          const endMs = new Date(sortedEntries[i].end_date).getTime();
-          const nextMs = new Date(sortedEntries[i + 1].start_date).getTime();
+          const endMs = dateOnlyMs(sortedEntries[i].end_date);
+          const nextMs = dateOnlyMs(sortedEntries[i + 1].start_date);
           const diffDays = Math.ceil((nextMs - endMs) / 86400000);
           if (diffDays > 28) {
             detectedGaps.push({ from: sortedEntries[i].end_date, to: sortedEntries[i + 1].start_date, days: diffDays });

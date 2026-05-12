@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { BTN } from '../lib/design.js';
 
 const REFRESH_ERROR_PATTERNS = [
   'ChunkLoadError',
@@ -48,13 +49,13 @@ export default class RouteErrorBoundary extends Component {
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className={BTN.primary}
             >
               Try again
             </button>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className={BTN.secondary}
             >
               Reload app
             </button>

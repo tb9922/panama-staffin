@@ -11,6 +11,7 @@ import { useData } from '../contexts/DataContext.jsx';
 import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGE = {
   eligible_enrolled: BADGE.green,
@@ -282,7 +283,7 @@ export default function PensionManager() {
             {enrolments.map((enrolment) => {
               const staff = staffMap[enrolment.staff_id];
               const reviewDate = enrolment.status === 'postponed' ? enrolment.postponed_until : enrolment.reassessment_date;
-              const reviewWarning = reviewDate && new Date(reviewDate) <= new Date(Date.now() + 30 * 86400 * 1000);
+              const reviewWarning = reviewDate && reviewDate <= addDaysLocalISO(todayLocalISO(), 30);
               const eeRate = enrolment.contribution_override_employee != null
                 ? fmtPct(enrolment.contribution_override_employee)
                 : config ? fmtPct(config.employee_rate) : '-';

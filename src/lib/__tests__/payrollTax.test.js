@@ -301,6 +301,11 @@ describe('calculatePAYE', () => {
     expect(r.tax).toBeCloseTo(400, 1); // 20% of 2000
   });
 
+  it('SD1 Scottish tax code uses HMRC table D 42% flat rate', () => {
+    const r = calculatePAYE(1000, parseTaxCode('SD1'), 1, 12, zeroYTD, scotlandBands);
+    expect(r.tax).toBeCloseTo(420, 1);
+  });
+
   it('Scotland bands applied correctly for S1257L', () => {
     const code = parseTaxCode('S1257L');
     // Use Scotland bands — starter rate is 19%

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run integration tests against a disposable Postgres container.
-# Usage: bash scripts/test-integration.sh
+# Usage: bash scripts/test-integration.sh [vitest args...]
 set -euo pipefail
 
 COMPOSE_FILE="docker-compose.test.yml"
@@ -30,7 +30,7 @@ export ALLOWED_ORIGIN=http://localhost:5173
 echo "Running migrations..."
 node scripts/migrate.js
 
-echo "Running all tests (unit + integration)..."
-npx vitest run
+echo "Running tests..."
+npx vitest run "$@"
 
 echo "Done."

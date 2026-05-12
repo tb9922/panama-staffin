@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { zodError } from '../../errors.js';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
+import { readRateLimiter, writeRateLimiter } from '../../lib/rateLimiter.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import * as auditRepo from '../../repositories/auditRepo.js';
@@ -16,7 +17,7 @@ const purgeBodySchema = z.object({
 
 const dateParamSchema = z.string().refine(isValidIsoDateOnly, 'Invalid calendar date');
 
-router.post('/admin/purge-expired', requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/admin/purge-expired', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
   try {
     const parsed = purgeBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -38,7 +39,7 @@ router.post('/admin/purge-expired', requireAuth, requireHomeAccess, requireModul
   } catch (err) { next(err); }
 });
 
-router.get('/admin/audit-export', requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
+router.get('/admin/audit-export', readRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
   try {
     if (req.query.from !== undefined && !dateParamSchema.safeParse(req.query.from).success) {
       return res.status(400).json({ error: 'Invalid from date' });

@@ -6,7 +6,8 @@ export const DEFAULT_NMW_RATE_18_20 = 10.85;
 export const DEFAULT_NMW_RATE_UNDER_18 = 8.00;
 
 export function getConfiguredNlwRate(config) {
-  return config?.nlw_rate || DEFAULT_NLW_RATE;
+  const configured = Number(config?.nlw_rate);
+  return Math.max(Number.isFinite(configured) && configured > 0 ? configured : 0, DEFAULT_NLW_RATE);
 }
 
 /**
@@ -33,6 +34,10 @@ export function getMinimumWageRate(staffDob, config, asOfDate) {
   if (monthDiff < 0 || (monthDiff === 0 && ref.getUTCDate() < dob.getUTCDate())) age--;
 
   if (age >= 21) return { rate: nlwRate, label: 'NLW' };
-  if (age >= 18) return { rate: config?.nmw_rate_18_20 || DEFAULT_NMW_RATE_18_20, label: 'NMW (18-20)' };
-  return { rate: config?.nmw_rate_under_18 || DEFAULT_NMW_RATE_UNDER_18, label: 'NMW (U18)' };
+  if (age >= 18) {
+    const configured = Number(config?.nmw_rate_18_20);
+    return { rate: Math.max(Number.isFinite(configured) && configured > 0 ? configured : 0, DEFAULT_NMW_RATE_18_20), label: 'NMW (18-20)' };
+  }
+  const configured = Number(config?.nmw_rate_under_18);
+  return { rate: Math.max(Number.isFinite(configured) && configured > 0 ? configured : 0, DEFAULT_NMW_RATE_UNDER_18), label: 'NMW (U18)' };
 }

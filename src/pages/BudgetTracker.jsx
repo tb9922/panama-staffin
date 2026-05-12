@@ -11,14 +11,14 @@ import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
-import { currentLocalYearMonth, endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
+import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
 
 function getMonthDates(year, month) {
   const dates = [];
-  const d = new Date(year, month, 1);
-  while (d.getMonth() === month) {
+  const d = new Date(Date.UTC(year, month, 1));
+  while (d.getUTCMonth() === month) {
     dates.push(new Date(d));
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
 }
@@ -91,14 +91,18 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   const months = useMemo(() => {
     const result = [];
     const now = new Date();
+    const baseYear = now.getUTCFullYear();
+    const baseMonth = now.getUTCMonth();
     for (let i = -6; i <= 5; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const d = new Date(Date.UTC(baseYear, baseMonth + i, 1));
+      const year = d.getUTCFullYear();
+      const month = d.getUTCMonth();
       result.push({
-        year: d.getFullYear(),
-        month: d.getMonth(),
-        key: currentLocalYearMonth(d),
-        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-        fullLabel: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+        year,
+        month,
+        key: `${year}-${String(month + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
+        fullLabel: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
         isCurrent: i === 0,
         isFuture: i > 0,
       });
@@ -148,7 +152,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   // YTD calculations (Jan to current month of current year)
   const ytd = useMemo(() => {
     const now = new Date();
-    const yearMonths = monthData.filter(m => m.year === now.getFullYear() && m.month <= now.getMonth());
+    const yearMonths = monthData.filter(m => m.year === now.getUTCFullYear() && m.month <= now.getUTCMonth());
     const actualYTD = yearMonths.reduce((s, m) => s + m.actual, 0);
     const budgetYTD = yearMonths.reduce((s, m) => s + m.budget, 0);
     const agencyYTD = yearMonths.reduce((s, m) => s + m.agency, 0);
@@ -161,7 +165,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     const recent = monthData.filter(m => !m.isFuture && m.actual > 0).slice(-3);
     if (recent.length === 0) return null;
     const avgMonthly = recent.reduce((s, m) => s + m.actual, 0) / recent.length;
-    const remainingMonths = 12 - (now.getMonth() + 1);
+    const remainingMonths = 12 - (now.getUTCMonth() + 1);
     const projected = ytd.actual + (avgMonthly * remainingMonths);
     const annualBudget = defaultBudget * 12;
     return { avgMonthly, projected, annualBudget, remaining: remainingMonths };

@@ -283,28 +283,40 @@ export const QUALITY_STATEMENTS = [
 // limiting-judgement aggregation rules (see applyLimitingJudgement below).
 export const METRIC_DEFINITIONS = [
   // -- Safe (Reg 12, 13, 15, 18, 19) ------------------------------------------
-  { id: 'staffingFillRate',        label: 'Staffing Fill Rate %',         weight: 0.12, question: 'safe',       available: true },
-  { id: 'agencyDependency',        label: 'Agency Dependency %',          weight: 0.08, question: 'safe',       available: true },
-  { id: 'incidentResponseTime',    label: 'Incident Response Time',       weight: 0.07, question: 'safe',       available: true },
-  { id: 'cqcNotifications',        label: 'CQC Notifications on Time',    weight: 0.07, question: 'safe',       available: true },
-  { id: 'fireDrillCompliance',     label: 'Fire Drill Compliance',        weight: 0.04, question: 'safe',       available: true },
-  { id: 'maintenanceCompliancePct',label: 'Maintenance Compliance %',     weight: 0.05, question: 'safe',       available: true },
-  { id: 'ipcAuditCompliance',      label: 'IPC Audit Compliance %',       weight: 0.05, question: 'safe',       available: true },
+  { id: 'staffingFillRate',        label: 'Staffing Fill Rate %',         weight: 0.025, question: 'safe',       available: true },
+  { id: 'agencyDependency',        label: 'Agency Dependency %',          weight: 0.015, question: 'safe',       available: true },
+  { id: 'incidentResponseTime',    label: 'Incident Response Time',       weight: 0.02,  question: 'safe',       available: true },
+  { id: 'cqcNotifications',        label: 'CQC Notifications on Time',    weight: 0.02,  question: 'safe',       available: true },
+  { id: 'fireDrillCompliance',     label: 'Fire Drill Compliance',        weight: 0.015, question: 'safe',       available: true },
+  { id: 'maintenanceCompliancePct',label: 'Maintenance Compliance %',     weight: 0.015, question: 'safe',       available: true },
+  { id: 'ipcAuditCompliance',      label: 'IPC Audit Compliance %',       weight: 0.015, question: 'safe',       available: true },
+  { id: 'safeguardingTraining',    label: 'Safeguarding Training %',      weight: 0.02,  question: 'safe',       available: true },
+  { id: 'dbsCompliance',           label: 'DBS Check Completion %',       weight: 0.02,  question: 'safe',       available: true },
+  { id: 'incidentSafeguarding',    label: 'Safeguarding Referral Rate',   weight: 0.015, question: 'safe',       available: true },
+  { id: 'incidentTrends',          label: 'Incident Trend Control',       weight: 0.01,  question: 'safe',       available: true },
+  { id: 'actionCompletionRate',    label: 'Action Completion Rate',       weight: 0.01,  question: 'safe',       available: true },
   // -- Effective (Reg 9, 17, 18) -----------------------------------------------
-  { id: 'trainingCompliance',      label: 'Training Compliance %',        weight: 0.12, question: 'effective',  available: true },
-  { id: 'supervisionCompletion',   label: 'Supervision Completion %',     weight: 0.07, question: 'effective',  available: true },
-  { id: 'careCertCompletion',      label: 'Care Certificate Completion',  weight: 0.05, question: 'effective',  available: true },
-  { id: 'appraisalCompletion',     label: 'Appraisal Completion %',       weight: 0.04, question: 'effective',  available: true },
+  { id: 'trainingCompliance',      label: 'Training Compliance %',        weight: 0.045, question: 'effective',  available: true },
+  { id: 'supervisionCompletion',   label: 'Supervision Completion %',     weight: 0.04,  question: 'effective',  available: true },
+  { id: 'careCertCompletion',      label: 'Care Certificate Completion',  weight: 0.03,  question: 'effective',  available: true },
+  { id: 'appraisalCompletion',     label: 'Appraisal Completion %',       weight: 0.03,  question: 'effective',  available: true },
+  { id: 'dolsCompliancePct',       label: 'DoLS Compliance %',            weight: 0.025, question: 'effective',  available: true },
+  { id: 'mcaTrainingCompliance',   label: 'MCA/DoLS Training %',          weight: 0.03,  question: 'effective',  available: true },
   // -- Caring (Reg 9, 10, 11, 13) ---------------------------------------------
-  { id: 'dolsCompliancePct',       label: 'DoLS Compliance %',            weight: 0.03, question: 'caring',     available: true },
-  { id: 'satisfactionScore',       label: 'Satisfaction Score',           weight: 0.03, question: 'caring',     available: true },
+  { id: 'equalityTrainingCompliance',       label: 'Equality Training %',        weight: 0.08, question: 'caring', available: true },
+  { id: 'dataProtectionTrainingCompliance', label: 'Data Protection Training %', weight: 0.06, question: 'caring', available: true },
+  { id: 'satisfactionScore',                label: 'Satisfaction Score',         weight: 0.06, question: 'caring', available: true },
   // -- Responsive (Reg 9, 16) -------------------------------------------------
-  { id: 'complaintResolutionRate', label: 'Complaint Resolution Rate',    weight: 0.05, question: 'responsive', available: true },
+  { id: 'complaintResolutionRate', label: 'Complaint Resolution Rate',    weight: 0.20, question: 'responsive', available: true },
   // -- Well-Led (Reg 17) ------------------------------------------------------
-  { id: 'staffTurnover',           label: 'Staff Turnover Rate %',        weight: 0.05, question: 'well-led',   available: true },
-  { id: 'riskManagementScore',     label: 'Risk Management Score',        weight: 0.03, question: 'well-led',   available: true },
-  { id: 'policyCompliancePct',     label: 'Policy Compliance %',          weight: 0.03, question: 'well-led',   available: true },
-  { id: 'speakUpCulture',          label: 'Speak Up Culture',             weight: 0.02, question: 'well-led',   available: true },
+  { id: 'staffTurnover',           label: 'Staff Turnover Rate %',        weight: 0.04,  question: 'well-led',   available: true },
+  { id: 'riskManagementScore',     label: 'Risk Management Score',        weight: 0.04,  question: 'well-led',   available: true },
+  { id: 'policyCompliancePct',     label: 'Policy Compliance %',          weight: 0.04,  question: 'well-led',   available: true },
+  { id: 'speakUpCulture',          label: 'Speak Up Culture',             weight: 0.04,  question: 'well-led',   available: true },
+  { id: 'onboardingCompletion',    label: 'Onboarding Completion %',      weight: 0.02,  question: 'well-led',   available: true },
+  { id: 'sickRate',                label: 'Sickness Rate %',              weight: 0.01,  question: 'well-led',   available: true },
+  { id: 'fatigueBreaches',         label: 'Fatigue Risk %',               weight: 0.005, question: 'well-led',   available: true },
+  { id: 'trainingTrend',           label: 'Training Trend',               weight: 0.005, question: 'well-led',   available: true },
 ];
 
 // CQC key questions for grouping
@@ -321,11 +333,12 @@ export const SCORE_BANDS = [
 ];
 
 // -- Limiting Judgement ------------------------------------------------------
-// CQC overall rating aggregation rules (confirmed from CQC guidance):
-// - Outstanding:          2+ Outstanding + remaining all Good
-// - Good:                 No Inadequate AND max 1 Requires Improvement
-// - Requires Improvement: 2+ Requires Improvement
-// - Inadequate:           2+ Inadequate
+// CQC overall rating aggregation rules:
+// - 2+ Inadequate key questions => Inadequate
+// - 1 Inadequate key question => Requires Improvement
+// - 2+ Requires Improvement key questions => Requires Improvement
+// - 1 Requires Improvement with the rest Good/Outstanding can still be Good
+// - Outstanding needs 2+ Outstanding and the rest Good.
 
 export function applyLimitingJudgement(questionBands) {
   const counts = { Outstanding: 0, Good: 0, 'Requires Improvement': 0, Inadequate: 0 };
@@ -336,8 +349,10 @@ export function applyLimitingJudgement(questionBands) {
 
   // Inadequate: 2+ key questions rated Inadequate
   if (counts.Inadequate >= 2) return SCORE_BANDS[3]; // Inadequate
+  // Requires Improvement: 1 Inadequate, even if every other key question is Good/Outstanding
+  if (counts.Inadequate === 1) return SCORE_BANDS[2];
   // Requires Improvement: 2+ key questions rated RI, OR 1 Inadequate + 1+ RI
-  if (counts['Requires Improvement'] >= 2 || (counts.Inadequate >= 1 && counts['Requires Improvement'] >= 1)) return SCORE_BANDS[2];
+  if (counts['Requires Improvement'] >= 2) return SCORE_BANDS[2];
   // Outstanding: 2+ Outstanding AND rest all Good
   if (counts.Outstanding >= 2 && counts.Outstanding + counts.Good === total) return SCORE_BANDS[0];
   // Good: no Inadequate AND max 1 RI
@@ -574,30 +589,31 @@ export function calculateFatigueBreachesPct(data, dateRange) {
   const dates = dateRangeToDates(dateRange);
   const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
   if (activeStaff.length === 0) return 0;
-  let breachCount = 0;
-  // Check fatigue on last date of range
-  const checkDate = dates[dates.length - 1] || new Date();
+  const breachedStaff = new Set();
   for (const s of activeStaff) {
-    const result = checkFatigueRisk(s, checkDate, data.overrides || {}, data.config);
-    if (result.atRisk) breachCount++;
+    for (const checkDate of dates) {
+      const result = checkFatigueRisk(s, checkDate, data.overrides || {}, data.config);
+      if (result.atRisk) {
+        breachedStaff.add(s.id);
+        break;
+      }
+    }
   }
-  return Math.round((breachCount / activeStaff.length) * 100);
+  return Math.round((breachedStaff.size / activeStaff.length) * 100);
 }
 
 export function calculateStaffTurnover(data, dateRange) {
   const staff = data.staff || [];
-  const fromStr = formatDate(dateRange.from);
   const toStr = formatDate(dateRange.to);
+  const toDate = new Date(`${toStr}T00:00:00Z`);
+  const fromStr = formatDate(addDays(toDate, -364));
   const leavers = staff.filter(s => s.leaving_date && s.leaving_date >= fromStr && s.leaving_date <= toStr);
   const activeAtStart = staff.filter(s => s.active !== false || (s.leaving_date && s.leaving_date >= fromStr));
   const avgHeadcount = activeAtStart.length || 1;
-  // Annualise: raw count over a short window (e.g. 28 days) is not comparable to CQC benchmarks
-  // which use annual turnover figures. Multiply by (365 / periodDays) to get annualised rate.
   const fromDate = new Date(fromStr + 'T00:00:00Z');
-  const toDate = new Date(toStr + 'T00:00:00Z');
   const periodDays = Math.max(1, Math.round((toDate - fromDate) / 86400000) + 1);
-  const annualisedPct = Math.round((leavers.length / avgHeadcount) * (365 / periodDays) * 100);
-  return { pct: annualisedPct, leavers: leavers.length, avgHeadcount, periodDays };
+  const pct = Math.round((leavers.length / avgHeadcount) * 100);
+  return { pct, leavers: leavers.length, avgHeadcount, periodDays, from: fromStr, to: toStr };
 }
 
 export function calculateTrainingTrend(data, asOfDate) {
@@ -610,6 +626,25 @@ export function calculateTrainingTrend(data, asOfDate) {
   return { currentPct, pastPct, trend };
 }
 
+function lowerIsBetterScore(value, amber, red) {
+  if (value == null || Number.isNaN(value)) return null;
+  if (value <= amber) return 100;
+  if (value >= red) return 0;
+  return Math.max(0, Math.round(100 - ((value - amber) / (red - amber)) * 100));
+}
+
+function scoreIncidentTrend(trends) {
+  const monthly = trends?.monthlyTrend || [];
+  const total = monthly.reduce((sum, item) => sum + (item.count || 0), 0);
+  if (total === 0) return { score: 100, total, direction: 'none', monthlyTrend: monthly };
+  if (monthly.length < 2) return { score: Math.max(50, 100 - total * 5), total, direction: 'single-period', monthlyTrend: monthly };
+  const first = monthly[0].count || 0;
+  const last = monthly[monthly.length - 1].count || 0;
+  const delta = last - first;
+  const score = delta <= 0 ? 100 : Math.max(0, 100 - delta * 20);
+  return { score, total, delta, direction: delta <= 0 ? 'stable_or_down' : 'rising', monthlyTrend: monthly };
+}
+
 // -- Per-metric Provenance, Confidence, and Evidence Summaries ----------------
 
 const METRIC_PROVENANCE = {
@@ -618,9 +653,15 @@ const METRIC_PROVENANCE = {
   agencyDependency:        { source_modules: ['rotation', 'escalation'], evidence_category: 'processes', assumptions: ['Agency rates from config'], exclusions: [] },
   incidentResponseTime:    { source_modules: ['incidents'], evidence_category: 'processes', assumptions: ['Notification time based on date-only field'], exclusions: [] },
   cqcNotifications:        { source_modules: ['incidents'], evidence_category: 'processes', assumptions: ['Deadline interpretation per Reg 18'], exclusions: [] },
+  safeguardingTraining:    { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Safeguarding training type IDs configured consistently'], exclusions: [] },
+  dbsCompliance:           { source_modules: ['onboarding'], evidence_category: 'processes', assumptions: ['Onboarding DBS section maintained'], exclusions: [] },
+  incidentSafeguarding:    { source_modules: ['incidents'], evidence_category: 'processes', assumptions: ['Safeguarding incidents are correctly typed'], exclusions: [] },
+  incidentTrends:          { source_modules: ['incidents'], evidence_category: 'outcomes', assumptions: ['Incident dates entered accurately'], exclusions: ['Resident-month adjustment not yet applied'] },
+  actionCompletionRate:    { source_modules: ['incidents'], evidence_category: 'processes', assumptions: ['Legacy corrective actions remain mapped'], exclusions: ['Standalone manager actions scored separately in V1 portfolio'] },
   supervisionCompletion:   { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Supervision frequency from config'], exclusions: [] },
   staffTurnover:           { source_modules: ['rotation'], evidence_category: 'outcomes', assumptions: ['Leaving date set on deactivation'], exclusions: [] },
   appraisalCompletion:     { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Annual cycle assumed'], exclusions: [] },
+  mcaTrainingCompliance:   { source_modules: ['training'], evidence_category: 'processes', assumptions: ['MCA/DoLS training type ID configured'], exclusions: [] },
   fireDrillCompliance:     { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Quarterly = 91 days'], exclusions: [] },
   careCertCompletion:      { source_modules: ['careCertificate'], evidence_category: 'outcomes', assumptions: ['12-week completion target'], exclusions: [] },
   complaintResolutionRate: { source_modules: ['complaints'], evidence_category: 'outcomes', assumptions: ['Resolution = status closed/resolved'], exclusions: [] },
@@ -631,6 +672,12 @@ const METRIC_PROVENANCE = {
   policyCompliancePct:     { source_modules: ['policyReview'], evidence_category: 'processes', assumptions: ['Review frequency from policy config'], exclusions: [] },
   satisfactionScore:       { source_modules: ['complaints'], evidence_category: 'peoples_experience', assumptions: ['Survey responses representative'], exclusions: ['Response rate not factored'] },
   speakUpCulture:          { source_modules: ['whistleblowing'], evidence_category: 'staff_leader_feedback', assumptions: ['Anonymous concerns included'], exclusions: ['Protection rate N/A when all anonymous'] },
+  equalityTrainingCompliance:       { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Equality training type ID configured'], exclusions: [] },
+  dataProtectionTrainingCompliance: { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Data protection training type ID configured'], exclusions: [] },
+  onboardingCompletion:    { source_modules: ['onboarding'], evidence_category: 'processes', assumptions: ['Onboarding sections maintained'], exclusions: [] },
+  sickRate:                { source_modules: ['rotation'], evidence_category: 'outcomes', assumptions: ['SICK rota overrides recorded'], exclusions: [] },
+  fatigueBreaches:         { source_modules: ['rotation', 'escalation'], evidence_category: 'processes', assumptions: ['Rota data complete over range'], exclusions: [] },
+  trainingTrend:           { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Historical training records retained'], exclusions: [] },
 };
 
 function deriveConfidence(metricId, raw, detail, data) {
@@ -709,6 +756,18 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const cqcn = calculateCqcNotificationsPct(data.incidents || [], fromStr, toStr);
   metrics.cqcNotifications = { raw: cqcn.score, score: cqcn.score, detail: cqcn };
 
+  // Safeguarding and incident learning metrics
+  const sgTraining = calculateSafeguardingTrainingPct(data, asOfDate);
+  metrics.safeguardingTraining = { raw: sgTraining, score: sgTraining };
+  const dbsPct = calculateDbsCompliancePct(data);
+  metrics.dbsCompliance = { raw: dbsPct, score: dbsPct };
+  const sgIncidents = getSafeguardingIncidentStats(data.incidents || [], fromStr, toStr);
+  metrics.incidentSafeguarding = { raw: sgIncidents.referralPct, score: sgIncidents.referralPct, detail: sgIncidents };
+  const incidentTrends = scoreIncidentTrend(getIncidentTrendData(data.incidents || [], fromStr, toStr));
+  metrics.incidentTrends = { raw: incidentTrends.total, score: incidentTrends.score, detail: incidentTrends };
+  const actionCompletion = calculateActionCompletionRate(data.incidents || [], fromStr, toStr, asOfDate);
+  metrics.actionCompletionRate = { raw: actionCompletion.completionPct, score: actionCompletion.completionPct, detail: actionCompletion };
+
   // Supervision completion: direct %
   const supPct = calculateSupervisionCompletionPct(data, asOfDate);
   metrics.supervisionCompletion = { raw: supPct, score: supPct };
@@ -720,6 +779,9 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   // Appraisal completion: direct %
   const aprPct = calculateAppraisalCompletionPct(data, asOfDate);
   metrics.appraisalCompletion = { raw: aprPct, score: aprPct };
+
+  const mcaPct = calculateMcaTrainingCompliancePct(data, asOfDate);
+  metrics.mcaTrainingCompliance = { raw: mcaPct, score: mcaPct };
 
   // Fire drill compliance: scored 0-100
   const firePct = calculateFireDrillCompliancePct(data, asOfDate);
@@ -745,6 +807,11 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const dols = calculateDolsCompliancePct(data, asOfDate);
   metrics.dolsCompliancePct = { raw: dols.score, score: dols.score, detail: dols };
 
+  const equalityPct = calculateEqualityTrainingPct(data, asOfDate);
+  metrics.equalityTrainingCompliance = { raw: equalityPct, score: equalityPct };
+  const dataProtectionPct = calculateDataProtectionTrainingPct(data, asOfDate);
+  metrics.dataProtectionTrainingCompliance = { raw: dataProtectionPct, score: dataProtectionPct };
+
   // Risk management score: direct %
   const risk = calculateRiskManagementScore(data, asOfDate);
   metrics.riskManagementScore = { raw: risk.score, score: risk.score, detail: risk };
@@ -761,6 +828,19 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   // Speak up culture: direct %
   const speakUp = calculateSpeakUpCulture(data, fromStr, toStr);
   metrics.speakUpCulture = { raw: speakUp.score, score: speakUp.score, detail: speakUp };
+
+  const onboardingPct = calculateOnboardingCompletionPct(data);
+  metrics.onboardingCompletion = { raw: onboardingPct, score: onboardingPct };
+  const sick = calculateSickRate(data, dateRange);
+  metrics.sickRate = { raw: sick.pct, score: lowerIsBetterScore(sick.pct, 4, 12), detail: sick };
+  const fatiguePct = calculateFatigueBreachesPct(data, dateRange);
+  metrics.fatigueBreaches = { raw: fatiguePct, score: lowerIsBetterScore(fatiguePct, 0, 20) };
+  const trainingTrend = calculateTrainingTrend(data, asOfDate);
+  metrics.trainingTrend = {
+    raw: trainingTrend.trend,
+    score: Math.max(0, Math.min(100, 75 + trainingTrend.trend)),
+    detail: trainingTrend,
+  };
 
   // Enrich every metric with provenance, evidence summary, and confidence
   for (const [id, metric] of Object.entries(metrics)) {

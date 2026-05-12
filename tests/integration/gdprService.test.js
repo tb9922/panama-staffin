@@ -813,7 +813,7 @@ describe('executeErasure', () => {
     expect(staff.name).toBe('[REDACTED-gdpr]');
     expect(staff.date_of_birth).toBeNull();
     expect(staff.ni_number).toBeNull();
-    expect(staff.hourly_rate).toBe('0.00');
+    expect(Number(staff.hourly_rate)).toBe(0);
     expect(staff.active).toBe(false);
   });
 

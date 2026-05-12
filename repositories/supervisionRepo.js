@@ -11,6 +11,7 @@ function shapeRow(row) {
     next_due:   toDateStr(row.next_due) ?? undefined,
     notes:      row.notes || undefined,
     updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
+    _version:   row.version ?? 1,
   };
 }
 
@@ -21,7 +22,7 @@ function shapeRow(row) {
  */
 export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at,
+    `SELECT id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at, version,
             COUNT(*) OVER() AS _total
      FROM supervisions WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY staff_id, date, id LIMIT $2 OFFSET $3`,
@@ -83,7 +84,8 @@ export async function sync(homeId, supervisionsObj, client) {
            next_due   = EXCLUDED.next_due,
            notes      = EXCLUDED.notes,
            updated_at = NOW(),
-           deleted_at = NULL`,
+           version    = supervisions.version + 1
+         WHERE supervisions.deleted_at IS NULL`,
         [homeId, ...values]
       );
     }
@@ -99,7 +101,7 @@ export async function sync(homeId, supervisionsObj, client) {
     return;
   }
   await conn.query(
-    `UPDATE supervisions SET deleted_at = NOW()
+    `UPDATE supervisions SET deleted_at = NOW(), updated_at = NOW(), version = version + 1
      WHERE home_id = $1 AND id != ALL($2::text[]) AND staff_id = ANY($3::text[]) AND deleted_at IS NULL`,
     [homeId, incomingIds, incomingStaffIds]
   );
@@ -117,12 +119,13 @@ export async function upsertSession(homeId, staffId, record) {
            next_due = $8,
            notes = $9,
            updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
+           version = version + 1,
            deleted_at = NULL
        WHERE home_id = $1
          AND id = $2
          AND deleted_at IS NULL
          AND date_trunc('milliseconds', updated_at) = $10::timestamptz
-       RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at`,
+       RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at, version`,
       [homeId, record.id, staffId, record.date, record.supervisor || null,
         record.topics || null, record.actions || null, record.next_due || null,
         record.notes || null, record._clientUpdatedAt, record._preserveLegacyActions === true]
@@ -137,7 +140,7 @@ export async function upsertSession(homeId, staffId, record) {
     `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,clock_timestamp())
       ON CONFLICT (home_id, id) DO NOTHING
-      RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at`,
+      RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at, version`,
     [record.id, homeId, staffId, record.date, record.supervisor || null,
      record.topics || null, record.actions || null, record.next_due || null, record.notes || null]
   );
@@ -149,7 +152,7 @@ export async function upsertSession(homeId, staffId, record) {
 
 export async function softDeleteSession(homeId, id) {
   const { rowCount } = await pool.query(
-    'UPDATE supervisions SET deleted_at=NOW() WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
+    'UPDATE supervisions SET deleted_at=NOW(), updated_at=NOW(), version=version+1 WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
     [homeId, id]
   );
   return rowCount > 0;

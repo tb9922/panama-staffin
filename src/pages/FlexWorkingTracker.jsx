@@ -13,7 +13,19 @@ import ErrorState from '../components/ErrorState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
-import { todayLocalISO, parseLocalDate } from '../lib/localDates.js';
+import { todayLocalISO } from '../lib/localDates.js';
+
+function addMonthsDateOnly(dateIso, months) {
+  const [year, month, day] = String(dateIso).split('-').map(Number);
+  const firstOfTarget = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(
+    firstOfTarget.getUTCFullYear(),
+    firstOfTarget.getUTCMonth() + 1,
+    0,
+  )).getUTCDate();
+  const targetDay = Math.min(day, lastDay);
+  return `${firstOfTarget.getUTCFullYear()}-${String(firstOfTarget.getUTCMonth() + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+}
 
 const DECISION_OPTIONS = [
   { id: '', name: '— Not decided —' },
@@ -125,13 +137,7 @@ export default function FlexWorkingTracker() {
     const today = todayLocalISO();
     // ERA 2025: employer must decide within 2 months
     // Clamp day to avoid month overflow (e.g. Dec 31 + 2 months → Feb 28, not Mar 3)
-    const deadline = parseLocalDate(today);
-    const requestDay = deadline.getDate();
-    deadline.setDate(1);
-    deadline.setMonth(deadline.getMonth() + 2);
-    const lastDay = new Date(deadline.getFullYear(), deadline.getMonth() + 1, 0).getDate();
-    deadline.setDate(Math.min(requestDay, lastDay));
-    setForm({ ...blankForm(), request_date: today, decision_deadline: todayLocalISO(deadline) });
+    setForm({ ...blankForm(), request_date: today, decision_deadline: addMonthsDateOnly(today, 2) });
     setShowModal(true);
   }
 

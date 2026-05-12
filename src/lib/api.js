@@ -34,7 +34,7 @@ function getCsrfToken() {
   return match ? match[1] : '';
 }
 
-function authHeaders(extra = {}) {
+export function authHeaders(extra = {}) {
   return {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest', // Defense-in-depth: blocks simple cross-site requests
@@ -54,7 +54,7 @@ export function isAbortLikeError(error, signal) {
   );
 }
 
-async function apiFetch(url, options = {}) {
+export async function apiFetch(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', ...options });
   if (res.status === 401) {
     expireClientSession();

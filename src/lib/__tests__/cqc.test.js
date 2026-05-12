@@ -97,8 +97,8 @@ describe('QUALITY_STATEMENTS', () => {
 });
 
 describe('METRIC_DEFINITIONS', () => {
-  it('has 18 metrics', () => {
-    expect(METRIC_DEFINITIONS).toHaveLength(18);
+  it('has all configured auto metrics', () => {
+    expect(METRIC_DEFINITIONS).toHaveLength(30);
   });
 
   it('weights sum to 1.0', () => {
@@ -518,7 +518,7 @@ describe('calculateStaffTurnover', () => {
     expect(result.leavers).toBe(0);
   });
 
-  it('counts leavers in date range (annualised)', () => {
+  it('counts leavers using rolling 12-month actual turnover', () => {
     const data = {
       staff: [
         makeStaff({ leaving_date: '2025-03-15', active: false }),
@@ -530,8 +530,8 @@ describe('calculateStaffTurnover', () => {
     const result = calculateStaffTurnover(data, dateRange);
     expect(result.leavers).toBe(1);
     expect(result.avgHeadcount).toBe(2);
-    expect(result.pct).toBe(101);
-    expect(result.periodDays).toBe(181);
+    expect(result.pct).toBe(50);
+    expect(result.periodDays).toBe(365);
   });
 
   it('excludes leavers outside date range', () => {

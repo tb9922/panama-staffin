@@ -492,7 +492,7 @@ export default function AnnualLeave() {
             {bookingError && <p className="text-sm text-red-600">{bookingError}</p>}
             {bookingMsg && <p className="text-sm text-emerald-700">{bookingMsg}</p>}
             <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd || saving || (selectedAccrual?.missingContractHours)}
-              className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium shadow-sm transition-colors duration-150 disabled:opacity-50`}>
+              className={`${BTN.primary} w-full`}>
               {saving ? 'Booking...' : 'Book Annual Leave'}
             </button>
           </div>

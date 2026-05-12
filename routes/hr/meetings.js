@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
+import { readRateLimiter, writeRateLimiter } from '../../lib/rateLimiter.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { meetingBodySchema, meetingCaseTypeSchema } from './schemas.js';
@@ -10,7 +11,7 @@ import { withTransaction } from '../../db.js';
 const router = Router();
 
 // GET /api/hr/meetings/:caseType/:caseId?home=X
-router.get('/meetings/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+router.get('/meetings/:caseType/:caseId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const parsed = meetingCaseTypeSchema.safeParse(req.params.caseType);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
@@ -22,7 +23,7 @@ router.get('/meetings/:caseType/:caseId', requireAuth, requireHomeAccess, requir
 });
 
 // POST /api/hr/meetings/:caseType/:caseId?home=X
-router.post('/meetings/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+router.post('/meetings/:caseType/:caseId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const ctParsed = meetingCaseTypeSchema.safeParse(req.params.caseType);
     if (!ctParsed.success) return res.status(400).json({ error: 'Invalid case type' });
@@ -45,7 +46,7 @@ router.post('/meetings/:caseType/:caseId', requireAuth, requireHomeAccess, requi
 });
 
 // PUT /api/hr/meetings/:id?home=X
-router.put('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+router.put('/meetings/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
@@ -69,7 +70,7 @@ router.put('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 
 });
 
 // DELETE /api/hr/meetings/:id?home=X
-router.delete('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+router.delete('/meetings/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });

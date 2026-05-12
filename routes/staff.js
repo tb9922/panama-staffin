@@ -2,7 +2,7 @@ import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as overrideRequestService from '../services/overrideRequestService.js';
@@ -203,7 +203,7 @@ function requireOverrideRequestReviewer(req, res, next) {
   next();
 }
 
-router.get('/override-requests', requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), requireOverrideRequestReviewer, async (req, res, next) => {
+router.get('/override-requests', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), requireOverrideRequestReviewer, async (req, res, next) => {
   try {
     const rows = await overrideRequestService.findPending({ homeId: req.home.id });
     res.json(rows);

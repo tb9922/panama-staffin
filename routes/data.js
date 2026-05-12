@@ -109,6 +109,11 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
         error: 'Legacy /api/data no longer accepts day notes. Use /api/scheduling/day-notes so edit-lock and audit checks run.',
       });
     }
+    if (body.staff?.length > 0) {
+      return res.status(400).json({
+        error: 'Legacy /api/data no longer accepts staff writes. Use /api/staff so HR/pay/GDPR field guards and staff audit checks run.',
+      });
+    }
 
     const criticalErrors = detectCriticalErrors(body);
     if (criticalErrors.length > 0) {

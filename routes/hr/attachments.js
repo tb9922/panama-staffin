@@ -6,6 +6,7 @@ import { stat, unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
+import { readRateLimiter, writeRateLimiter } from '../../lib/rateLimiter.js';
 import { config } from '../../config.js';
 import { sendStoredDownload } from '../../lib/sendDownload.js';
 import { assertGenericAttachmentUploadSafe, genericAttachmentFileFilter } from '../../lib/uploadSecurity.js';
@@ -41,7 +42,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, fileFilter: genericAttachmentFileFilter, limits: { fileSize: config.upload.maxFileSize } });
 
 // GET /api/hr/attachments/download/:id?home=X
-router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+router.get('/attachments/download/:id', readRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
@@ -74,7 +75,7 @@ router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireM
 });
 
 // GET /api/hr/attachments/:caseType/:caseId?home=X
-router.get('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+router.get('/attachments/:caseType/:caseId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const parsed = caseTypeSchema.safeParse(req.params.caseType);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
@@ -87,7 +88,7 @@ router.get('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, req
 });
 
 // POST /api/hr/attachments/:caseType/:caseId?home=X
-router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+router.post('/attachments/:caseType/:caseId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     // Validate caseType BEFORE multer writes any bytes to disk
     const caseTypeParsed = caseTypeSchema.safeParse(req.params.caseType);
@@ -128,7 +129,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
 });
 
 // DELETE /api/hr/attachments/:id?home=X
-router.delete('/attachments/:id', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+router.delete('/attachments/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });

@@ -79,7 +79,7 @@ router.put('/config', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     }
 
     const before = req.home.config ?? {};
-    const nextConfig = { ...parsed.data.config };
+    const nextConfig = { ...before, ...parsed.data.config };
     if (!Object.prototype.hasOwnProperty.call(parsed.data.config, 'edit_lock_pin') &&
         Object.prototype.hasOwnProperty.call(before, 'edit_lock_pin')) {
       nextConfig.edit_lock_pin = before.edit_lock_pin;

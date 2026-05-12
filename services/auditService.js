@@ -15,6 +15,17 @@ export async function log(action, homeSlug, username, details, client) {
   }
 }
 
+export async function bulkLog(entries, client) {
+  if (!entries?.length) return 0;
+  if (client) return auditRepo.bulkLog(entries, client);
+  try {
+    return await auditRepo.bulkLog(entries);
+  } catch (err) {
+    logger.error({ count: entries.length, err: err.message }, 'audit bulk write failure');
+    return 0;
+  }
+}
+
 export async function getRecent(limit = 100, homeSlug) {
   if (homeSlug) return auditRepo.getByHome(homeSlug, limit);
   return auditRepo.getRecent(limit);

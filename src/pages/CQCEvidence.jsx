@@ -161,11 +161,9 @@ export default function CQCEvidence() {
     if (!homeSlug) return;
     let cancelled = false;
     // CQC scoring needs up to 365 days of overrides for the 1-year view
-    const now = new Date();
-    const fromDate = new Date(now);
-    fromDate.setFullYear(fromDate.getFullYear() - 1);
-    const from = todayLocalISO(fromDate);
-    const to = addDaysLocalISO(todayLocalISO(now), 7);
+    const today = todayLocalISO();
+    const from = addDaysLocalISO(today, -365);
+    const to = addDaysLocalISO(today, 7);
     const capture = (label, promise, fallback) => promise
       .then((data) => ({ label, data, error: null }))
       .catch((e) => ({ label, data: fallback, error: e.message || `Failed to load ${label}` }));

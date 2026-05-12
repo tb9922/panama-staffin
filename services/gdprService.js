@@ -148,9 +148,9 @@ export async function processQueuedRetentionPurgeFiles(ids, { throwOnFailure = f
   if (!ids?.length) return { deleted: 0, failed: 0 };
   const { rows } = await pool.query(
     `SELECT id, file_path
-       FROM retention_purge_files
-      WHERE id = ANY($1::bigint[])
-        AND status IN ('pending', 'failed')
+      FROM retention_purge_files
+     WHERE id = ANY($1::bigint[])
+        AND status IN ('pending', 'processing', 'failed')
       ORDER BY id`,
     [ids],
   );
@@ -163,6 +163,12 @@ export async function processQueuedRetentionPurgeFiles(ids, { throwOnFailure = f
       if (!isPathInsideRoot(uploadRoot, resolved)) {
         throw new ValidationError('Attachment path is outside the upload directory');
       }
+      await pool.query(
+        `UPDATE retention_purge_files
+            SET status = 'processing', error = NULL, processed_at = NOW()
+          WHERE id = $1`,
+        [row.id],
+      );
       try {
         await fs.unlink(resolved);
       } catch (err) {
@@ -1063,6 +1069,13 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       await client.query(
         `UPDATE handover_entries SET author = '[REDACTED]', content = '[REDACTED]'
          WHERE home_id = $1 AND author = $2`,
+        [homeId, originalName]
+      );
+      await client.query(
+        `UPDATE handover_entries SET content = '[REDACTED]'
+         WHERE home_id = $1
+           AND author <> '[REDACTED]'
+           AND content LIKE '%' || $2 || '%'`,
         [homeId, originalName]
       );
     }

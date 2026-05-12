@@ -28,28 +28,28 @@ describe('METRIC_DEFINITIONS question assignments', () => {
     }
   });
 
-  it('safe has the most metrics (7)', () => {
-    expect(METRIC_DEFINITIONS.filter(m => m.question === 'safe').length).toBe(7);
+  it('safe has the most metrics (12)', () => {
+    expect(METRIC_DEFINITIONS.filter(m => m.question === 'safe').length).toBe(12);
   });
 
-  it('effective has 4 metrics', () => {
-    expect(METRIC_DEFINITIONS.filter(m => m.question === 'effective').length).toBe(4);
+  it('effective has 6 metrics', () => {
+    expect(METRIC_DEFINITIONS.filter(m => m.question === 'effective').length).toBe(6);
   });
 
-  it('caring has 2 metrics', () => {
-    expect(METRIC_DEFINITIONS.filter(m => m.question === 'caring').length).toBe(2);
+  it('caring has 3 metrics', () => {
+    expect(METRIC_DEFINITIONS.filter(m => m.question === 'caring').length).toBe(3);
   });
 
   it('responsive has 1 metric', () => {
     expect(METRIC_DEFINITIONS.filter(m => m.question === 'responsive').length).toBe(1);
   });
 
-  it('well-led has 4 metrics', () => {
-    expect(METRIC_DEFINITIONS.filter(m => m.question === 'well-led').length).toBe(4);
+  it('well-led has 8 metrics', () => {
+    expect(METRIC_DEFINITIONS.filter(m => m.question === 'well-led').length).toBe(8);
   });
 
-  it('all 18 metrics are assigned', () => {
-    expect(METRIC_DEFINITIONS.length).toBe(18);
+  it('all 30 metrics are assigned', () => {
+    expect(METRIC_DEFINITIONS.length).toBe(30);
   });
 
   it('weights still sum to 1.0', () => {

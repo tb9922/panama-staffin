@@ -12,6 +12,7 @@ function shapeRow(row) {
     next_due:         toDateStr(row.next_due) ?? undefined,
     notes:            row.notes || undefined,
     updated_at:       row.updated_at ? row.updated_at.toISOString() : undefined,
+    _version:         row.version ?? 1,
   };
 }
 
@@ -22,7 +23,7 @@ function shapeRow(row) {
  */
 export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at,
+    `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at, version,
             COUNT(*) OVER() AS _total
      FROM appraisals WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY staff_id, date, id LIMIT $2 OFFSET $3`,
@@ -87,7 +88,8 @@ export async function sync(homeId, appraisalsObj, client) {
            next_due         = EXCLUDED.next_due,
            notes            = EXCLUDED.notes,
            updated_at       = NOW(),
-           deleted_at       = NULL`,
+           version          = appraisals.version + 1
+         WHERE appraisals.deleted_at IS NULL`,
         [homeId, ...values]
       );
     }
@@ -99,7 +101,7 @@ export async function sync(homeId, appraisalsObj, client) {
     return;
   }
   await conn.query(
-    `UPDATE appraisals SET deleted_at = NOW()
+    `UPDATE appraisals SET deleted_at = NOW(), updated_at = NOW(), version = version + 1
      WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
     [homeId, incomingIds]
   );
@@ -118,12 +120,13 @@ export async function upsertAppraisal(homeId, staffId, record) {
            next_due = $9,
            notes = $10,
            updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
+           version = version + 1,
            deleted_at = NULL
        WHERE home_id = $1
          AND id = $2
          AND deleted_at IS NULL
          AND date_trunc('milliseconds', updated_at) = $11::timestamptz
-       RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
+       RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at, version`,
       [homeId, record.id, staffId, record.date, record.appraiser || null,
         record.objectives || null, record.training_needs || null,
         record.development_plan || null, record.next_due || null,
@@ -140,7 +143,7 @@ export async function upsertAppraisal(homeId, staffId, record) {
        (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp())
       ON CONFLICT (home_id, id) DO NOTHING
-      RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
+      RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at, version`,
     [record.id, homeId, staffId, record.date, record.appraiser || null,
      record.objectives || null, record.training_needs || null,
      record.development_plan || null, record.next_due || null, record.notes || null]
@@ -153,7 +156,7 @@ export async function upsertAppraisal(homeId, staffId, record) {
 
 export async function softDeleteAppraisal(homeId, id) {
   const { rowCount } = await pool.query(
-    'UPDATE appraisals SET deleted_at=NOW() WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
+    'UPDATE appraisals SET deleted_at=NOW(), updated_at=NOW(), version=version+1 WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
     [homeId, id]
   );
   return rowCount > 0;

@@ -20,6 +20,7 @@ import {
   updateAuditTask,
   verifyAuditTask,
 } from '../lib/api.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const EMPTY_TASK = {
   template_key: '',
@@ -216,7 +217,7 @@ export default function AuditCalendar() {
   useEffect(() => { load(); }, [load]);
 
   const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     return {
       open: allTasks.filter(task => task.status === 'open').length,
       overdue: allTasks.filter(task => task.status === 'open' && task.due_date < today).length,

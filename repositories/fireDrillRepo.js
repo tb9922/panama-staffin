@@ -1,7 +1,7 @@
 import { ConflictError } from '../errors.js';
 import { pool, toDateStr } from '../db.js';
 
-const DRILL_COLS = 'id, home_id, date, time, scenario, evacuation_time_seconds, staff_present, residents_evacuated, issues, corrective_actions, conducted_by, notes, created_at, updated_at, deleted_at';
+const DRILL_COLS = 'id, home_id, date, time, scenario, evacuation_time_seconds, staff_present, residents_evacuated, issues, corrective_actions, conducted_by, notes, version, created_at, updated_at, deleted_at';
 
 function shapeRow(row) {
   return {
@@ -16,6 +16,7 @@ function shapeRow(row) {
     corrective_actions:      row.corrective_actions || undefined,
     conducted_by:            row.conducted_by || undefined,
     notes:                   row.notes || undefined,
+    _version:                row.version ?? 1,
     updated_at:              row.updated_at ? row.updated_at.toISOString() : undefined,
   };
 }
@@ -74,7 +75,8 @@ export async function sync(homeId, drillsArr, client) {
          evacuation_time_seconds=EXCLUDED.evacuation_time_seconds,staff_present=EXCLUDED.staff_present,
          residents_evacuated=EXCLUDED.residents_evacuated,issues=EXCLUDED.issues,
          corrective_actions=EXCLUDED.corrective_actions,conducted_by=EXCLUDED.conducted_by,
-         notes=EXCLUDED.notes,updated_at=NOW(),deleted_at=NULL`,
+         notes=EXCLUDED.notes,updated_at=NOW(),version=fire_drills.version+1
+       WHERE fire_drills.deleted_at IS NULL`,
       [homeId, ...values]
     );
   }
@@ -84,7 +86,7 @@ export async function sync(homeId, drillsArr, client) {
     return;
   }
   await conn.query(
-    `UPDATE fire_drills SET deleted_at = NOW()
+    `UPDATE fire_drills SET deleted_at = NOW(), updated_at = NOW(), version = version + 1
      WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
     [homeId, incomingIds]
   );
@@ -105,6 +107,7 @@ export async function upsertDrill(homeId, record) {
            conducted_by = $11,
            notes = $12,
            updated_at = NOW(),
+           version = version + 1,
            deleted_at = NULL
        WHERE home_id = $1
          AND id = $2
@@ -144,7 +147,7 @@ export async function upsertDrill(homeId, record) {
 
 export async function removeDrill(homeId, id) {
   const { rowCount } = await pool.query(
-    'UPDATE fire_drills SET deleted_at=NOW() WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
+    'UPDATE fire_drills SET deleted_at=NOW(), updated_at=NOW(), version=version+1 WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
     [homeId, id]
   );
   return rowCount > 0;

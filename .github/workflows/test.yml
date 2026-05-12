@@ -327,6 +327,11 @@ jobs:
               pm2 stop panama panama-webhooks || true
               RESTORE_USE_ENV_DB=true FORCE_RESTORE_DB=true bash ./scripts/restore-db.sh "$PRE_MIGRATION_BACKUP"
               restore_status=$?
+              if [ "$restore_status" -ne 0 ]; then
+                set -e
+                echo "Rollback aborted: database restore failed with status $restore_status"
+                return 1
+              fi
               git checkout "$PREV_COMMIT"
               checkout_status=$?
               npm ci
@@ -339,7 +344,9 @@ jobs:
               set -e
               if [ "$restore_status" -ne 0 ] || [ "$checkout_status" -ne 0 ] || [ "$ci_status" -ne 0 ] || [ "$build_status" -ne 0 ] || [ "$pm2_status" -ne 0 ]; then
                 echo "Rollback incomplete: restore=$restore_status checkout=$checkout_status npm_ci=$ci_status build=$build_status pm2=$pm2_status"
+                return 1
               fi
+              return 0
             }
             pm2 stop panama panama-webhooks || true
             if ! node scripts/migrate.js; then

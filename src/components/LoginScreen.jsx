@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { login } from '../lib/api.js';
-import { INPUT, BTN } from '../lib/design.js';
+import { CARD, INPUT, BTN } from '../lib/design.js';
 
 function getInitialLoginError() {
   try {
@@ -44,10 +44,10 @@ export default function LoginScreen({ onLogin }) {
   }
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
-      <form onSubmit={handleLogin} className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 w-full max-w-sm mx-4">
+    <div className="flex h-screen items-center justify-center bg-[var(--paper-2)]">
+      <form onSubmit={handleLogin} className={`${CARD.elevated} w-full max-w-sm mx-4`}>
         <div className="flex items-center gap-2.5 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>

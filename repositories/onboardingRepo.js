@@ -57,7 +57,9 @@ export async function sync(homeId, onboardingObj, client) {
        VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, staff_id) DO UPDATE SET
          data       = EXCLUDED.data,
-         updated_at = NOW()`,
+         updated_at = NOW(),
+         version    = onboarding.version + 1
+       WHERE onboarding.deleted_at IS NULL`,
       [homeId, ...values]
     );
   }
@@ -71,6 +73,7 @@ export async function upsertSection(homeId, staffId, section, sectionData) {
        ON CONFLICT (home_id, staff_id) DO UPDATE SET
          data = COALESCE(onboarding.data, '{}'::jsonb) || jsonb_build_object($3::text, $4::jsonb),
          updated_at = NOW(),
+         version = onboarding.version + 1,
          deleted_at = NULL
        RETURNING data`,
       [homeId, staffId, section, JSON.stringify(sectionData ?? {})]
@@ -89,7 +92,7 @@ export async function clearSection(homeId, staffId, section) {
     const existing = rows[0].data ?? {};
     delete existing[section];
     await client.query(
-      'UPDATE onboarding SET data=$3, updated_at=NOW() WHERE home_id=$1 AND staff_id=$2',
+      'UPDATE onboarding SET data=$3, updated_at=NOW(), version=version+1 WHERE home_id=$1 AND staff_id=$2',
       [homeId, staffId, JSON.stringify(existing)]
     );
     return existing;

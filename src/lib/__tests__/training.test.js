@@ -362,6 +362,11 @@ describe('isInProbation', () => {
     const staff = makeStaff({ start_date: '2025-10-01' });
     expect(isInProbation(staff, {}, TODAY)).toBe(true); // 5 months in
   });
+
+  it('clamps end-of-month probation dates instead of overflowing into the next month', () => {
+    const staff = makeStaff({ start_date: '2026-01-31' });
+    expect(isInProbation(staff, { supervision_probation_months: 1 }, '2026-02-28')).toBe(false);
+  });
 });
 
 // ── getSupervisionFrequency ──────────────────────────────────────────────────

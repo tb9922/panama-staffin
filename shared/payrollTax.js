@@ -275,8 +275,9 @@ function computeTax(annualTaxable, taxBands, parsedCode) {
   if (parsedCode.type === 'br') return annualTaxable * 0.20;
   // D0: flat higher rate (40% England/Wales, 42% Scotland)
   if (parsedCode.type === 'd0') return annualTaxable * (parsedCode.country === 'scotland' ? 0.42 : 0.40);
-  // D1: flat top rate (45% England/Wales, 48% Scotland — Scottish top rate from April 2024)
-  if (parsedCode.type === 'd1') return annualTaxable * (parsedCode.country === 'scotland' ? 0.48 : 0.45);
+  // D1/SD1 flat-rate codes use HMRC table D rates.
+  // SD2 is the separate Scottish advanced-rate code.
+  if (parsedCode.type === 'd1') return annualTaxable * (parsedCode.country === 'scotland' ? 0.42 : 0.45);
 
   let tax = 0;
   let remaining = annualTaxable;

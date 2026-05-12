@@ -9,7 +9,7 @@ import { pool, toDateStr } from '../db.js';
 export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT id, home_id, staff_id, training_type_id, completed, expiry,
-            trainer, method, certificate_ref, evidence_ref, level, notes, updated_at,
+            trainer, method, certificate_ref, evidence_ref, level, notes, updated_at, version,
             COUNT(*) OVER() AS _total
      FROM training_records
      WHERE home_id = $1 AND deleted_at IS NULL
@@ -31,6 +31,7 @@ export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}) {
         level:     row.level     ?? undefined,
         notes:     row.notes     ?? undefined,
         updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
+        _version: row.version ?? 1,
       };
   }
   return { rows: result, total };
@@ -41,7 +42,7 @@ export async function findByStaff(homeId, staffId, client) {
   const { rows } = await conn.query(
     `SELECT id, home_id, staff_id, training_type_id, completed, expiry,
             trainer, method, certificate_ref, evidence_ref, level, notes,
-            acknowledged_at, acknowledged_by_staff, updated_at
+            acknowledged_at, acknowledged_by_staff, updated_at, version
        FROM training_records
       WHERE home_id = $1
         AND staff_id = $2
@@ -63,6 +64,7 @@ export async function findByStaff(homeId, staffId, client) {
     acknowledged_at: row.acknowledged_at instanceof Date ? row.acknowledged_at.toISOString() : row.acknowledged_at,
     acknowledged_by_staff: row.acknowledged_by_staff === true,
     updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
+    _version: row.version ?? 1,
   }));
 }
 
@@ -121,7 +123,8 @@ export async function sync(homeId, trainingObj, client) {
           level           = EXCLUDED.level,
          notes           = EXCLUDED.notes,
          updated_at      = NOW(),
-         deleted_at      = NULL`,
+         version         = training_records.version + 1
+       WHERE training_records.deleted_at IS NULL`,
       [homeId, ...values]
     );
   }
@@ -143,13 +146,14 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
             level = $10,
             notes = $11,
             updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
+            version = version + 1,
             deleted_at = NULL
        WHERE home_id = $1
          AND staff_id = $2
          AND training_type_id = $3
          AND deleted_at IS NULL
           AND date_trunc('milliseconds', updated_at) = $12::timestamptz
-       RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes, updated_at`,
+       RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes, updated_at, version`,
       [homeId, staffId, typeId,
         record.completed ?? null, record.expiry ?? null,
         record.trainer ?? null, record.method ?? null,
@@ -170,6 +174,7 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
       level:     r.level     ?? undefined,
       notes:     r.notes     ?? undefined,
       updated_at: r.updated_at ? r.updated_at.toISOString() : undefined,
+      _version: r.version ?? 1,
     };
   }
 
@@ -188,9 +193,10 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
          level = EXCLUDED.level,
          notes = EXCLUDED.notes,
          updated_at = clock_timestamp(),
+         version = training_records.version + 1,
          deleted_at = NULL
        WHERE training_records.deleted_at IS NOT NULL
-       RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes, updated_at`,
+       RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes, updated_at, version`,
     [homeId, staffId, typeId,
       record.completed ?? null, record.expiry ?? null,
       record.trainer ?? null, record.method ?? null,
@@ -211,13 +217,14 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
     level:     r.level     ?? undefined,
     notes:     r.notes     ?? undefined,
     updated_at: r.updated_at ? r.updated_at.toISOString() : undefined,
+    _version: r.version ?? 1,
   };
 }
 
 export async function removeRecord(homeId, staffId, typeId, client) {
   const conn = client || pool;
   const { rowCount } = await conn.query(
-    'UPDATE training_records SET deleted_at=NOW() WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3 AND deleted_at IS NULL',
+    'UPDATE training_records SET deleted_at=NOW(), updated_at=NOW(), version=version+1 WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3 AND deleted_at IS NULL',
     [homeId, staffId, typeId]
   );
   return rowCount > 0;
@@ -236,7 +243,8 @@ export async function acknowledgeByStaff(homeId, staffId, typeId, { asOfDate } =
     `UPDATE training_records
         SET acknowledged_at = NOW(),
             acknowledged_by_staff = TRUE,
-            updated_at = NOW()
+            updated_at = NOW(),
+            version = version + 1
       WHERE home_id = $1
         AND staff_id = $2
         AND training_type_id = $3

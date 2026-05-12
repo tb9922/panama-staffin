@@ -6,6 +6,7 @@ import logger from '../logger.js';
 export async function escalateOverdueActionItems({ today = new Date(), audit = true } = {}) {
   const candidates = await actionItemRepo.findEscalationCandidates(today);
   let escalated = 0;
+  const auditEntries = [];
 
   for (const item of candidates) {
     const nextLevel = calculateEscalationLevel({
@@ -21,14 +22,23 @@ export async function escalateOverdueActionItems({ today = new Date(), audit = t
     escalated += 1;
 
     if (audit) {
-      await auditService.log('action_item_escalate', item.home_slug, 'system', {
-        id: item.id,
-        previousLevel: item.escalation_level || 0,
-        nextLevel,
-        dueDate: item.due_date,
-        priority: item.priority,
+      auditEntries.push({
+        action: 'action_item_escalate',
+        homeSlug: item.home_slug,
+        username: 'system',
+        details: {
+          id: item.id,
+          previousLevel: item.escalation_level || 0,
+          nextLevel,
+          dueDate: item.due_date,
+          priority: item.priority,
+        },
       });
     }
+  }
+
+  if (auditEntries.length > 0) {
+    await auditService.bulkLog(auditEntries);
   }
 
   if (escalated > 0) {

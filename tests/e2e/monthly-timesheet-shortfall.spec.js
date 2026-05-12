@@ -114,6 +114,10 @@ test.describe('Monthly Timesheet shortfall resolution', () => {
 
     await row.getByRole('button', { name: 'Adjust' }).click();
     await expect(dialog).toBeVisible({ timeout: 5_000 });
+    page.once('dialog', async (confirmDialog) => {
+      expect(confirmDialog.message()).toMatch(/Remove the paid shortfall adjustment/i);
+      await confirmDialog.accept();
+    });
     await dialog.getByRole('button', { name: 'Remove' }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/hourly adjustment removed/i).first()).toBeVisible({ timeout: 10_000 });
@@ -140,6 +144,10 @@ test.describe('Monthly Timesheet shortfall resolution', () => {
 
     await row.getByRole('button', { name: 'Adjust' }).click();
     await expect(dialog).toBeVisible({ timeout: 5_000 });
+    page.once('dialog', async (confirmDialog) => {
+      expect(confirmDialog.message()).toMatch(/Remove the paid shortfall adjustment/i);
+      await confirmDialog.accept();
+    });
     await dialog.getByRole('button', { name: 'Remove' }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
     await expect(row.locator('td').nth(8)).toHaveText('—');

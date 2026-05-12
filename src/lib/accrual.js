@@ -60,7 +60,8 @@ export function sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourA
     const ov = dayOverrides[staff.id];
     if (ov?.shift !== 'AL') continue;
     if (ov.al_hours != null) {
-      hours += parseFloat(ov.al_hours);
+      const parsedHours = parseFloat(ov.al_hours);
+      if (Number.isFinite(parsedHours)) hours += parsedHours;
     } else {
       // Legacy booking — derive from scheduled shift
       hours += getALDeductionHours(staff, dateKey, config);
@@ -70,7 +71,8 @@ export function sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourA
     if (dateKey < leaveYear.startStr || dateKey > leaveYear.endStr) continue;
     const adj = dayAdjustments?.[staff.id];
     if (adj?.kind !== 'annual_leave') continue;
-    hours += parseFloat(adj.hours || 0);
+    const parsedHours = parseFloat(adj.hours || 0);
+    if (Number.isFinite(parsedHours)) hours += parsedHours;
   }
   return Math.round(hours * 10) / 10;
 }

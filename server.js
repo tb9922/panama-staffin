@@ -201,17 +201,22 @@ app.use('/api/docs/finance', financeDocsRouter);
 app.use('/api/docs/maintenance', maintenanceDocsRouter);
 app.use('/api/docs/onboarding', onboardingDocsRouter);
 
+async function getMigrationStatus() {
+  const { rows } = await pool.query('SELECT name, run_at FROM migrations ORDER BY name DESC LIMIT 1');
+  return rows[0] ? { latest: rows[0].name, runAt: rows[0].run_at } : { latest: null, runAt: null };
+}
+
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;
 app.get('/readiness', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (shuttingDown) return res.status(503).json({ status: 'shutting_down' });
   try {
-    await Promise.race([
-      pool.query('SELECT 1'),
+    const [, migration] = await Promise.race([
+      Promise.all([pool.query('SELECT 1'), getMigrationStatus()]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
     ]);
-    res.json({ status: 'ready', db: 'ok' });
+    res.json({ status: 'ready', db: 'ok', migration });
   } catch {
     res.status(503).json({ status: 'degraded', db: 'error' });
   }

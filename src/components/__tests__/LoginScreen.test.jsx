@@ -9,6 +9,7 @@ vi.mock('../../lib/api.js', () => ({
 }));
 
 vi.mock('../../lib/design.js', () => ({
+  CARD: { elevated: 'elevated' },
   INPUT: { label: 'label', base: 'base' },
   BTN: { primary: 'primary' },
 }));

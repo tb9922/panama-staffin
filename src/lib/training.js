@@ -101,6 +101,15 @@ export function calculateExpiry(completedDateStr, refresherMonths) {
   return `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
 }
 
+function addMonthsClamped(date, months) {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+  const firstOfTarget = new Date(Date.UTC(year, month + months, 1));
+  const lastDay = new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth(), Math.min(day, lastDay)));
+}
+
 // ── Status Calculation ─────────────────────────────────────────────────────
 
 export function getTrainingStatus(staffMember, trainingType, staffRecords, asOfDate) {
@@ -214,8 +223,7 @@ export function isInProbation(staff, config, asOfDate) {
   if (!staff.start_date) return false;
   const start = parseDate(staff.start_date);
   const probMonths = config.supervision_probation_months || 6;
-  const probEnd = new Date(start);
-  probEnd.setUTCMonth(probEnd.getUTCMonth() + probMonths);
+  const probEnd = addMonthsClamped(start, probMonths);
   const now = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);
   return now < probEnd;
 }

@@ -245,6 +245,17 @@ describe('scheduling route hardening', () => {
     expect(rows[0].cnt).toBe(0);
   });
 
+  it('rejects legacy /api/data staff writes', async () => {
+    const res = await authRequest('post', `/api/data?home=${homeSlug}`)
+      .send({
+        config: BASE_CONFIG,
+        staff: [{ id: 'sched-route-s1', name: 'Route Test Carer', role: 'Carer', active: true }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no longer accepts staff writes/i);
+  });
+
   it('redacts deprecated /api/data reads for broad scheduling readers', async () => {
     const shiftDate = utcDateOffset(10);
     await pool.query(
@@ -466,6 +477,12 @@ describe('scheduling route hardening', () => {
   it('checks mandatory training against the target shift date, not today', async () => {
     const futureShiftDate = utcDateOffset(30);
     const expiryBeforeShift = utcDateOffset(10);
+    await pool.query(
+      `UPDATE staff
+          SET pref = 'E', wtr_opt_out = false
+        WHERE home_id = $1 AND id = 'sched-route-s1'`,
+      [homeId],
+    );
     await pool.query(
       `INSERT INTO training_records (home_id, staff_id, training_type_id, completed, expiry, trainer, method)
        VALUES ($1, 'sched-route-s1', 'fire-safety', $2, $3, 'Route Test Trainer', 'classroom')`,

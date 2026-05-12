@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import * as Sentry from '@sentry/node';
 import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
@@ -111,6 +112,7 @@ export async function requireAuth(req, res, next) {
   }
 
   req.user = decoded;
+  Sentry.setUser({ username: decoded.username || decoded.staff_id || 'unknown' });
   setRequestContext({ username: decoded.username });
   next();
 }
@@ -169,6 +171,8 @@ export async function requireHomeAccess(req, res, next) {
       req.home = home;
       req.homeRole = 'home_manager';
       req.staffId = null;
+      Sentry.setTag('homeId', String(home.id));
+      Sentry.setTag('homeSlug', home.slug);
       setRequestContext({ homeSlug: home.slug });
       return next();
     }
@@ -183,6 +187,8 @@ export async function requireHomeAccess(req, res, next) {
     req.home = home;
     req.homeRole = 'staff_member';
     req.staffId = req.user.staff_id || null;
+    Sentry.setTag('homeId', String(home.id));
+    Sentry.setTag('homeSlug', home.slug);
     setRequestContext({ homeSlug: home.slug });
     return next();
   }
@@ -196,6 +202,8 @@ export async function requireHomeAccess(req, res, next) {
   req.home = home;
   req.homeRole = assignment.role_id;
   req.staffId = assignment.staff_id || null;
+  Sentry.setTag('homeId', String(home.id));
+  Sentry.setTag('homeSlug', home.slug);
   setRequestContext({ homeSlug: home.slug });
   next();
 }

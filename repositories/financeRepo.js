@@ -719,7 +719,7 @@ export async function getChasesDueForAction(homeId, beforeDate, client) {
     `SELECT ${CHASE_COLS.split(',').map(c => `c.${c.trim()}`).join(', ')},
        i.invoice_number, i.payer_name, i.balance_due
      FROM finance_invoice_chase c
-     JOIN finance_invoices i ON i.id = c.invoice_id AND i.deleted_at IS NULL
+      JOIN finance_invoices i ON i.id = c.invoice_id AND i.home_id = c.home_id AND i.deleted_at IS NULL
      WHERE c.home_id = $1 AND c.deleted_at IS NULL
        AND c.next_action_date IS NOT NULL AND c.next_action_date <= $2
        AND i.status NOT IN ('paid','void','credited')
