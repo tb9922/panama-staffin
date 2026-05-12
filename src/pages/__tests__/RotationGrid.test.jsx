@@ -159,11 +159,24 @@ describe('RotationGrid', () => {
     expect(document.querySelector('.roster-print-page')).toBeInTheDocument();
     expect(document.querySelector('.roster-print-surface')).toBeInTheDocument();
     expect(document.querySelector('.roster-print-table')).toBeInTheDocument();
-    expect(screen.getByText('Pay GBP')).toBeInTheDocument();
+    expect(screen.getByText('Pay GBP')).toHaveClass('roster-print-metric');
 
     const shiftCell = document.querySelector('.roster-shift-cell');
     expect(shiftCell).toBeInTheDocument();
     expect(shiftCell.className).toMatch(/bg-(blue|indigo|emerald|purple|gray|amber|red|pink|cyan|teal|orange)-/);
+  });
+
+  it('marks hours, wage, overtime, and WTR columns as screen-only for printing', async () => {
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Hrs')).toHaveClass('roster-print-metric');
+    expect(screen.getByText('Pay GBP')).toHaveClass('roster-print-metric');
+    expect(screen.getByText('OT')).toHaveClass('roster-print-metric');
+    expect(screen.getByText('WTR')).toHaveClass('roster-print-metric');
+    expect(document.querySelectorAll('td.roster-print-metric').length).toBeGreaterThan(0);
   });
 
   it('renders Export CSV button', async () => {

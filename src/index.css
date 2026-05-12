@@ -522,10 +522,8 @@ button, a, input, select, textarea {
     max-width: 18px !important;
   }
 
-  .roster-print-table th:nth-last-child(-n + 4),
-  .roster-print-table td:nth-last-child(-n + 4) {
-    width: 26px !important;
-    max-width: 26px !important;
+  .roster-print-table .roster-print-metric {
+    display: none !important;
   }
 
   .roster-print-table .truncate {
