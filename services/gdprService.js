@@ -289,7 +289,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       const staffName = staffRow?.name;
       const { rows: linkedUserRows } = staffName
         ? await conn.query(
-            `SELECT u.username
+            `SELECT u.id, u.username
                FROM users u
               WHERE (u.display_name = $1 OR u.username = $1)
                 AND EXISTS (
@@ -301,6 +301,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           )
         : { rows: [] };
       const linkedUsernames = linkedUserRows.map((row) => row.username);
+      const linkedUserIds = linkedUserRows.map((row) => row.id).filter((id) => id != null);
 
       const [
         staff, overrides, training, supervisions, appraisals,
@@ -311,10 +312,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
         hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
         hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes, hrCaseNotesOnCases,
-        onboarding, careCertificates, complaints, incidentAddenda,
+        onboarding, onboardingHistory, careCertificates, complaints, incidentAddenda,
         payrollYtd, hrMeetings, hrAttachments,
         trainingAttachments, onboardingAttachments,
-        payrollLineShifts, userAccount, userHomeRoles,
+        payrollLineShifts,
+        clockIns, overrideRequests, staffAuthCredentials, staffInviteTokens,
+        shiftHourAdjustments, requestIdempotencyRows, userNotificationReads,
+        reflectivePracticeRows, actionItemsRows, userAccount, userHomeRoles,
         // GDPR module own tables — the subject may be the requester or consent giver
         consentRecords, dataRequests, dpComplaints,
         // Operational/CQC tables matched by name (no staff FK)
@@ -408,6 +412,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
            )`, [homeId, subjectId, staffName || null]),
         // Onboarding data (DBS, RTW, references, etc.)
         () => conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM onboarding_history WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Care Certificate progress
         () => conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Complaints where staff is the complainant (pre-resolved name)
@@ -448,6 +453,69 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
            JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
            JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
            WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM clock_ins WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM override_requests WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(
+          `SELECT home_id, staff_id, username, last_login_at, failed_login_count, locked_until,
+                  session_version, created_at, updated_at
+             FROM staff_auth_credentials
+            WHERE home_id = $1 AND staff_id = $2`,
+          [homeId, subjectId],
+        ),
+        () => conn.query(
+          `SELECT home_id, staff_id, created_by, created_at, expires_at, consumed_at
+             FROM staff_invite_tokens
+            WHERE home_id = $1 AND staff_id = $2`,
+          [homeId, subjectId],
+        ),
+        () => conn.query(`SELECT * FROM shift_hour_adjustments WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(
+          `SELECT id, scope, idempotency_key, home_id, user_name, status,
+                  response_status, response_body, created_at, updated_at, expires_at
+             FROM request_idempotency
+            WHERE home_id = $1
+              AND (
+                user_name = $2
+                OR ($3::TEXT[] IS NOT NULL AND user_name = ANY($3))
+                OR response_body::text ILIKE '%' || $4 || '%'
+                OR ($5::TEXT IS NOT NULL AND response_body::text ILIKE '%' || $5 || '%')
+              )`,
+          [homeId, staffName || '', linkedUsernames.length > 0 ? linkedUsernames : null, String(subjectId), staffName || null],
+        ),
+        () => linkedUserIds.length > 0
+          ? conn.query(
+              `SELECT unr.*
+                 FROM user_notification_reads unr
+                WHERE unr.home_id = $1 AND unr.user_id = ANY($2::int[])`,
+              [homeId, linkedUserIds])
+          : { rows: [] },
+        () => conn.query(
+          `SELECT * FROM reflective_practice
+            WHERE home_id = $1
+              AND deleted_at IS NULL
+              AND (
+                staff_id = $2
+                OR ($3::TEXT IS NOT NULL AND facilitator = $3)
+              )`,
+          [homeId, subjectId, staffName || null],
+        ),
+        () => conn.query(
+          `SELECT * FROM action_items
+            WHERE home_id = $1
+              AND deleted_at IS NULL
+              AND (
+                source_id = $2
+                OR ($3::TEXT IS NOT NULL AND owner_name = $3)
+                OR ($4::int[] IS NOT NULL AND (
+                  owner_user_id = ANY($4)
+                  OR created_by = ANY($4)
+                  OR updated_by = ANY($4)
+                  OR completed_by = ANY($4)
+                  OR verified_by = ANY($4)
+                ))
+              )`,
+          [homeId, String(subjectId), staffName || null, linkedUserIds.length > 0 ? linkedUserIds : null],
+        ),
         // System user account (if staff member has a login)
         () => staffName
           ? conn.query(
@@ -573,6 +641,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           hr_rtw_dbs_renewals: hrRenewals.rows,
           hr_case_notes: dedupeById([...hrCaseNotes.rows, ...hrCaseNotesOnCases.rows]),
           onboarding: onboarding.rows,
+          onboarding_history: onboardingHistory.rows,
           care_certificates: careCertificates.rows,
           complaints: complaints.rows,
           incident_addenda: incidentAddenda.rows,
@@ -582,6 +651,15 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           training_file_attachments: trainingAttachments.rows,
           onboarding_file_attachments: onboardingAttachments.rows,
           payroll_line_shifts: payrollLineShifts.rows,
+          clock_ins: clockIns.rows,
+          override_requests: overrideRequests.rows,
+          staff_auth_credentials: staffAuthCredentials.rows,
+          staff_invite_tokens: staffInviteTokens.rows,
+          shift_hour_adjustments: shiftHourAdjustments.rows,
+          request_idempotency: requestIdempotencyRows.rows,
+          user_notification_reads: userNotificationReads.rows,
+          reflective_practice: reflectivePracticeRows.rows,
+          action_items: actionItemsRows.rows,
           user_account: userAccount.rows,
           user_home_roles: userHomeRoles.rows,
           // GDPR module own tables
@@ -1129,6 +1207,13 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
+    await client.query(
+      `UPDATE onboarding_history
+          SET data = jsonb_build_object('redacted', true),
+              changed_by = $2
+        WHERE home_id = $1 AND staff_id = $3`,
+      [homeId, anon, staffId]
+    );
     const { rows: onboardingAttachments } = await client.query(
       `SELECT id, stored_name, section
          FROM onboarding_file_attachments
@@ -1242,6 +1327,71 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     await client.query(
       `UPDATE shift_overrides SET reason = NULL WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE clock_ins
+          SET lat = NULL,
+              lng = NULL,
+              accuracy_m = NULL,
+              distance_m = NULL,
+              note = NULL,
+              approved_by = CASE WHEN approved_by = $3 THEN $2 ELSE approved_by END
+        WHERE home_id = $1 AND staff_id = $4`,
+      [homeId, anon, originalName || null, staffId]
+    );
+    await client.query(
+      `UPDATE override_requests
+          SET reason = NULL,
+              decision_note = NULL,
+              decided_by = CASE WHEN decided_by = $3 THEN $2 ELSE decided_by END
+        WHERE home_id = $1 AND staff_id = $4`,
+      [homeId, anon, originalName || null, staffId]
+    );
+    await client.query(
+      `UPDATE shift_hour_adjustments
+          SET note = NULL
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE staff_auth_credentials
+          SET username = CONCAT('redacted-staff-', home_id, '-', staff_id),
+              password_hash = '[REDACTED]',
+              failed_login_count = 0,
+              locked_until = '9999-12-31'::timestamptz,
+              session_version = session_version + 1,
+              updated_at = NOW()
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE staff_invite_tokens
+          SET consumed_at = COALESCE(consumed_at, NOW())
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE reflective_practice
+          SET facilitator = CASE WHEN facilitator = $3 THEN $2 ELSE facilitator END,
+              topic = '[REDACTED]',
+              reflection = NULL,
+              learning_outcome = NULL,
+              wellbeing_notes = NULL,
+              action_summary = NULL
+        WHERE home_id = $1
+          AND deleted_at IS NULL
+          AND (staff_id = $4 OR facilitator = $3)`,
+      [homeId, anon, originalName || null, staffId]
+    );
+    await client.query(
+      `UPDATE action_items
+          SET owner_name = CASE WHEN owner_name = $3 THEN $2 ELSE owner_name END,
+              description = NULL,
+              evidence_notes = NULL
+        WHERE home_id = $1
+          AND deleted_at IS NULL
+          AND (source_id = $4 OR owner_name = $3)`,
+      [homeId, anon, originalName || null, String(staffId)]
     );
 
     // Redact audit_log entries containing this staff member's name in details.

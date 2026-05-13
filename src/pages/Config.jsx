@@ -432,14 +432,14 @@ export default function Config() {
         </div>
         <div className="mt-4 space-y-2">
           <label className={`flex items-center gap-2 text-sm text-[var(--ink-2)] ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
-            <input type="checkbox" checked={!!config.enforce_onboarding_blocking}
+            <input type="checkbox" checked={config.enforce_onboarding_blocking !== false}
               onChange={e => handleChange('enforce_onboarding_blocking', e.target.checked)}
               disabled={!canEdit}
               className={`accent-blue-600 ${DISABLED_CHECK_CLASS}`} />
             Warn when rostering staff with incomplete onboarding (DBS, RTW, references, identity)
           </label>
           <label className={`flex items-center gap-2 text-sm text-[var(--ink-2)] ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
-            <input type="checkbox" checked={!!config.enforce_training_blocking}
+            <input type="checkbox" checked={config.enforce_training_blocking !== false}
               onChange={e => handleChange('enforce_training_blocking', e.target.checked)}
               disabled={!canEdit}
               className={`accent-blue-600 ${DISABLED_CHECK_CLASS}`} />

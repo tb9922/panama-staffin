@@ -18,7 +18,7 @@ export function countLateCoverage(staffForDay) {
 }
 
 export function countNightCoverage(staffForDay) {
-  return staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift)).length;
+  return staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift) && !s.sleep_in).length;
 }
 
 // Skill points for a shift period
@@ -35,16 +35,27 @@ export function calculateCoverage(staffForDay, period, config) {
   } else if (period === 'late') {
     relevantStaff = staffForDay.filter(s => isCareRole(s.role) && isLateShift(s.shift));
   } else {
-    relevantStaff = staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift));
+    relevantStaff = staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift) && !s.sleep_in);
   }
 
   const headCount = relevantStaff.length;
   const skillPoints = calcSkillPoints(relevantStaff);
   const headGap = Math.max(0, mins.heads - headCount);
   const skillGap = Math.max(0, mins.skill_points - skillPoints);
+  const loneWorking = headCount === 1;
   const isCovered = headGap === 0 && skillGap <= 0;
 
-  return { headCount, skillPoints, headGap, skillGap, isCovered, required: mins, staff: relevantStaff };
+  return {
+    headCount,
+    skillPoints,
+    headGap,
+    skillGap,
+    loneWorking,
+    loneWorkingWarning: loneWorking ? 'Lone working: one waking staff member rostered; confirm risk assessment and escalation support' : null,
+    isCovered,
+    required: mins,
+    staff: relevantStaff,
+  };
 }
 
 // 6-level escalation matching Excel
@@ -59,6 +70,9 @@ export function getEscalationLevel(coverage, staffForDay) {
   const hasOT = staffForDay.some(s => isOTShift(s.shift));
   const hasFloat = staffForDay.some(s => s.team === 'Float' && isWorkingShift(s.shift));
 
+  if (coverage.loneWorking) {
+    return { level: 4, status: 'LVL4 Lone Working', color: 'red', label: 'Lone Working' };
+  }
   if (coverage.isCovered && !hasAgency && !hasOT && !hasFloat) {
     return { level: 0, status: 'LVL0 Normal', color: 'green', label: 'Covered' };
   }
@@ -104,6 +118,7 @@ export function getDayCoverageStatus(staffForDay, config) {
         headCount: Math.min(earlyCov.headCount, lateCov.headCount),
         skillPoints: Math.min(earlyCov.skillPoints, lateCov.skillPoints),
         isCovered: earlyCov.isCovered && lateCov.isCovered,
+        loneWorking: earlyCov.loneWorking || lateCov.loneWorking,
         required: earlyCov.required,
       },
       escalation: earlyEsc.level >= lateEsc.level ? earlyEsc : lateEsc,

@@ -95,6 +95,32 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
     const filesToUnlink = [];
     const years = parseInt(retentionYears, 10);
 
+    // DBS Code of Practice: certificate numbers should not be retained beyond
+    // the decision period. Keep the check outcome/dates, purge the identifier.
+    if (dryRun) {
+      const { rows } = await client.query(
+        `SELECT COUNT(*) FROM hr_rtw_dbs_renewals
+          WHERE home_id = $1
+            AND check_type = 'dbs'
+            AND dbs_certificate_number IS NOT NULL
+            AND COALESCE(dbs_check_date, updated_at::date, created_at::date) < CURRENT_DATE - INTERVAL '6 months'`,
+        [homeId],
+      );
+      counts.dbs_certificate_numbers = parseInt(rows[0].count, 10);
+    } else {
+      const { rowCount } = await client.query(
+        `UPDATE hr_rtw_dbs_renewals
+            SET dbs_certificate_number = NULL,
+                updated_at = NOW()
+          WHERE home_id = $1
+            AND check_type = 'dbs'
+            AND dbs_certificate_number IS NOT NULL
+            AND COALESCE(dbs_check_date, updated_at::date, created_at::date) < CURRENT_DATE - INTERVAL '6 months'`,
+        [homeId],
+      );
+      counts.dbs_certificate_numbers = rowCount;
+    }
+
     // 1. Purge child rows that were individually soft-deleted past retention.
     const childTables = ['hr_case_notes', 'hr_file_attachments', 'hr_investigation_meetings'];
     for (const child of childTables) {

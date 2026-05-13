@@ -145,7 +145,7 @@ const WORKING_SHIFTS_FOR_TRAINING_CHECK = new Set([
 const TRAINING_BLOCKING_CARE_ROLES = new Set([
   'Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer',
 ]);
-const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
+const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguarding-adults', 'oliver-mcgowan'];
 
 function getTodayStr() {
   return todayLocalISO();
@@ -180,6 +180,10 @@ function canReadCostConfig(req) {
     || ['admin', 'home_manager', 'deputy_manager', 'finance_officer'].includes(req.homeRole);
 }
 
+function configFlagEnabled(config, key) {
+  return config?.[key] !== false;
+}
+
 function buildSchedulingConfigOut(config, { ownDataOnly = false, costConfigAllowed = true } = {}) {
   const baseConfig = { ...(config || {}) };
   const editLockEnabled = Boolean(baseConfig.edit_lock_pin);
@@ -205,7 +209,7 @@ function buildSchedulingConfigOut(config, { ownDataOnly = false, costConfigAllow
  * Only fires for care staff roles and working shifts. Does NOT block the save itself —
  * the caller decides whether to 400 (enforce_training_blocking) or 200+warnings.
  *
- * Uses one DB query: joins staff + training_records for the 3 blocking types.
+ * Uses one DB query: joins staff + training_records for the blocking types.
  */
 async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, effectiveDate, client) {
   if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(shift)) return null;
@@ -456,6 +460,49 @@ async function checkWTRBlockingForOverride(homeId, staffId, shift, config, effec
   return null;
 }
 
+async function checkOnboardingBlockingForOverride(homeId, staffId, shift, effectiveDate, client) {
+  if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(shift)) return null;
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT s.role, s.name, o.data
+       FROM staff s
+       LEFT JOIN onboarding o
+         ON o.home_id = s.home_id
+        AND o.staff_id = s.id
+        AND o.deleted_at IS NULL
+      WHERE s.home_id = $1
+        AND s.id = $2
+        AND s.deleted_at IS NULL
+      LIMIT 1`,
+    [homeId, staffId],
+  );
+  if (!rows.length) return null;
+  const { role, name, data } = rows[0];
+  if (!TRAINING_BLOCKING_CARE_ROLES.has(role)) return null;
+
+  const record = data || {};
+  const blockers = [];
+  const dbs = record.dbs_check;
+  const rtw = record.right_to_work;
+  const identity = record.identity_check;
+  const references = record.references;
+  const effectiveDateStr = effectiveDate || getTodayStr();
+
+  if (!dbs || dbs.status !== 'completed') blockers.push('DBS check incomplete');
+  if (!rtw || rtw.status !== 'completed') {
+    blockers.push('Right to Work incomplete');
+  } else {
+    const rtwExpiry = rtw.expiry || rtw.expiry_date;
+    if (rtwExpiry && rtwExpiry < effectiveDateStr) blockers.push('Right to Work expired');
+  }
+  if (!identity || identity.status !== 'completed') blockers.push('identity check incomplete');
+  if (!references || references.status !== 'completed') blockers.push('references incomplete');
+
+  return blockers.length
+    ? `${name}: onboarding blocks roster assignment - ${blockers.join(', ')}`
+    : null;
+}
+
 // GET /api/scheduling?home=X — full scheduling bundle
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
@@ -575,6 +622,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     }
 
     let trainingWarning = null;
+    let onboardingWarning = null;
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
       await withTransaction(async (client) => {
@@ -606,8 +654,14 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
           err.isWTRBlock = true;
           throw err;
         }
+        onboardingWarning = await checkOnboardingBlockingForOverride(req.home.id, staffId, shift, date, client);
+        if (onboardingWarning && configFlagEnabled(req.home.config, 'enforce_onboarding_blocking')) {
+          const err = new Error(onboardingWarning);
+          err.isOnboardingBlock = true;
+          throw err;
+        }
         trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client);
-        if (trainingWarning && req.home.config?.enforce_training_blocking) {
+        if (trainingWarning && configFlagEnabled(req.home.config, 'enforce_training_blocking')) {
           const err = new Error(trainingWarning);
           err.isTrainingBlock = true;
           throw err;
@@ -622,9 +676,11 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
       });
     }
     dispatchEvent(req.home.id, 'override.created', { date, staffId, shift });
-    res.json(trainingWarning ? { ok: true, warnings: [trainingWarning] } : { ok: true });
+    const warnings = [onboardingWarning, trainingWarning].filter(Boolean);
+    res.json(warnings.length ? { ok: true, warnings } : { ok: true });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
+    if (err.isOnboardingBlock) return res.status(400).json({ error: err.message });
     if (err.isTrainingBlock) return res.status(400).json({ error: err.message });
     if (err.isWTRBlock) return res.status(400).json({ error: err.message });
     next(err);
@@ -698,6 +754,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
     // Validate + upsert in a single transaction (atomicity, batch-aware AL counts, training TOCTOU fix)
     const overrides = parsed.data.overrides;
     const trainingWarnings = [];
+    const onboardingWarnings = [];
     await withTransaction(async (client) => {
       // WTR-blocking check inside transaction — same as single-upsert path.
       // Blocks overtime that would breach the 48h/week WTR limit for non-opted-out staff.
@@ -725,9 +782,18 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       // Training-blocking check inside transaction (prevents TOCTOU between check and write)
       for (const o of overrides) {
         if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(o.shift)) continue;
+        const onboardingBlock = await checkOnboardingBlockingForOverride(req.home.id, o.staffId, o.shift, o.date, client);
+        if (onboardingBlock) {
+          if (configFlagEnabled(req.home.config, 'enforce_onboarding_blocking')) {
+            const err = new Error(onboardingBlock);
+            err.isOnboardingBlock = true;
+            throw err;
+          }
+          if (!onboardingWarnings.includes(onboardingBlock)) onboardingWarnings.push(onboardingBlock);
+        }
         const w = await checkTrainingBlockingForOverride(req.home.id, o.staffId, o.shift, req.home.config, o.date, client);
         if (w) {
-          if (req.home.config?.enforce_training_blocking) {
+          if (configFlagEnabled(req.home.config, 'enforce_training_blocking')) {
             const err = new Error(w);
             err.isTrainingBlock = true;
             throw err;
@@ -776,10 +842,11 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
     res.json({
       ok: true,
       count: parsed.data.overrides.length,
-      ...(trainingWarnings.length > 0 && { warnings: trainingWarnings }),
+      ...((onboardingWarnings.length + trainingWarnings.length) > 0 && { warnings: [...onboardingWarnings, ...trainingWarnings] }),
     });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
+    if (err.isOnboardingBlock) return res.status(400).json({ error: err.message });
     if (err.isTrainingBlock) return res.status(400).json({ error: err.message });
     if (err.isWTRBlock) return res.status(400).json({ error: err.message });
     next(err);

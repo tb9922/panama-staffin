@@ -396,7 +396,7 @@ export function getFireDrillAlerts(fireDrills, asOfDate) {
 
 // ── Roster Blocking — Critical Training ─────────────────────────────────────
 
-export const BLOCKING_TRAINING_TYPES = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
+export const BLOCKING_TRAINING_TYPES = ['fire-safety', 'moving-handling', 'safeguarding-adults', 'oliver-mcgowan'];
 
 /**
  * Get blocking reasons for a staff member — if non-empty, they have expired or missing critical training.

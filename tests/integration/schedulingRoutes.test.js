@@ -59,6 +59,7 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
   await pool.query(`DELETE FROM day_notes WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
+  await pool.query(`DELETE FROM onboarding WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]);
   await pool.query(`DELETE FROM users WHERE username LIKE $1`, [`${PREFIX}-%`]);
   await pool.query(`DELETE FROM homes WHERE slug = $1`, [`${PREFIX}-home`]);
@@ -74,6 +75,16 @@ beforeAll(async () => {
     `INSERT INTO staff (home_id, id, name, role, team, skill, hourly_rate, active, date_of_birth, ni_number)
      VALUES ($1, 'sched-route-s1', 'Route Test Carer', 'Carer', 'Day A', 1, 14.50, true, '1980-01-01', 'QQ123456C')`,
     [homeId],
+  );
+  await pool.query(
+    `INSERT INTO onboarding (home_id, staff_id, data)
+     VALUES ($1, 'sched-route-s1', $2::jsonb)`,
+    [homeId, JSON.stringify({
+      dbs_check: { status: 'completed' },
+      right_to_work: { status: 'completed', expiry: '2099-12-31' },
+      identity_check: { status: 'completed' },
+      references: { status: 'completed' },
+    })],
   );
 
   const passwordHash = await bcrypt.hash(PASSWORD, 4);
@@ -133,6 +144,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM audit_log WHERE home_slug = $1`, [homeSlug]).catch(() => {});
   await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]).catch(() => {});
+  await pool.query(`DELETE FROM onboarding WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE $1`, [`${PREFIX}-%`]).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE id = $1`, [homeId]).catch(() => {});
@@ -340,6 +352,35 @@ describe('scheduling route hardening', () => {
     const coordinatorDecision = await coordinatorRequest('post', `/api/staff/override-requests/${requestRow.id}/decision?home=${homeSlug}`)
       .send({ status: 'approved', decisionNote: 'not allowed', expectedVersion: requestRow.version });
     expect(coordinatorDecision.status).toBe(403);
+  });
+
+  it('blocks care shifts when onboarding evidence is missing by default', async () => {
+    const shiftDate = utcDateOffset(18);
+    const { rows: existing } = await pool.query(
+      `SELECT data FROM onboarding WHERE home_id = $1 AND staff_id = 'sched-route-s1'`,
+      [homeId],
+    );
+    try {
+      await pool.query(
+        `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = 'sched-route-s1'`,
+        [homeId],
+      );
+      const res = await authRequest('put', `/api/scheduling/overrides?home=${homeSlug}`)
+        .send({ date: shiftDate, staffId: 'sched-route-s1', shift: 'E' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/onboarding blocks roster assignment/i);
+    } finally {
+      if (existing[0]?.data) {
+        await pool.query(
+          `INSERT INTO onboarding (home_id, staff_id, data)
+           VALUES ($1, 'sched-route-s1', $2::jsonb)
+           ON CONFLICT (home_id, staff_id)
+           DO UPDATE SET data = EXCLUDED.data`,
+          [homeId, JSON.stringify(existing[0].data)],
+        );
+      }
+    }
   });
 
   it('allows OC cover links and rejects stale cover links on non-OC shifts', async () => {

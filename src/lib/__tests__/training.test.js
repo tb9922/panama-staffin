@@ -76,8 +76,8 @@ describe('Constants', () => {
     expect(keys).toContain('dementia-awareness');
   });
 
-  it('BLOCKING_TRAINING_TYPES are fire-safety, moving-handling, safeguarding-adults', () => {
-    expect(BLOCKING_TRAINING_TYPES).toEqual(['fire-safety', 'moving-handling', 'safeguarding-adults']);
+  it('BLOCKING_TRAINING_TYPES include statutory clinical roster blockers', () => {
+    expect(BLOCKING_TRAINING_TYPES).toEqual(['fire-safety', 'moving-handling', 'safeguarding-adults', 'oliver-mcgowan']);
   });
 
   it('FIRE_DRILL_FREQUENCY_DAYS is 91 (quarterly)', () => {

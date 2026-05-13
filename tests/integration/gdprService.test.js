@@ -218,6 +218,11 @@ beforeAll(async () => {
     [homeA, STAFF[0], JSON.stringify({ dbs_check: { status: 'clear', date: '2025-01-01' } })]
   );
   await pool.query(
+    `INSERT INTO onboarding_history (home_id, staff_id, section, data, changed_by, change_type)
+     VALUES ($1, $2, 'dbs_check', $3, $4, 'update')`,
+    [homeA, STAFF[0], JSON.stringify({ dbs_certificate_number: 'DBS-HISTORY-123' }), STAFF_NAMES[0]]
+  );
+  await pool.query(
     `INSERT INTO onboarding_file_attachments
        (home_id, staff_id, section, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
      VALUES ($1, $2, 'contract', 'contract.pdf', 'gdpr-onboarding-doc.pdf', 'application/pdf', 22, 'Signed contract', 'test-runner')`,
@@ -348,6 +353,15 @@ async function cleanHome(hid) {
     { sql: `DELETE FROM hr_edi_records WHERE home_id = $1` },
     { sql: `DELETE FROM hr_tupe_transfers WHERE home_id = $1` },
     { sql: `DELETE FROM hr_rtw_dbs_renewals WHERE home_id = $1` },
+    { sql: `DELETE FROM request_idempotency WHERE home_id = $1` },
+    { sql: `DELETE FROM user_notification_reads WHERE home_id = $1` },
+    { sql: `DELETE FROM action_items WHERE home_id = $1` },
+    { sql: `DELETE FROM reflective_practice WHERE home_id = $1` },
+    { sql: `DELETE FROM shift_hour_adjustments WHERE home_id = $1` },
+    { sql: `DELETE FROM clock_ins WHERE home_id = $1` },
+    { sql: `DELETE FROM override_requests WHERE home_id = $1` },
+    { sql: `DELETE FROM staff_invite_tokens WHERE home_id = $1` },
+    { sql: `DELETE FROM staff_auth_credentials WHERE home_id = $1` },
     { sql: `DELETE FROM incident_addenda WHERE home_id = $1` },
     { sql: `DELETE FROM incidents WHERE home_id = $1` },
     { sql: `DELETE FROM complaints WHERE home_id = $1` },
@@ -356,6 +370,7 @@ async function cleanHome(hid) {
     { sql: `DELETE FROM supervisions WHERE home_id = $1` },
     { sql: `DELETE FROM appraisals WHERE home_id = $1` },
     { sql: `DELETE FROM pension_enrolments WHERE home_id = $1` },
+    { sql: `DELETE FROM onboarding_history WHERE home_id = $1` },
     { sql: `DELETE FROM onboarding WHERE home_id = $1` },
     { sql: `DELETE FROM care_certificates WHERE home_id = $1` },
     { sql: `DELETE FROM dols WHERE home_id = $1` },
@@ -742,11 +757,29 @@ describe('gatherPersonalData: staff', () => {
     expect(result.data.complaints[0].raised_by_name).toBe(STAFF_NAMES[0]);
   });
 
-  it('includes onboarding and care certificates', () => {
+  it('includes onboarding history and care certificates', () => {
     expect(result.data.onboarding.length).toBeGreaterThanOrEqual(1);
+    expect(result.data.onboarding_history.length).toBeGreaterThanOrEqual(1);
+    expect(result.data.onboarding_history[0].data.dbs_certificate_number).toBe('DBS-HISTORY-123');
 
     expect(result.data.care_certificates.length).toBeGreaterThanOrEqual(1);
     expect(result.data.care_certificates[0].supervisor).toBe('Jane CC Supervisor');
+  });
+
+  it('includes newer staff operational tables in the SAR output', () => {
+    for (const key of [
+      'clock_ins',
+      'override_requests',
+      'staff_auth_credentials',
+      'staff_invite_tokens',
+      'shift_hour_adjustments',
+      'request_idempotency',
+      'user_notification_reads',
+      'reflective_practice',
+      'action_items',
+    ]) {
+      expect(result.data).toHaveProperty(key);
+    }
   });
 });
 
@@ -1034,6 +1067,14 @@ describe('executeErasure', () => {
     expect(Object.values(ob[0].data || {})).toEqual(
       expect.arrayContaining([expect.objectContaining({ redacted: true })])
     );
+
+    const { rows: obHistory } = await pool.query(
+      `SELECT data, changed_by FROM onboarding_history WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(obHistory.length).toBeGreaterThanOrEqual(1);
+    expect(obHistory[0].data).toEqual({ redacted: true });
+    expect(obHistory[0].changed_by).toBe('[REDACTED-gdpr]');
 
     // Care certificate — supervisor anonymised, standards cleared
     const { rows: cc } = await pool.query(

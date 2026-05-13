@@ -701,9 +701,9 @@ export default function RotationGrid() {
                   <td className="sticky left-0 z-10 border-r border-[var(--line)] bg-[var(--paper)] px-3 py-1.5 font-medium">
                     {(() => {
                       const blockReasons = [];
-                      if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role))
+                      if (schedData.config.enforce_onboarding_blocking !== false && isCareRole(s.role))
                         blockReasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding));
-                      if (schedData.config.enforce_training_blocking && isCareRole(s.role))
+                      if (schedData.config.enforce_training_blocking !== false && isCareRole(s.role))
                         blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, formatDate(monthDates[monthDates.length - 1] || new Date())));
                       return (
                         <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})${blockReasons.length > 0 ? '\n! ' + blockReasons.join(', ') : ''}`}>

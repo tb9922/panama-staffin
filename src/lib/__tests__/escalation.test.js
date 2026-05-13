@@ -83,6 +83,26 @@ describe('calculateCoverage', () => {
     expect(nightCov.isCovered).toBe(true);
   });
 
+  it('does not count sleep-ins as waking night coverage', () => {
+    const staff = [
+      { ...makeCarer('S1', 'N', 1, 'Night A', 'Night Carer'), sleep_in: true },
+      { ...makeCarer('S2', 'N', 1, 'Night A', 'Night Carer'), sleep_in: true },
+    ];
+    const nightCov = calculateCoverage(staff, 'night', config);
+    expect(nightCov.headCount).toBe(0);
+    expect(nightCov.isCovered).toBe(false);
+  });
+
+  it('flags lone working as a coverage risk', () => {
+    const nightCov = calculateCoverage([makeCarer('S1', 'N', 1, 'Night A', 'Night Carer')], 'night', {
+      ...config,
+      minimum_staffing: { ...config.minimum_staffing, night: { heads: 1, skill_points: 1 } },
+    });
+    expect(nightCov.isCovered).toBe(true);
+    expect(nightCov.loneWorking).toBe(true);
+    expect(nightCov.loneWorkingWarning).toContain('Lone working');
+  });
+
   it('does not count early staff toward night coverage', () => {
     const staff = [makeCarer('S1', 'E'), makeCarer('S2', 'E')];
     const nightCov = calculateCoverage(staff, 'night', config);

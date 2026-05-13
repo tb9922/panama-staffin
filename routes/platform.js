@@ -53,6 +53,8 @@ function buildDefaultConfig(name, beds, careType, cycleStartDate) {
     nlw_rate: 12.21,
     nmw_rate_18_20: 10.00,
     nmw_rate_under_18: 7.55,
+    enforce_onboarding_blocking: true,
+    enforce_training_blocking: true,
   };
 }
 

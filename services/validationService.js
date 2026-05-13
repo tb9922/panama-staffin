@@ -121,7 +121,7 @@ function validateOnboarding(data, warnings, todayStr) {
   if (dbsMissing > 0) warnings.push(`Onboarding: ${dbsMissing} active care staff without completed DBS check`);
   if (onboardingIncomplete > 0) warnings.push(`Onboarding: ${onboardingIncomplete} active care staff with incomplete onboarding`);
 
-  if (data.config.enforce_onboarding_blocking && data.overrides) {
+  if (data.config.enforce_onboarding_blocking !== false && data.overrides) {
     let blockedCount = 0;
     for (const dayOverrides of Object.values(data.overrides)) {
       for (const [staffId, override] of Object.entries(dayOverrides)) {
@@ -138,7 +138,7 @@ function validateOnboarding(data, warnings, todayStr) {
     if (blockedCount > 0) warnings.push(`Roster blocking: ${blockedCount} shift(s) assigned to staff with incomplete onboarding`);
   }
 
-  if (data.config.enforce_training_blocking && data.overrides && data.training) {
+  if (data.config.enforce_training_blocking !== false && data.overrides && data.training) {
     let blockedTraining = 0;
     for (const dayOverrides of Object.values(data.overrides)) {
       for (const [staffId, override] of Object.entries(dayOverrides)) {

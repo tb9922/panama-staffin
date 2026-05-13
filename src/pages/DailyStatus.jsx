@@ -537,10 +537,10 @@ export default function DailyStatus() {
   const getBlockingReasons = (s) => {
     if (!schedData) return [];
     const reasons = [];
-    if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role)) {
+    if (schedData.config.enforce_onboarding_blocking !== false && isCareRole(s.role)) {
       reasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding));
     }
-    if (schedData.config.enforce_training_blocking && isCareRole(s.role)) {
+    if (schedData.config.enforce_training_blocking !== false && isCareRole(s.role)) {
       reasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, dateStr));
     }
     return reasons;

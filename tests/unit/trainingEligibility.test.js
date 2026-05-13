@@ -15,6 +15,7 @@ describe('internal bank training eligibility', () => {
     expect(result.status).toBe('blocked');
     expect(result.blockers).toEqual(expect.arrayContaining([
       'Training expired or missing: Safeguarding Adults',
+      'Training expired or missing: Learning Disability & Autism (Oliver McGowan)',
       'Training expired or missing: Medication Awareness',
     ]));
   });
@@ -27,6 +28,7 @@ describe('internal bank training eligibility', () => {
         ['fire-safety', '2027-01-01'],
         ['moving-handling', '2027-01-01'],
         ['safeguarding-adults', '2027-01-01'],
+        ['oliver-mcgowan', '2027-01-01'],
         ['medication-awareness', '2027-01-01'],
       ]),
     });
