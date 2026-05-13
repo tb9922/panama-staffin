@@ -15,6 +15,7 @@ import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js'
 import { validateIncidentStatusChange } from '../lib/statusTransitions.js';
 import { isLegacyActionFreezeEnabled, rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
 import { getCqcNotificationDeadline } from '../shared/incidents.js';
+import { idempotency } from '../middleware/idempotency.js';
 
 const router = Router();
 const sensitiveComplianceWrite = [
@@ -193,7 +194,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/incidents?home=X
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, idempotency('incident:create'), async (req, res, next) => {
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -299,7 +300,7 @@ router.get('/:id/addenda', readRateLimiter, requireAuth, requireHomeAccess, requ
 });
 
 // POST /api/incidents/:id/addenda?home=X
-router.post('/:id/addenda', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
+router.post('/:id/addenda', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, idempotency('incident:addendum'), async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });

@@ -44,6 +44,7 @@ import { nullableDateInput, requiredDateInput } from '../lib/zodHelpers.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
 import { calculateAccrual } from '../src/lib/accrual.js';
 import { getActualShift, getLeaveYear, getShiftHours, isWorkingShift } from '../shared/rotation.js';
+import { idempotency } from '../middleware/idempotency.js';
 
 const router = Router();
 const SENSITIVE_DOWNLOAD_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
@@ -701,7 +702,7 @@ router.get('/runs', readRateLimiter, requireAuth, requireHomeAccess, requireModu
 });
 
 // POST /api/payroll/runs?home=X — create draft run
-router.post('/runs', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+router.post('/runs', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), idempotency('payroll-run:create'), async (req, res, next) => {
   try {
     const parsed = runBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -961,7 +962,7 @@ router.get('/agency/shifts', readRateLimiter, requireAuth, requireHomeAccess, re
 });
 
 // POST /api/payroll/agency/shifts?home=X
-router.post('/agency/shifts', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+router.post('/agency/shifts', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), idempotency('agency-shift:create'), async (req, res, next) => {
   try {
     const parsed = agencyShiftBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -1175,7 +1176,7 @@ router.get('/pensions', readRateLimiter, requireAuth, requireHomeAccess, require
 });
 
 // POST /api/payroll/pensions?home=X
-router.post('/pensions', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+router.post('/pensions', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), idempotency('pension-enrolment:upsert'), async (req, res, next) => {
   try {
     const parsed = enrolmentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

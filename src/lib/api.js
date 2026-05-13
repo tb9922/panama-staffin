@@ -70,6 +70,9 @@ export async function apiFetch(url, options = {}) {
   };
   if (!res.ok) {
     const body = await parseBody().catch(() => null);
+    if (res.status === 403 && /csrf/i.test(typeof body === 'string' ? body : body?.error || '')) {
+      expireClientSession();
+    }
     const err = new Error(typeof body === 'string' && body.trim() ? body : body?.error || `Request failed (${res.status})`);
     err.status = res.status;
     throw err;

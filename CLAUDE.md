@@ -115,7 +115,7 @@ Latest platform baseline note:
 81. ~~CQC rating scale uses non-CQC terms~~ — FIXED: Outstanding/Good/Requires Improvement/Inadequate
 82. ~~5 CQC metrics invisible (not wired to any QS)~~ — FIXED: wired to correct statements
 83. ~~CQCEvidence.jsx never loads onboarding data~~ — FIXED: DBS/onboarding evidence now populated
-84. ~~CQC "immediate" notification = 24h~~ — FIXED: "without_delay" = 4h per Reg 18
+84. ~~CQC "immediate" notification = 24h~~ — FIXED: "without_delay" = 24h default unless a record/type carries an explicit shorter operational window
 85. ~~Missing CQC notification type~~ — FIXED: added unauthorised absence (Reg 18(2)(g))
 86. ~~GDPR breach risk false negatives~~ — FIXED: NI/financial/address elevated, vulnerable adults factored
 87. ~~GDPR retention schedule table name mismatches~~ — FIXED: ssp_periods/training + migration 112

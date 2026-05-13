@@ -1,0 +1,29 @@
+groups:
+  - name: panama-production
+    rules:
+      - alert: PanamaReadinessDown
+        expr: up{job="panama"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Panama readiness probe is down"
+          description: "The Panama app has not answered the external scrape for 2 minutes."
+
+      - alert: PanamaDbPoolWaiting
+        expr: panama_db_pool_waiting > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Panama DB pool has waiting clients"
+          description: "Requests are waiting for Postgres connections; check portfolio/dashboard fan-out and DB health."
+
+      - alert: PanamaWebhookQueueGrowing
+        expr: panama_webhook_retry_queue_size > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Panama webhook retry queue is not draining"
+          description: "Webhook retries have been pending for more than 15 minutes."

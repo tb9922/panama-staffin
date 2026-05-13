@@ -25,6 +25,7 @@ async function cleanup() {
     await pool.query(`DELETE FROM audit_tasks WHERE home_id = $1`, [homeId]).catch(() => {});
     await pool.query(`DELETE FROM outcome_metrics WHERE home_id = $1`, [homeId]).catch(() => {});
     await pool.query(`DELETE FROM reflective_practice WHERE home_id = $1`, [homeId]).catch(() => {});
+    await pool.query(`DELETE FROM request_idempotency WHERE home_id = $1`, [homeId]).catch(() => {});
     await pool.query(`DELETE FROM audit_log WHERE home_slug LIKE $1`, [`${PREFIX}-%`]).catch(() => {});
   }
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE $1`, [`${PREFIX}-%`]).catch(() => {});
@@ -88,6 +89,40 @@ function qaAuthed(method, path) {
 }
 
 describe('V1 operating-system API foundations', () => {
+  it('replays duplicate Idempotency-Key incident creates without duplicating records', async () => {
+    const key = 'incident-create-same-network-retry';
+    const payload = {
+      date: '2026-05-01',
+      type: 'fall',
+      severity: 'moderate',
+      description: 'Resident slipped near the lounge doorway',
+      cqc_notifiable: false,
+      riddor_reportable: false,
+    };
+
+    const first = await authed('post', `/api/incidents?home=${HOME_A}`)
+      .set('Idempotency-Key', key)
+      .send(payload)
+      .expect(201);
+    const second = await authed('post', `/api/incidents?home=${HOME_A}`)
+      .set('Idempotency-Key', key)
+      .send(payload)
+      .expect(201);
+
+    expect(second.headers['idempotent-replay']).toBe('true');
+    expect(second.body.id).toBe(first.body.id);
+    const { rows: [count] } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM incidents
+        WHERE home_id = $1
+          AND type = 'fall'
+          AND description = $2
+          AND deleted_at IS NULL`,
+      [homeAId, payload.description],
+    );
+    expect(count.count).toBe(1);
+  });
+
   it('creates, lists and completes audit calendar tasks with tenant isolation', async () => {
     void homeBId;
     const created = await authed('post', `/api/audit-tasks?home=${HOME_A}`)

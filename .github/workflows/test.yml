@@ -209,6 +209,21 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
+      - name: Run fast master release gate
+        run: npm run test:master:fast
+        env:
+          CI: true
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$eZneW/Dpc9DPfyKDaj2TMea7V4.0PK9EmMYXZ/35m5JkIBKKdZd/m
+          VIEWER_PASSWORD_HASH: $2b$12$Fqm4wyinj2K9eafKdNoP.OBwyUl14dGqkOWK.XzqW/2JcuF8qmqs6
+          ALLOWED_ORIGIN: http://localhost:5173
+
       - name: Run E2E tests
         run: npm run test:e2e
         env:
@@ -315,7 +330,7 @@ jobs:
               exit 1
             fi
             bash ./scripts/backup-db.sh
-            PRE_MIGRATION_BACKUP=$(ls -t backups/db/panama_*.sql.gz | head -1)
+            PRE_MIGRATION_BACKUP=$(ls -t backups/db/panama_*.sql.gz.gpg backups/db/panama_*.sql.gz 2>/dev/null | head -1)
             if [ -z "$PRE_MIGRATION_BACKUP" ]; then
               echo "Could not locate pre-migration backup"
               exit 1

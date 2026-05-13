@@ -90,14 +90,48 @@ export function DataProvider({ children }) {
     return scanIntakeTargets.includes(targetId);
   }, [scanIntakeEnabled, scanIntakeTargets]);
 
+  const value = useMemo(() => ({
+    loading,
+    error,
+    homes,
+    activeHome,
+    switchHome,
+    refreshHomes,
+    setError,
+    clearError,
+    homeRole,
+    staffId,
+    isPlatformAdmin,
+    canRead,
+    canWrite,
+    activeHomeObj,
+    scanIntakeEnabled,
+    scanIntakeTargets,
+    isScanTargetEnabled,
+    staffPortalEnabled,
+  }), [
+    loading,
+    error,
+    homes,
+    activeHome,
+    switchHome,
+    refreshHomes,
+    setError,
+    clearError,
+    homeRole,
+    staffId,
+    isPlatformAdmin,
+    canRead,
+    canWrite,
+    activeHomeObj,
+    scanIntakeEnabled,
+    scanIntakeTargets,
+    isScanTargetEnabled,
+    staffPortalEnabled,
+  ]);
+
   return (
-    <DataCtx.Provider value={{
-      loading, error, homes, activeHome,
-      switchHome, refreshHomes, setError, clearError,
-      homeRole, staffId, isPlatformAdmin, canRead, canWrite,
-      activeHomeObj, scanIntakeEnabled, scanIntakeTargets, isScanTargetEnabled,
-      staffPortalEnabled,
-    }}>
+    <DataCtx.Provider value={value}>
       {children}
     </DataCtx.Provider>
   );

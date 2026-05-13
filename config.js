@@ -86,6 +86,8 @@ export const config = {
   trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || 'info',
   metricsToken: process.env.METRICS_TOKEN || null,
+  healthcheckPingUrl: process.env.HEALTHCHECK_URL || process.env.HEALTHCHECKS_PING_URL || null,
+  healthcheckPingIntervalMs: parseIntEnv(process.env.HEALTHCHECK_PING_INTERVAL_MS, 60_000),
   enableWebhookRetryWorker: process.env.ENABLE_WEBHOOK_RETRY_WORKER === '1' || process.env.ENABLE_WEBHOOK_RETRY_WORKER === 'true',
 
   // Authentication

@@ -20,10 +20,25 @@ import {
 } from '../shared/rotation.js';
 
 const CACHE_TTL_MS = 60_000;
+const PORTFOLIO_HOME_CONCURRENCY = 3;
 const cache = new Map();
 
 function cacheKey(username, isPlatformAdmin) {
   return `${isPlatformAdmin ? 'platform' : 'user'}:${String(username).toLowerCase()}`;
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export function clearPortfolioCache() {
@@ -960,7 +975,7 @@ export async function getPortfolioKpisForUser({ username, isPlatformAdmin = fals
     getAgencyByHome(homeIds),
   ]);
 
-  const rows = await Promise.all(homes.map(async (home) => {
+  const rows = await mapWithConcurrency(homes, PORTFOLIO_HOME_CONCURRENCY, async (home) => {
     const canReadHrEvidence = home.role_id === 'platform_admin'
       || hasModuleAccess(home.role_id, 'hr', 'read', { includeOwn: false });
     const cqcReadinessOptions = canReadHrEvidence
@@ -991,7 +1006,7 @@ export async function getPortfolioKpisForUser({ username, isPlatformAdmin = fals
       outcomes,
       staffing,
     );
-  }));
+  });
 
   const value = {
     generated_at: new Date().toISOString(),

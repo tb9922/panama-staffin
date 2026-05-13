@@ -4,6 +4,7 @@
 #
 # Usage:
 #   ./scripts/restore-db.sh backups/db/panama_20260227_020000.sql.gz
+#   ./scripts/restore-db.sh backups/db/panama_20260227_020000.sql.gz.gpg
 #   DB_NAME=panama_restore ./scripts/restore-db.sh backups/db/panama_20260227_020000.sql.gz
 #
 # IMPORTANT: This drops and recreates the target database.
@@ -83,11 +84,19 @@ trap cleanup EXIT
 
 restore_backup_into() {
   local target_db="$1"
-  gzip -dc "${BACKUP_FILE}" | psql \
-    -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
-    -d "${target_db}" \
-    --quiet \
-    --single-transaction
+  if [[ "${BACKUP_FILE}" == *.gpg ]]; then
+    gpg --batch --decrypt "${BACKUP_FILE}" | gzip -dc | psql \
+      -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+      -d "${target_db}" \
+      --quiet \
+      --single-transaction
+  else
+    gzip -dc "${BACKUP_FILE}" | psql \
+      -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+      -d "${target_db}" \
+      --quiet \
+      --single-transaction
+  fi
 }
 
 table_count_for() {

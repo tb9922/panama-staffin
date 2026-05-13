@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  apiFetch,
   loadHomes,
   listEvidenceHubUploaders,
   setCurrentHome,
@@ -41,6 +42,16 @@ describe('api client helpers', () => {
     fetch.mockResolvedValueOnce(mockResponse('Proxy failure', { status: 502, contentType: 'text/plain' }));
 
     await expect(loadHomes()).rejects.toThrow('Proxy failure');
+  });
+
+  it('dispatches session-expired when a mutating call hits a CSRF 403', async () => {
+    const listener = vi.fn();
+    window.addEventListener('panama:session-expired', listener);
+    fetch.mockResolvedValueOnce(mockResponse({ error: 'CSRF token mismatch' }, { status: 403 }));
+
+    await expect(apiFetch('/api/test', { method: 'POST' })).rejects.toThrow('CSRF token mismatch');
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener('panama:session-expired', listener);
   });
 
   it('fails fast when a home-scoped request runs without a selected home', async () => {

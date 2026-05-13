@@ -8,6 +8,7 @@ import { hasModuleAccess } from '../shared/roles.js';
 
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { idempotency } from '../middleware/idempotency.js';
 
 const router = Router();
 
@@ -97,7 +98,7 @@ router.get('/range', readRateLimiter, requireAuth, requireHomeAccess, requireAny
 });
 
 // POST /api/handover?home=X  — create entry (author from JWT)
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, idempotency('handover:create'), async (req, res, next) => {
   try {
     const parsed = entryBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -136,7 +137,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, async (req,
 });
 
 // POST /api/handover/:id/acknowledge?home=X  — mark as read by incoming shift (auth only — viewer can ack)
-router.post('/:id/acknowledge', writeRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.post('/:id/acknowledge', writeRateLimiter, requireAuth, requireHomeAccess, idempotency('handover:acknowledge'), async (req, res, next) => {
   try {
     const idParam = uuidSchema.safeParse(req.params.id);
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });

@@ -3,8 +3,17 @@ import * as dashboardRepo from '../repositories/dashboardRepo.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
 import { hasModuleAccess, isOwnDataOnly } from '../shared/roles.js';
 
+const DASHBOARD_CACHE_TTL_MS = 15_000;
+const dashboardCache = new Map();
+
 export function invalidateDashboardCache(homeId) {
-  void homeId;
+  if (homeId == null) {
+    dashboardCache.clear();
+    return;
+  }
+  for (const key of dashboardCache.keys()) {
+    if (key.startsWith(`${homeId}:`)) dashboardCache.delete(key);
+  }
 }
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
@@ -186,6 +195,13 @@ const DEFAULTS = {
 const MODULE_KEYS = Object.keys(DEFAULTS);
 
 export async function getDashboardSummary(homeId, { homeRole = null } = {}) {
+  const cacheKey = `${homeId}:${homeRole || 'full'}`;
+  const cached = dashboardCache.get(cacheKey);
+  const nowMs = Date.now();
+  if (cached && nowMs - cached.ts < DASHBOARD_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
   const today = todayLocalISO();
 
   const results = await Promise.allSettled([
@@ -226,7 +242,7 @@ export async function getDashboardSummary(homeId, { homeRole = null } = {}) {
     'Dashboard summary generated',
   );
 
-  return filterSummaryForRole(
+  const value = filterSummaryForRole(
     {
       modules,
       alerts,
@@ -238,4 +254,6 @@ export async function getDashboardSummary(homeId, { homeRole = null } = {}) {
     },
     homeRole,
   );
+  dashboardCache.set(cacheKey, { ts: nowMs, value });
+  return value;
 }

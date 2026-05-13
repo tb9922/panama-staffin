@@ -15,6 +15,7 @@ import {
   validateGdprComplaintStatusChange,
   validateGdprRequestStatusChange,
 } from '../lib/statusTransitions.js';
+import { idempotency } from '../middleware/idempotency.js';
 
 const router = Router();
 const GDPR_BREACH_AUDIT_SENSITIVE_FIELDS = [
@@ -184,7 +185,7 @@ router.get('/requests', readRateLimiter, requireAuth, requireHomeAccess, require
 });
 
 // POST /api/gdpr/requests?home=X
-router.post('/requests', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/requests', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-request:create'), async (req, res, next) => {
   try {
     const parsed = requestBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -222,7 +223,7 @@ router.put('/requests/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
 });
 
 // POST /api/gdpr/requests/:id/gather — trigger SAR data export
-router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-request:gather'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
@@ -244,7 +245,7 @@ router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAc
 });
 
 // POST /api/gdpr/requests/:id/execute — execute erasure
-router.post('/requests/:id/execute', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/requests/:id/execute', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-request:execute'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
@@ -285,7 +286,7 @@ router.get('/breaches', readRateLimiter, requireAuth, requireHomeAccess, require
 });
 
 // POST /api/gdpr/breaches?home=X
-router.post('/breaches', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/breaches', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-breach:create'), async (req, res, next) => {
   try {
     const parsed = breachBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -331,7 +332,7 @@ router.put('/breaches/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
 });
 
 // POST /api/gdpr/breaches/:id/assess — risk assessment
-router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-breach:assess'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
@@ -384,7 +385,7 @@ router.get('/consent', readRateLimiter, requireAuth, requireHomeAccess, requireM
 });
 
 // POST /api/gdpr/consent?home=X
-router.post('/consent', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/consent', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-consent:create'), async (req, res, next) => {
   try {
     const parsed = consentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -426,7 +427,7 @@ router.get('/complaints', readRateLimiter, requireAuth, requireHomeAccess, requi
 });
 
 // POST /api/gdpr/complaints?home=X
-router.post('/complaints', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/complaints', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-complaint:create'), async (req, res, next) => {
   try {
     const parsed = dpComplaintBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -494,7 +495,7 @@ router.get('/processors', readRateLimiter, requireAuth, requireHomeAccess, requi
   } catch (err) { next(err); }
 });
 
-router.post('/processors', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+router.post('/processors', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), idempotency('gdpr-processor:create'), async (req, res, next) => {
   try {
     const parsed = processorBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

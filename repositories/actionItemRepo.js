@@ -471,6 +471,38 @@ export async function setEscalationLevel(id, homeId, level, client = pool) {
   return shapeRow(rows[0]);
 }
 
+export async function setEscalationLevels(changes, client = pool) {
+  if (!Array.isArray(changes) || changes.length === 0) return [];
+  const ids = [];
+  const homeIds = [];
+  const levels = [];
+  for (const change of changes) {
+    ids.push(change.id);
+    homeIds.push(change.homeId);
+    levels.push(change.level);
+  }
+  const { rows } = await client.query(
+    `WITH updates AS (
+       SELECT *
+         FROM UNNEST($1::bigint[], $2::integer[], $3::integer[])
+              AS u(id, home_id, level)
+     )
+     UPDATE action_items ai
+        SET escalation_level = u.level,
+            escalated_at = CASE WHEN u.level > ai.escalation_level THEN NOW() ELSE ai.escalated_at END,
+            updated_at = NOW(),
+            version = ai.version + 1
+       FROM updates u
+      WHERE ai.id = u.id
+        AND ai.home_id = u.home_id
+        AND ai.deleted_at IS NULL
+        AND u.level > ai.escalation_level
+      RETURNING ${COLS}`,
+    [ids, homeIds, levels],
+  );
+  return rows.map(shapeRow);
+}
+
 export async function countByHome(homeIds, client = pool) {
   if (!Array.isArray(homeIds) || homeIds.length === 0) return [];
   const { rows } = await client.query(

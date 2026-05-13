@@ -206,6 +206,34 @@ async function getMigrationStatus() {
   return rows[0] ? { latest: rows[0].name, runAt: rows[0].run_at } : { latest: null, runAt: null };
 }
 
+async function pingExternalHealthcheck(status = 'ok') {
+  if (!config.healthcheckPingUrl) return;
+  const url = status === 'ok'
+    ? config.healthcheckPingUrl
+    : `${config.healthcheckPingUrl.replace(/\/$/, '')}/fail`;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      body: status,
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'external healthcheck ping failed');
+  }
+}
+
+async function runExternalHealthcheckPing() {
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
+    await pingExternalHealthcheck('ok');
+  } catch {
+    await pingExternalHealthcheck('fail');
+  }
+}
+
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;
 app.get('/readiness', async (req, res) => {
@@ -225,17 +253,20 @@ app.get('/readiness', async (req, res) => {
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
   let dbOk = false;
+  let migration = null;
   try {
-    await Promise.race([
-      pool.query('SELECT 1'),
+    const [, migrationStatus] = await Promise.race([
+      Promise.all([pool.query('SELECT 1'), getMigrationStatus()]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
     ]);
     dbOk = true;
+    migration = migrationStatus;
   } catch { /* db down or timeout */ }
   res.setHeader('Cache-Control', 'no-store');
   res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: dbOk ? 'ok' : 'error',
+    migration,
   });
 });
 
@@ -374,6 +405,11 @@ const server = shouldListen ? app.listen(config.port, config.host, async () => {
         30_000
       ).unref();
     }
+    setInterval(
+      () => runExternalHealthcheckPing(),
+      Math.max(30_000, config.healthcheckPingIntervalMs),
+    ).unref();
+    runExternalHealthcheckPing();
     logger.info('Background jobs registered (instance 0)');
   }
 }) : null;

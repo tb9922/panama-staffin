@@ -7,7 +7,8 @@
 #
 # Usage:
 #   ./scripts/verify-backup.sh                             # verify latest backup
-#   BACKUP_FILE=path/to.sql.gz ./scripts/verify-backup.sh  # verify specific backup
+#   BACKUP_FILE=path/to.sql.gz ./scripts/verify-backup.sh      # verify specific backup
+#   BACKUP_FILE=path/to.sql.gz.gpg ./scripts/verify-backup.sh  # verify encrypted backup
 #
 # Cron (weekly at 3am Sunday, after 2am daily backup):
 #   0 3 * * 0 /var/www/panama-staffing/scripts/verify-backup.sh >> /var/log/panama-verify.log 2>&1
@@ -73,7 +74,7 @@ trap cleanup EXIT
 if [ -n "${BACKUP_FILE:-}" ]; then
   LATEST="${BACKUP_FILE}"
 else
-  LATEST=$(ls -t "${BACKUP_DIR}"/panama_*.sql.gz 2>/dev/null | head -1)
+  LATEST=$(find "${BACKUP_DIR}" -maxdepth 1 \( -name "panama_*.sql.gz.gpg" -o -name "panama_*.sql.gz" \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {print $2}' || true)
 fi
 
 if [ -z "${LATEST}" ] || [ ! -f "${LATEST}" ]; then
@@ -89,10 +90,17 @@ echo "[$(date --iso-8601=seconds)] Restore target: ${VERIFY_DB}"
 
 createdb -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" "${VERIFY_DB}"
 
-gzip -dc "${LATEST}" | psql \
-  -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
-  -d "${VERIFY_DB}" \
-  --quiet --single-transaction 2>/dev/null
+if [[ "${LATEST}" == *.gpg ]]; then
+  gpg --batch --decrypt "${LATEST}" | gzip -dc | psql \
+    -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+    -d "${VERIFY_DB}" \
+    --quiet --single-transaction 2>/dev/null
+else
+  gzip -dc "${LATEST}" | psql \
+    -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+    -d "${VERIFY_DB}" \
+    --quiet --single-transaction 2>/dev/null
+fi
 
 echo "[$(date --iso-8601=seconds)] Restore complete, comparing counts..."
 

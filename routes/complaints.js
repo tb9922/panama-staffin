@@ -13,6 +13,7 @@ import { nullableDateInput } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateComplaintStatusChange } from '../lib/statusTransitions.js';
 import { isLegacyActionFreezeEnabled, rejectLegacyActionWriteIfFrozen } from '../lib/legacyActionFreeze.js';
+import { idempotency } from '../middleware/idempotency.js';
 
 const router = Router();
 const sensitiveComplianceWrite = [
@@ -106,7 +107,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 });
 
 // POST /api/complaints?home=X
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, idempotency('complaint:create'), async (req, res, next) => {
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -169,7 +170,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensi
 });
 
 // POST /api/complaints/surveys?home=X
-router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, async (req, res, next) => {
+router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveComplianceWrite, idempotency('complaint-survey:create'), async (req, res, next) => {
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);

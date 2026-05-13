@@ -29,6 +29,11 @@ describe('action item helpers', () => {
     expect(daysPastDue('2026-04-27', TODAY)).toBe(-1);
   });
 
+  it('accepts a local ISO today string for midnight escalation jobs', () => {
+    expect(daysPastDue('2026-05-12', '2026-05-13')).toBe(1);
+    expect(calculateEscalationLevel({ dueDate: '2026-05-12', today: '2026-05-13' })).toBe(1);
+  });
+
   it('applies the V1 escalation cadence', () => {
     expect(calculateEscalationLevel({ dueDate: '2026-04-27', today: TODAY })).toBe(0);
     expect(calculateEscalationLevel({ dueDate: '2026-04-26', today: TODAY })).toBe(1);
