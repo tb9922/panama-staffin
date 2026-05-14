@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { isVerifiedPlatformAdmin, requireAuth } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
 import { readRateLimiter } from '../lib/rateLimiter.js';
 import * as portfolioService from '../services/portfolioService.js';
 import * as auditService from '../services/auditService.js';
@@ -8,10 +8,8 @@ const router = Router();
 
 router.use(readRateLimiter);
 
-router.get('/kpis', requireAuth, async (req, res, next) => {
+router.get('/kpis', requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
-    // Cross-home endpoint: portfolioService filters to platform-admin homes or
-    // homes where user_home_roles grants report visibility.
     const isPlatformAdmin = isVerifiedPlatformAdmin(req);
     const result = await portfolioService.getPortfolioKpisForUser({
       username: req.user.username,
@@ -21,7 +19,7 @@ router.get('/kpis', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/board-pack', requireAuth, async (req, res, next) => {
+router.get('/board-pack', requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const isPlatformAdmin = isVerifiedPlatformAdmin(req);
     const result = await portfolioService.getPortfolioBoardPackForUser({

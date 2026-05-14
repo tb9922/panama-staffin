@@ -10,6 +10,7 @@ const HOME_A = `${PREFIX}-home-a`;
 const HOME_B = `${PREFIX}-home-b`;
 const HOME_C = `${PREFIX}-home-c`;
 const MANAGER = `${PREFIX}-manager`;
+const ADMIN = `${PREFIX}-admin`;
 const PASSWORD = 'PortfolioTest1!';
 const MINIMUM_STAFFING_CONFIG = {
   cycle_start_date: '2026-04-01',
@@ -24,6 +25,7 @@ let homeAId;
 let homeBId;
 let homeCId;
 let managerToken;
+let adminToken;
 
 async function cleanup() {
   clearPortfolioCache();
@@ -67,6 +69,11 @@ beforeAll(async () => {
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'viewer', true, 'Portfolio Manager', 'test-setup')`,
     [MANAGER, hash]
+  );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, is_platform_admin, display_name, created_by)
+     VALUES ($1, $2, 'admin', true, true, 'Portfolio Admin', 'test-setup')`,
+    [ADMIN, hash]
   );
 
   await pool.query(
@@ -148,6 +155,8 @@ beforeAll(async () => {
 
   const login = await request(app).post('/api/login').send({ username: MANAGER, password: PASSWORD }).expect(200);
   managerToken = login.body.token;
+  const adminLogin = await request(app).post('/api/login').send({ username: ADMIN, password: PASSWORD }).expect(200);
+  adminToken = adminLogin.body.token;
 }, 20000);
 
 afterAll(async () => {
@@ -155,18 +164,25 @@ afterAll(async () => {
 });
 
 describe('portfolio KPI API', () => {
-  it('returns only report-visible homes with manager action and agency signals', async () => {
+  it('blocks non-platform admins from portfolio KPIs', async () => {
+    await request(app)
+      .get('/api/portfolio/kpis')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+  });
+
+  it('returns platform homes with manager action and agency signals', async () => {
     void homeCId;
     const res = await request(app)
       .get('/api/portfolio/kpis')
-      .set('Authorization', `Bearer ${managerToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
     expect(Array.isArray(res.body.homes)).toBe(true);
     const slugs = res.body.homes.map(home => home.home_slug);
     expect(slugs).toContain(HOME_A);
     expect(slugs).toContain(HOME_B);
-    expect(slugs).not.toContain(HOME_C);
+    expect(slugs).toContain(HOME_C);
 
     const homeA = res.body.homes.find(home => home.home_slug === HOME_A);
     expect(homeA.manager_actions.open).toBe(1);
@@ -218,15 +234,15 @@ describe('portfolio KPI API', () => {
   it('generates an audited portfolio board-pack payload for visible homes', async () => {
     const res = await request(app)
       .get('/api/portfolio/board-pack')
-      .set('Authorization', `Bearer ${managerToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
-    expect(res.body.summary.home_count).toBe(2);
+    expect(res.body.summary.home_count).toBe(3);
     expect(res.body.summary.homes_with_unknown_kpis).toBeGreaterThan(0);
     expect(res.body.summary.unknown_kpi_signals).toBeGreaterThan(0);
     expect(res.body.summary.cqc_gap_homes).toBeGreaterThan(0);
     expect(res.body.homes.map(home => home.home_slug)).toEqual(expect.arrayContaining([HOME_A, HOME_B]));
-    expect(res.body.homes.map(home => home.home_slug)).not.toContain(HOME_C);
+    expect(res.body.homes.map(home => home.home_slug)).toContain(HOME_C);
     expect(res.body.weakest_homes.length).toBeGreaterThan(0);
     expect(res.body.weakest_homes[0].unknown_count).toBeGreaterThanOrEqual(0);
     expect(res.body.agency_pressure.find(row => row.home_slug === HOME_A).emergency_override_pct).toBe(100);
@@ -264,6 +280,6 @@ describe('portfolio KPI API', () => {
     expect(rows.length).toBeGreaterThanOrEqual(2);
     const details = JSON.parse(rows[0].details);
     expect(details.home_slugs).toEqual(expect.arrayContaining([HOME_A, HOME_B]));
-    expect(details.home_slugs).not.toContain(HOME_C);
+    expect(details.home_slugs).toContain(HOME_C);
   });
 });

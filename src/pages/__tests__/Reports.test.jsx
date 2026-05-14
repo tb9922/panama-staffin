@@ -46,10 +46,11 @@ import * as api from '../../lib/api.js';
 // ---------------------------------------------------------------------------
 
 function renderAdmin() {
-  api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin', isPlatformAdmin: true });
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
   return renderWithProviders(<Reports />, {
-    user: { username: 'admin', role: 'admin' },
+    user: { username: 'admin', role: 'admin', isPlatformAdmin: true },
+    isPlatformAdmin: true,
   });
 }
 
@@ -58,6 +59,15 @@ function renderViewer() {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
   return renderWithProviders(<Reports />, {
     user: { username: 'viewer', role: 'viewer' }, canWrite: false,
+  });
+}
+
+function renderHomeManager() {
+  api.getLoggedInUser.mockReturnValue({ username: 'manager', role: 'manager', isPlatformAdmin: false });
+  api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
+  return renderWithProviders(<Reports />, {
+    user: { username: 'manager', role: 'manager', isPlatformAdmin: false },
+    isPlatformAdmin: false,
   });
 }
 
@@ -104,7 +114,7 @@ describe('Reports', () => {
     expect(screen.queryByText('Loading report data...')).not.toBeInTheDocument();
   });
 
-  it('admin sees all five report type cards', async () => {
+  it('platform admin sees all five report type cards', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('PDF Reports')).toBeInTheDocument()
@@ -129,13 +139,23 @@ describe('Reports', () => {
     expect(screen.queryByText('Board Pack')).not.toBeInTheDocument();
   });
 
+  it('home manager sees home reports but not the platform board pack', async () => {
+    renderHomeManager();
+    await waitFor(() =>
+      expect(screen.getByText('PDF Reports')).toBeInTheDocument()
+    );
+    expect(screen.getByText('Monthly Cost Report')).toBeInTheDocument();
+    expect(screen.getByText('Staff Register')).toBeInTheDocument();
+    expect(screen.queryByText('Board Pack')).not.toBeInTheDocument();
+  });
+
   it('each visible report card has a Download PDF button', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('PDF Reports')).toBeInTheDocument()
     );
     const downloadBtns = screen.getAllByRole('button', { name: 'Download PDF' });
-    // Admin sees 5 reports, each with its own button
+    // Platform admin sees 5 reports, each with its own button
     expect(downloadBtns).toHaveLength(5);
   });
 

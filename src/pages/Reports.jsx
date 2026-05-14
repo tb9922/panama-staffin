@@ -7,6 +7,7 @@ import ErrorState from '../components/ErrorState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
 import { getCurrentHome, getSchedulingData, getSnapshots, getSnapshot, logReportDownload } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useAuth } from '../contexts/AuthContext.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { currentLocalYearMonth, startOfLocalWeekISO } from '../lib/localDates.js';
 
@@ -34,6 +35,7 @@ export default function Reports() {
 
 function ReportsInner({ data }) {
   const { canWrite } = useData();
+  const { isPlatformAdmin } = useAuth();
   const canEdit = canWrite('reports');
   const weekDateId = useId();
   const costMonthId = useId();
@@ -163,7 +165,7 @@ function ReportsInner({ data }) {
       color: 'purple',
       dateInput: null,
     }] : []),
-    ...(canEdit ? [{
+    ...(canEdit && isPlatformAdmin ? [{
       id: 'boardpack',
       title: 'Board Pack',
       description: 'Executive summary for board meeting - CQC score, coverage, training, incidents, costs.',

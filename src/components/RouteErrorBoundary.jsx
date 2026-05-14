@@ -28,9 +28,7 @@ export default class RouteErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('Route error:', error, info);
-    if (typeof window !== 'undefined' && window.__SENTRY__) {
-      import('@sentry/react').then(Sentry => Sentry.captureException(error, { extra: info })).catch(() => {});
-    }
+    import('@sentry/react').then(Sentry => Sentry.captureException(error, { extra: info })).catch(() => {});
   }
 
   render() {

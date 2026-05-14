@@ -8,17 +8,7 @@ import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
-
-function downloadCSV(filename, headers, rows) {
-  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+import { downloadCSV } from '../lib/csvExport.js';
 
 function getMonthDates(year, month) {
   const dates = [];

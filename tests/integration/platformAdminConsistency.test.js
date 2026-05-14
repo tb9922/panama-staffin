@@ -114,22 +114,16 @@ describe('platform admin consistency', () => {
     expect(res.body.isPlatformAdmin).toBe(false);
   });
 
-  it('scopes cross-home portfolio and setup reads unless the actor is a real platform admin', async () => {
-    const portfolio = await request(app)
+  it('keeps portfolio and setup reads platform-admin only', async () => {
+    await request(app)
       .get('/api/portfolio/kpis')
       .set('Authorization', `Bearer ${flaggedToken}`)
-      .expect(200);
-    const portfolioSlugs = portfolio.body.homes.map(home => home.home_slug);
-    expect(portfolioSlugs).toContain(HOME_A);
-    expect(portfolioSlugs).not.toContain(HOME_B);
+      .expect(403);
 
-    const setup = await request(app)
+    await request(app)
       .get('/api/home-setup')
       .set('Authorization', `Bearer ${flaggedToken}`)
-      .expect(200);
-    const setupSlugs = setup.body.homes.map(home => home.home_slug);
-    expect(setupSlugs).toContain(HOME_A);
-    expect(setupSlugs).not.toContain(HOME_B);
+      .expect(403);
 
     const adminPortfolio = await request(app)
       .get('/api/portfolio/kpis')

@@ -27,7 +27,7 @@ if [ -f "${SCRIPT_DIR}/load-env-file.sh" ]; then
     DB_PASSWORD DB_NAME DB_HOST DB_PORT DB_USER \
     BACKUP_S3_BUCKET BACKUP_SCP_TARGET HEALTHCHECK_URL \
     BACKUP_GPG_RECIPIENT BACKUP_REQUIRE_ENCRYPTION BACKUP_KEEP_PLAINTEXT \
-    NODE_ENV BACKUP_REQUIRE_OFFSITE BACKUP_ALLOW_LOCAL_ONLY
+    NODE_ENV BACKUP_REQUIRE_OFFSITE BACKUP_ALLOW_LOCAL_ONLY UPLOAD_DIR
 fi
 
 : "${DB_PASSWORD:?DB_PASSWORD is required}"
@@ -139,6 +139,10 @@ if [ "${OFFSITE_CONFIGURED}" != "true" ]; then
     echo "[$(date --iso-8601=seconds)] WARNING: Production backup has no offsite target. Configure BACKUP_S3_BUCKET or BACKUP_SCP_TARGET, or set BACKUP_REQUIRE_OFFSITE=true to make this a hard release gate."
   fi
 fi
+if [ "${OFFSITE_CONFIGURED}" = "true" ] && [ -z "${BACKUP_GPG_RECIPIENT:-}" ] && [ "${BACKUP_ALLOW_UNENCRYPTED_OFFSITE:-false}" != "true" ]; then
+  echo "[$(date --iso-8601=seconds)] ERROR: Offsite backups require BACKUP_GPG_RECIPIENT unless BACKUP_ALLOW_UNENCRYPTED_OFFSITE=true is explicitly set."
+  exit 1
+fi
 
 if [ -n "${BACKUP_S3_BUCKET:-}" ]; then
   echo "[$(date --iso-8601=seconds)] Uploading DB backup to S3: ${BACKUP_S3_BUCKET}"
@@ -155,19 +159,48 @@ fi
 # ── Attachments backup (uploads directory) ────────────────────────────────────
 
 UPLOAD_DIR="${UPLOAD_DIR:-${APP_DIR}/uploads}"
-if [ -d "${UPLOAD_DIR}" ] && [ -n "${BACKUP_S3_BUCKET:-}" ]; then
-  echo "[$(date --iso-8601=seconds)] Syncing attachments to S3: ${BACKUP_S3_BUCKET}/uploads/"
-  aws s3 sync "${UPLOAD_DIR}" "s3://${BACKUP_S3_BUCKET}/uploads/" --quiet
-  echo "[$(date --iso-8601=seconds)] Attachments sync complete"
-elif [ -d "${UPLOAD_DIR}" ] && [ -n "${BACKUP_SCP_TARGET:-}" ]; then
-  echo "[$(date --iso-8601=seconds)] Syncing attachments via rsync: ${BACKUP_SCP_TARGET}/uploads/"
-  rsync -az --delete "${UPLOAD_DIR}/" "${BACKUP_SCP_TARGET}/uploads/"
-  echo "[$(date --iso-8601=seconds)] Attachments sync complete"
+if [ -d "${UPLOAD_DIR}" ]; then
+  UPLOAD_ARCHIVE="${BACKUP_DIR}/panama_uploads_${TIMESTAMP}.tar.gz"
+  FINAL_UPLOAD_ARCHIVE="${UPLOAD_ARCHIVE}"
+  FINAL_UPLOAD_FILENAME="$(basename "${UPLOAD_ARCHIVE}")"
+  echo "[$(date --iso-8601=seconds)] Archiving attachments from ${UPLOAD_DIR}"
+  tar -C "$(dirname "${UPLOAD_DIR}")" -czf "${UPLOAD_ARCHIVE}" "$(basename "${UPLOAD_DIR}")"
+
+  if [ -n "${BACKUP_GPG_RECIPIENT:-}" ]; then
+    FINAL_UPLOAD_ARCHIVE="${UPLOAD_ARCHIVE}.gpg"
+    FINAL_UPLOAD_FILENAME="$(basename "${FINAL_UPLOAD_ARCHIVE}")"
+    echo "[$(date --iso-8601=seconds)] Encrypting attachments archive for ${BACKUP_GPG_RECIPIENT}"
+    gpg --batch --yes --trust-model always \
+      --output "${FINAL_UPLOAD_ARCHIVE}" \
+      --encrypt --recipient "${BACKUP_GPG_RECIPIENT}" \
+      "${UPLOAD_ARCHIVE}"
+    if [ "${BACKUP_KEEP_PLAINTEXT:-false}" != "true" ]; then
+      rm -f "${UPLOAD_ARCHIVE}"
+      echo "[$(date --iso-8601=seconds)] Removed plaintext local attachments archive after encryption"
+    fi
+  elif [ "${BACKUP_REQUIRE_ENCRYPTION:-false}" = "true" ] || { [ "${NODE_ENV:-}" = "production" ] && [ "${BACKUP_ALLOW_LOCAL_ONLY:-false}" != "true" ]; }; then
+    echo "[$(date --iso-8601=seconds)] ERROR: BACKUP_GPG_RECIPIENT is required for encrypted attachments backup."
+    exit 1
+  fi
+
+  sha256sum "${FINAL_UPLOAD_ARCHIVE}" > "${FINAL_UPLOAD_ARCHIVE}.sha256"
+
+  if [ -n "${BACKUP_S3_BUCKET:-}" ]; then
+    echo "[$(date --iso-8601=seconds)] Uploading encrypted attachments archive to S3: ${BACKUP_S3_BUCKET}/uploads/"
+    aws s3 cp "${FINAL_UPLOAD_ARCHIVE}" "s3://${BACKUP_S3_BUCKET}/uploads/${FINAL_UPLOAD_FILENAME}"
+    aws s3 cp "${FINAL_UPLOAD_ARCHIVE}.sha256" "s3://${BACKUP_S3_BUCKET}/uploads/${FINAL_UPLOAD_FILENAME}.sha256"
+    echo "[$(date --iso-8601=seconds)] Attachments archive upload complete"
+  elif [ -n "${BACKUP_SCP_TARGET:-}" ]; then
+    echo "[$(date --iso-8601=seconds)] Uploading encrypted attachments archive via SCP: ${BACKUP_SCP_TARGET}/uploads/"
+    scp "${FINAL_UPLOAD_ARCHIVE}" "${BACKUP_SCP_TARGET}/uploads/"
+    scp "${FINAL_UPLOAD_ARCHIVE}.sha256" "${BACKUP_SCP_TARGET}/uploads/"
+    echo "[$(date --iso-8601=seconds)] Attachments archive upload complete"
+  fi
 fi
 
 # ── Retention — prune old local backups ───────────────────────────────────────
 
-DELETED=$(find "${BACKUP_DIR}" \( -name "panama_*.sql.gz" -o -name "panama_*.sql.gz.sha256" -o -name "panama_*.sql.gz.gpg" -o -name "panama_*.sql.gz.gpg.sha256" \) -mtime "+${RETENTION_DAYS}" -delete -print | wc -l)
+DELETED=$(find "${BACKUP_DIR}" \( -name "panama_*.sql.gz" -o -name "panama_*.sql.gz.sha256" -o -name "panama_*.sql.gz.gpg" -o -name "panama_*.sql.gz.gpg.sha256" -o -name "panama_uploads_*.tar.gz" -o -name "panama_uploads_*.tar.gz.sha256" -o -name "panama_uploads_*.tar.gz.gpg" -o -name "panama_uploads_*.tar.gz.gpg.sha256" \) -mtime "+${RETENTION_DAYS}" -delete -print | wc -l)
 if [ "${DELETED}" -gt 0 ]; then
   echo "[$(date --iso-8601=seconds)] Pruned ${DELETED} backups older than ${RETENTION_DAYS} days"
 fi

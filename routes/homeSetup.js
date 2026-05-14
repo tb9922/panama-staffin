@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { isVerifiedPlatformAdmin, requireAuth } from '../middleware/auth.js';
+import { isVerifiedPlatformAdmin, requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
 import { readRateLimiter } from '../lib/rateLimiter.js';
 import * as homeSetupService from '../services/homeSetupService.js';
 
 const router = Router();
 
-router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const result = await homeSetupService.getHomeSetupCompletenessForUser({
       username: req.user.username,

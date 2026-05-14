@@ -24,21 +24,11 @@ import LoadingState from '../components/LoadingState.jsx';
 import StickyTable from '../components/StickyTable.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { canManageSensitiveStaffFields } from '../../shared/staffPolicy.js';
+import { downloadCSV } from '../lib/csvExport.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 const PREFS = ['EL', 'E', 'L', 'N', 'ANY'];
-
-function downloadCSV(filename, headers, rows) {
-  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 
 const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,

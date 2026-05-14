@@ -17,6 +17,8 @@ vi.mock('../../lib/api.js', async () => {
     getFinanceAlerts: vi.fn().mockResolvedValue([]),
     getDashboardSummary: vi.fn().mockResolvedValue(null),
     getPayrollRuns: vi.fn().mockResolvedValue([]),
+    getPendingOverrideRequests: vi.fn().mockResolvedValue([]),
+    decideOverrideRequest: vi.fn().mockResolvedValue({ ok: true }),
     setCurrentHome: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Care Home' }]),
     logout: vi.fn(),
@@ -48,23 +50,7 @@ function renderDashboard(userOverride = { username: 'admin', role: 'admin' }, op
 function buildCleanDashboardData() {
   return {
     ...MOCK_SCHEDULING_DATA,
-    staff: [{
-      id: 'S999',
-      name: 'Safe Staff',
-      role: 'Senior Carer',
-      team: 'Day A',
-      pref: 'EL',
-      skill: 1.5,
-      hourly_rate: 20.00,
-      active: true,
-      start_date: '2020-01-01',
-      contract_hours: 37.5,
-      wtr_opt_out: false,
-      al_entitlement: null,
-      al_carryover: 0,
-      leaving_date: null,
-      date_of_birth: null,
-    }],
+    staff: [],
     overrides: {},
     config: {
       ...MOCK_CONFIG,
@@ -89,6 +75,8 @@ describe('Dashboard', () => {
     api.getFinanceAlerts.mockResolvedValue([]);
     api.getDashboardSummary.mockResolvedValue(null);
     api.getPayrollRuns.mockResolvedValue([]);
+    api.getPendingOverrideRequests.mockResolvedValue([]);
+    api.decideOverrideRequest.mockResolvedValue({ ok: true });
     useData.mockReturnValue({
       canRead: () => true,
       canWrite: () => true,

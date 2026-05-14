@@ -30,6 +30,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import { generateHorizonRoster } from '../lib/rotationAnalysis.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import InlineNotice from '../components/InlineNotice.jsx';
+import { downloadCSV } from '../lib/csvExport.js';
 
 /** Resolve staff ID to two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -42,17 +43,6 @@ function getInitials(staffMap, staffId) {
 }
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
-
-function downloadCSV(filename, headers, rows) {
-  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 
 function getMonthDates(year, month) {
   const dates = [];

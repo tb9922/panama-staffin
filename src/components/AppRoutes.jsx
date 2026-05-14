@@ -174,12 +174,12 @@ export default function AppRoutes() {
       <Route path="/dpia" element={<RouteErrorBoundary><RequireModule module="gdpr"><DpiaManager /></RequireModule></RouteErrorBoundary>} />
 
       {/* Reports & System */}
-      <Route path="/portfolio" element={<RouteErrorBoundary><RequireModule module="reports"><PortfolioDashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/portfolio" element={<RouteErrorBoundary><RequirePlatformAdmin><PortfolioDashboard /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/operational-reviews" element={<RouteErrorBoundary><RequireAnyModule modules={['governance', 'payroll', 'compliance', 'gdpr']}><OperationalReviews /></RequireAnyModule></RouteErrorBoundary>} />
-      <Route path="/outcomes" element={<RouteErrorBoundary><RequireModule module="reports"><OutcomeMetrics /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/outcomes" element={<RouteErrorBoundary><RequirePlatformAdmin><OutcomeMetrics /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
       <Route path="/evidence" element={<RouteErrorBoundary><RequireEvidenceHub><EvidenceHub /></RequireEvidenceHub></RouteErrorBoundary>} />
-      <Route path="/home-setup" element={<RouteErrorBoundary><RequireModule module="reports"><HomeSetupDashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/home-setup" element={<RouteErrorBoundary><RequirePlatformAdmin><HomeSetupDashboard /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><RequireUserManagement><UserManagement /></RequireUserManagement></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />
