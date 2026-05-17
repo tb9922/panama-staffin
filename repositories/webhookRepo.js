@@ -144,11 +144,13 @@ export async function remove(id, homeId) {
 export async function logDelivery(webhookId, event, payload, statusCode, responseMs, error, status = 'delivered', options = {}) {
   let retryCount = 0;
   let nextRetryAt = null;
+  let requestId = null;
   let signingSecretEncrypted = null;
   let signingSecretIv = null;
   let signingSecretTag = null;
   if (typeof options.retryCount === 'number') retryCount = options.retryCount;
   if (options.nextRetryAt != null) nextRetryAt = options.nextRetryAt;
+  if (options.requestId) requestId = options.requestId;
   if (options.signingSecret) {
     const { encrypted, iv, tag } = encrypt(options.signingSecret);
     signingSecretEncrypted = encrypted;
@@ -167,11 +169,12 @@ export async function logDelivery(webhookId, event, payload, statusCode, respons
        status,
        retry_count,
        next_retry_at,
+       request_id,
        signing_secret_encrypted,
        signing_secret_iv,
        signing_secret_tag
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'whd-' || md5(clock_timestamp()::text || random()::text)), $11, $12, $13)
      RETURNING id`,
     [
       webhookId,
@@ -183,6 +186,7 @@ export async function logDelivery(webhookId, event, payload, statusCode, respons
       status,
       retryCount,
       nextRetryAt,
+      requestId,
       signingSecretEncrypted,
       signingSecretIv,
       signingSecretTag,
@@ -240,7 +244,7 @@ export async function getRecentDeliveries(webhookId, homeId, { limit = 50, statu
   const { rows } = await pool.query(
     `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.status_code,
             wd.response_ms, wd.error, wd.delivered_at,
-            wd.retry_count, wd.next_retry_at, wd.status
+            wd.retry_count, wd.next_retry_at, wd.status, wd.request_id
      FROM webhook_deliveries wd
      JOIN webhooks w ON w.id = wd.webhook_id
      WHERE wd.webhook_id = $1 AND w.home_id = $2${statusFilter}
@@ -253,7 +257,7 @@ export async function getRecentDeliveries(webhookId, homeId, { limit = 50, statu
 
 export async function findPendingRetries(limit = 20) {
   const { rows } = await pool.query(
-    `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count,
+    `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count, wd.request_id,
             wd.signing_secret_encrypted, wd.signing_secret_iv, wd.signing_secret_tag,
             w.url, w.secret, w.secret_encrypted, w.secret_iv, w.secret_tag,
             w.home_id, w.active
@@ -294,7 +298,7 @@ export async function claimPendingRetries(limit = 20) {
        FROM webhooks w
        WHERE wd.id = ANY($1::int[])
          AND w.id = wd.webhook_id
-       RETURNING wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count,
+       RETURNING wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count, wd.request_id,
                  wd.signing_secret_encrypted, wd.signing_secret_iv, wd.signing_secret_tag,
                  w.url, w.secret, w.secret_encrypted, w.secret_iv, w.secret_tag,
                  w.home_id, w.active`,

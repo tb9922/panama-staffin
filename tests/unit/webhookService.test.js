@@ -83,6 +83,7 @@ describe('webhookService', () => {
     expect(opts.headers['Content-Type']).toBe('application/json');
     expect(opts.headers['X-Webhook-Event']).toBe('incident.created');
     expect(opts.headers['X-Webhook-Timestamp']).toBeTruthy();
+    expect(opts.headers['X-Webhook-Request-ID']).toBeTruthy();
     expect(opts.headers['X-Webhook-Signature']).toMatch(/^sha256=[a-f0-9]+$/);
   });
 
@@ -282,6 +283,7 @@ describe('webhookService', () => {
         id: 77,
         webhook_id: 1,
         event: 'incident.created',
+        request_id: 'req-stable-77',
         payload: {
           event: 'incident.created',
           payload: { id: 'inc-1' },
@@ -302,6 +304,7 @@ describe('webhookService', () => {
     const signatureBase = `${opts.headers['X-Webhook-Timestamp']}.${opts.body}`;
     const expectedSig = crypto.createHmac('sha256', 'old-frozen-secret').update(signatureBase).digest('hex');
     expect(opts.headers['X-Webhook-Signature']).toBe(`sha256=${expectedSig}`);
+    expect(opts.headers['X-Webhook-Request-ID']).toBe('req-stable-77');
     expect(webhookRepo.markDeliverySucceeded).toHaveBeenCalledWith(77, 200, expect.any(Number));
   });
 

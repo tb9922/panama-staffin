@@ -447,6 +447,50 @@ export function buildSageCSV(payrollLines, staffMap, run, ytdMap = null) {
 }
 
 /**
+ * Build Xero draft pay-line CSV.
+ *
+ * This is intentionally not the Sage 37-column payroll-control export. It emits
+ * one summary pay line per staff member in the compact shape documented in
+ * docs/EXPORT_SCHEMAS.md so an export labelled "Xero" is visibly distinct and
+ * can be validated by bureau tooling before import.
+ */
+export function buildXeroCSV(payrollLines, staffMap, run) {
+  const headers = [
+    'PayrollCalendarID',
+    'EmployeeID',
+    'EmployeeName',
+    'EarningsRateID',
+    'NumberOfUnits',
+    'RatePerUnit',
+    'GrossPay',
+    'PayPeriodStart',
+    'PayPeriodEnd',
+  ];
+
+  const rows = payrollLines.map(line => {
+    const staff = staffMap.get(line.staff_id) || {};
+    const totalHours = Number(line.total_hours ?? 0);
+    const grossPay = Number(line.gross_pay || 0) + Number(line.holiday_pay || 0) + Number(line.ssp_amount || 0);
+    const ratePerUnit = totalHours > 0
+      ? grossPay / totalHours
+      : Number(staff.hourly_rate || 0);
+    return [
+      'MONTHLY',
+      csvEscape(line.staff_id || ''),
+      csvEscape(staff.name || ''),
+      totalHours > Number(line.base_hours || 0) ? 'OVERTIME' : 'ORDINARY',
+      totalHours.toFixed(2),
+      ratePerUnit.toFixed(2),
+      grossPay.toFixed(2),
+      run.period_start,
+      run.period_end,
+    ].join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\r\n');
+}
+
+/**
  * Generic CSV — same columns as Sage, works with any payroll bureau.
  * ytdMap is optional (null for draft runs).
  */

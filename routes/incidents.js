@@ -150,6 +150,18 @@ const incidentUpdateSchema = incidentBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
+function requiresSafeguardingReferral(incident) {
+  return ['major', 'catastrophic'].includes(incident.severity)
+    && (incident.person_affected === 'resident' || incident.resident_id != null);
+}
+
+function safeguardingReferralError(incident) {
+  if (!requiresSafeguardingReferral(incident)) return null;
+  return incident.safeguarding_referral === true
+    ? null
+    : 'Major or catastrophic resident incidents require a safeguarding referral before they can be saved';
+}
+
 async function validateResidentId(homeId, residentId, res) {
   if (residentId == null) return true;
   const resident = await financeRepo.findResidentById(residentId, homeId);
@@ -198,6 +210,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiveC
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    const safeguardingError = safeguardingReferralError(parsed.data);
+    if (safeguardingError) return res.status(422).json({ error: safeguardingError });
     if (rejectLegacyActionWriteIfFrozen(res, parsed.data, ['corrective_actions'], 'incidents')) return;
     if (!await validateResidentId(req.home.id, parsed.data.resident_id, res)) return;
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
@@ -232,6 +246,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, ...sensitiv
     const statusError = validateIncidentStatusChange(existing, updates);
     if (statusError) return res.status(400).json({ error: statusError });
     const merged = normalizeIncidentPayload({ ...existing, ...updates });
+    const safeguardingError = safeguardingReferralError(merged);
+    if (safeguardingError) return res.status(422).json({ error: safeguardingError });
     const normalizedUpdates = {
       ...updates,
       cqc_notification_type: merged.cqc_notification_type,

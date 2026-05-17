@@ -12,15 +12,14 @@ Generated from `Reports > Monthly Cost Report` or via the Payroll module's expor
 
 | Column | Type | Description |
 |--------|------|-------------|
-| Employee ID | String | Staff ID (e.g. `S001`) |
-| Employee Name | String | Full name |
-| NI Number | String | UK National Insurance number (blank if not set) |
-| Hours Worked | Decimal | Total contracted + overtime hours |
-| Hourly Rate | Decimal | Staff hourly rate |
-| Gross Pay | Decimal | Total pay for period |
-| OT Hours | Decimal | Overtime hours only |
-| OT Premium | Decimal | Overtime premium amount |
-| BH Premium | Decimal | Bank holiday premium amount |
+| Staff_Name | String | Full name |
+| NI_Number | String | UK National Insurance number (blank if not set) |
+| Tax_Code | String | PAYE tax code used for the run |
+| Student_Loan_Plan | String | Student loan plan code, if present |
+| Pay_Period_Start / Pay_Period_End | Date | Run period |
+| Basic/Night/Weekend/Bank Holiday/Overtime/Sleep-in/On-call columns | Decimal | Hours and pay/enhancement breakdown |
+| Total_Gross_Pay | Decimal | Gross pay including holiday pay and SSP |
+| Ref:* columns | Decimal | Panama-estimated PAYE, NI, pension, student loan, net pay and YTD cross-checks |
 
 ### Xero Format
 
@@ -28,9 +27,12 @@ Generated from `Reports > Monthly Cost Report` or via the Payroll module's expor
 |--------|------|-------------|
 | PayrollCalendarID | String | Always "MONTHLY" |
 | EmployeeID | String | Staff ID |
+| EmployeeName | String | Full name |
 | EarningsRateID | String | Rate type: "ORDINARY" or "OVERTIME" |
 | NumberOfUnits | Decimal | Hours worked |
 | RatePerUnit | Decimal | Hourly rate |
+| GrossPay | Decimal | Gross pay including holiday pay and SSP |
+| PayPeriodStart / PayPeriodEnd | Date | Run period |
 
 ### Generic Format
 

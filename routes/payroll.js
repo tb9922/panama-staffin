@@ -837,10 +837,10 @@ router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireHomeAcces
     const { csv, filename } = await payrollService.exportRunCSVReadOnly(
       runIdP.data, req.home.id, req.home.slug, req.user.username, format,
     );
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control', SENSITIVE_DOWNLOAD_CACHE_CONTROL);
-    res.send(csv);
+    res.send(csv.startsWith('\uFEFF') ? csv : `\uFEFF${csv}`);
   } catch (err) { next(err); }
 });
 

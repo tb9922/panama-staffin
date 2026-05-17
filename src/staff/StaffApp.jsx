@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import StaffLayout from './StaffLayout.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
@@ -14,6 +14,16 @@ const ReportSick = lazy(() => import('./pages/ReportSick.jsx'));
 const MyProfile = lazy(() => import('./pages/MyProfile.jsx'));
 
 export default function StaffApp() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const segment = location.pathname.split('/').filter(Boolean).at(-1);
+    const title = !segment
+      ? 'Staff Portal'
+      : segment.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+    document.title = `${title} | Panama Staffing`;
+  }, [location.pathname]);
+
   return (
     <Suspense fallback={<LoadingState message="Loading your portal..." className="py-10" card />}>
       <Routes>

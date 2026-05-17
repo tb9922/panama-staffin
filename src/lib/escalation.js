@@ -138,7 +138,7 @@ export function calculateDayCost(staffForDay, config) {
   let sleepIn = 0;
 
   staffForDay.forEach(s => {
-    if (s.sleep_in) sleepIn += config.sleep_in_rate || 0;
+    if (s.sleep_in) sleepIn += config.sleep_in_rate ?? 50;
     const shift = s.shift;
     if (!isWorkingShift(shift)) return;
     let hours = getShiftHours(shift, config);
@@ -168,7 +168,7 @@ export function calculateDayCost(staffForDay, config) {
 
     // OT premium: extra £/hr for OC-* shifts
     if (isOTShift(shift)) {
-      otPremium += hours * config.ot_premium;
+      otPremium += hours * (config.ot_premium || 0);
     }
 
     // BH premium: (multiplier - 1) × hours × rate
@@ -271,7 +271,7 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
     ? floatStaff.reduce((sum, s) => sum + (s.hourly_rate || 0), 0) / floatStaff.length
     : getConfiguredNlwRate(config);
   const floatCost = floatFills * elHours * avgFloatRate * days;
-  const otCost = otFills * elHours * (avgFloatRate + config.ot_premium) * days;
+  const otCost = otFills * elHours * (avgFloatRate + (config.ot_premium || 0)) * days;
   const agDayCost = agDayFills * elHours * config.agency_rate_day * days;
   const agNightCost = agNightFills * nHours * config.agency_rate_night * days;
 

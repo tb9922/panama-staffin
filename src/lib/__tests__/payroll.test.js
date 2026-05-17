@@ -11,6 +11,7 @@ import {
   calculatePayableHours,
   suggestNextPeriod,
   buildSageCSV,
+  buildXeroCSV,
 } from '../payroll.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -511,6 +512,30 @@ describe('buildSageCSV', () => {
     const totalIdx = cols.indexOf('Total_Gross_Pay');
     const values = dataRow.split(',');
     expect(values[totalIdx]).toBe('1000.00');
+  });
+});
+
+describe('buildXeroCSV', () => {
+  const lines = [{
+    staff_id: 'S001',
+    base_hours: 120,
+    total_hours: 130,
+    gross_pay: 1600,
+    holiday_pay: 100,
+    ssp_amount: 0,
+  }];
+  const staffMap = new Map([['S001', { name: 'Siân Smith', hourly_rate: 12 }]]);
+  const run = { period_start: '2026-05-01', period_end: '2026-05-31' };
+
+  it('uses the Xero schema rather than the Sage control export', () => {
+    const csv = buildXeroCSV(lines, staffMap, run);
+    const [header, row] = csv.split('\r\n');
+
+    expect(header).toBe('PayrollCalendarID,EmployeeID,EmployeeName,EarningsRateID,NumberOfUnits,RatePerUnit,GrossPay,PayPeriodStart,PayPeriodEnd');
+    expect(header).not.toContain('Ref:Est_PAYE');
+    expect(row).toContain('S001');
+    expect(row).toContain('Siân Smith');
+    expect(row).toContain('1700.00');
   });
 });
 

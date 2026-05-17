@@ -34,6 +34,7 @@ import {
   checkNMWCompliance,
   getDefaultShiftHours,
   buildSageCSV,
+  buildXeroCSV,
   buildGenericCSV,
 } from '../shared/payroll.js';
 
@@ -57,6 +58,7 @@ import { NotFoundError, ValidationError } from '../errors.js';
 // Zero-value YTD — used when no approved run exists yet this tax year
 const ZERO_YTD = { gross_pay: 0, taxable_pay: 0, tax_deducted: 0, employee_ni: 0, employer_ni: 0, student_loan: 0, pension_employee: 0, pension_employer: 0 };
 const EMPLOYMENT_ALLOWANCE_BY_TAX_YEAR = new Map([[2026, 10500]]);
+const PENSION_MODES = new Set(['npa', 'ras', 'sacrifice']);
 
 async function logPayrollAction(action, homeSlug, username, details) {
   await auditService.log(action, homeSlug, username, details);
@@ -77,6 +79,52 @@ function addYearsToIsoDate(isoDate, years) {
 
 function maxIsoDate(values) {
   return values.filter(Boolean).sort().at(-1) || null;
+}
+
+async function getHomePensionMode(client, homeId) {
+  const { rows: [home] } = await client.query(
+    `SELECT pension_mode, config->>'pension_mode' AS config_pension_mode FROM homes WHERE id = $1`,
+    [homeId],
+  );
+  const mode = home?.config_pension_mode || home?.pension_mode || 'npa';
+  return PENSION_MODES.has(mode) ? mode : 'npa';
+}
+
+function applyPensionMode(mode, contribution) {
+  const grossEmployeeContribution = contribution.employeeAmount || 0;
+  if (mode === 'ras') {
+    return {
+      employeeDeduction: round2(grossEmployeeContribution * 0.8),
+      employerContribution: contribution.employerAmount || 0,
+      taxableDeduction: 0,
+      niDeduction: 0,
+      note: grossEmployeeContribution > 0
+        ? `Pension relief at source: gross employee contribution £${grossEmployeeContribution.toFixed(2)}, payslip deduction net of basic-rate relief`
+        : null,
+    };
+  }
+  if (mode === 'sacrifice') {
+    return {
+      employeeDeduction: grossEmployeeContribution,
+      employerContribution: round2((contribution.employerAmount || 0) + grossEmployeeContribution),
+      taxableDeduction: grossEmployeeContribution,
+      niDeduction: grossEmployeeContribution,
+      note: grossEmployeeContribution > 0
+        ? 'Pension salary sacrifice applied before PAYE and NI'
+        : null,
+    };
+  }
+  return {
+    employeeDeduction: grossEmployeeContribution,
+    employerContribution: contribution.employerAmount || 0,
+    taxableDeduction: grossEmployeeContribution,
+    niDeduction: 0,
+    note: null,
+  };
+}
+
+function taxablePensionDeductionForLine(line, pensionMode) {
+  return pensionMode === 'ras' ? 0 : (line.pension_employee || 0);
 }
 
 function getRunPayDate(run) {
@@ -234,6 +282,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const niThresholds  = await taxRepo.getNIThresholds(taxYear, client);
     const slThresholds  = await taxRepo.getStudentLoanThresholds(taxYear, client);
     const pensionConf   = await pensionRepo.getPensionConfig(payDate, client);
+    const pensionMode   = await getHomePensionMode(client, homeId);
     const taxBandsCache = new Map();
     const niRatesCache  = new Map();
 
@@ -542,33 +591,40 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
             : `AUTO-ENROLLED: Pension auto-enrolment triggered from ${autoEnrolmentDate}`);
         }
       }
-      let pensionEmployee = 0, pensionEmployer = 0;
+      let pensionEmployee = 0, pensionEmployer = 0, pensionTaxableDeduction = 0, pensionNiDeduction = 0;
       if (pensionConf && enrolment && ['eligible_enrolled', 'opt_in_enrolled'].includes(enrolment.status)) {
         const pr = calculatePensionContributions(grossForTax, run.pay_frequency, pensionConf, enrolment);
-        pensionEmployee = pr.employeeAmount;
-        pensionEmployer = pr.employerAmount;
+        const pension = applyPensionMode(pensionMode, pr);
+        pensionEmployee = pension.employeeDeduction;
+        pensionEmployer = pension.employerContribution;
+        pensionTaxableDeduction = pension.taxableDeduction;
+        pensionNiDeduction = pension.niDeduction;
+        if (pension.note) notesParts.push(pension.note);
         // Record contribution row (deletes+recreates on recalculate via cascade on payroll_lines)
-        if (pr.employeeAmount > 0 || pr.employerAmount > 0) {
+        if (pensionEmployee > 0 || pensionEmployer > 0) {
           await pensionRepo.insertContribution(homeId, {
             payroll_line_id: line.id,
             staff_id: s.id,
             qualifying_pay: pr.qualifyingEarnings,
-            employee_amount: pr.employeeAmount,
-            employer_amount: pr.employerAmount,
+            employee_amount: pensionEmployee,
+            employer_amount: pensionEmployer,
           }, client);
         }
       }
 
-      // PAYE on gross MINUS pension employee contribution (Net Pay Arrangement).
-      // Use taxable_pay from YTD (pension-reduced) for cumulative consistency.
+      // PAYE on pension-adjusted gross. NPA and salary sacrifice reduce taxable
+      // pay; relief-at-source does not because relief is claimed by the provider.
+      // Use taxable_pay from YTD for cumulative consistency.
       // effectiveYTD includes P45 previous employment figures for mid-year starters.
-      const grossForPAYE = round2(grossForTax - pensionEmployee);
+      const grossForPAYE = round2(Math.max(0, grossForTax - pensionTaxableDeduction));
       const payeYTD = { ...effectiveYTD, gross_pay: effectiveYTD.taxable_pay ?? effectiveYTD.gross_pay ?? 0 };
       const { tax, isRefund: _isRefund } = calculatePAYE(grossForPAYE, parsedCode, payPeriod, periodsInYear, payeYTD, taxBands);
       const taxDeducted = round2(tax); // may be negative (refund) — passed through to net pay
 
-      // NI is on full gross (pension relief does not apply to NI)
-      const { employeeNI, employerNI } = calculateNI(grossForTax, run.pay_frequency, niThresholds, niRates);
+      // NI is on full gross except salary sacrifice, where the sacrifice reduces
+      // NI-able pay as well as taxable pay.
+      const grossForNI = round2(Math.max(0, grossForTax - pensionNiDeduction));
+      const { employeeNI, employerNI } = calculateNI(grossForNI, run.pay_frequency, niThresholds, niRates);
 
       const planStr    = taxCodeRow?.student_loan_plan || null;
       const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
@@ -688,6 +744,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
     const payDate  = getRunPayDate(run);
     const taxYear  = getTaxYear(new Date(payDate));
     const taxMonth = getHMRCTaxMonth(new Date(payDate));
+    const pensionMode = await getHomePensionMode(client, homeId);
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
 
     // Write YTD increments for all staff in a single batch INSERT ... ON CONFLICT
@@ -696,7 +753,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       return {
         staff_id:         l.staff_id,
         gross_pay:        grossWithExtras,
-        taxable_pay:      round2(grossWithExtras - (l.pension_employee || 0)),
+        taxable_pay:      round2(Math.max(0, grossWithExtras - taxablePensionDeductionForLine(l, pensionMode))),
         tax_deducted:     l.tax_deducted     || 0,
         employee_ni:      l.employee_ni      || 0,
         employer_ni:      l.employer_ni      || 0,
@@ -783,6 +840,7 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
     const payDate  = getRunPayDate(run);
     const taxYear  = getTaxYear(new Date(payDate));
     const taxMonth = getHMRCTaxMonth(new Date(payDate));
+    const pensionMode = await getHomePensionMode(client, homeId);
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
 
     if (run.ytd_applied && lines.length > 0) {
@@ -792,7 +850,7 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
         return {
           staff_id:         l.staff_id,
           gross_pay:        grossWithExtras,
-          taxable_pay:      round2(grossWithExtras - (l.pension_employee || 0)),
+          taxable_pay:      round2(Math.max(0, grossWithExtras - taxablePensionDeductionForLine(l, pensionMode))),
           tax_deducted:     l.tax_deducted     || 0,
           employee_ni:      l.employee_ni      || 0,
           employer_ni:      l.employer_ni      || 0,
@@ -874,6 +932,12 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
+function buildPayrollExportCsv(format, lines, staffMap, run, ytdMap) {
+  if (format === 'sage') return buildSageCSV(lines, staffMap, run, ytdMap);
+  if (format === 'xero') return buildXeroCSV(lines, staffMap, run);
+  return buildGenericCSV(lines, staffMap, run, ytdMap);
+}
+
 /**
  * Generate CSV export for an approved/exported payroll run.
  * format: 'sage' | 'xero' | 'generic'
@@ -897,9 +961,7 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
     const staffIds = [...new Set(lines.map(l => l.staff_id))];
     const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
 
-    const csv = format === 'sage'
-      ? buildSageCSV(lines, staffMap, run, ytdMap)
-      : buildGenericCSV(lines, staffMap, run, ytdMap);
+    const csv = buildPayrollExportCsv(format, lines, staffMap, run, ytdMap);
 
     const filename = `payroll_${homeSlug}_${run.period_start}_to_${run.period_end}_${format}.csv`;
 
@@ -936,9 +998,7 @@ export async function exportRunCSVReadOnly(runId, homeId, homeSlug, username, fo
     const taxYear = getTaxYear(new Date(getRunPayDate(run)));
     const staffIds = [...new Set(lines.map(l => l.staff_id))];
     const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
-    const csv = format === 'sage'
-      ? buildSageCSV(lines, staffMap, run, ytdMap)
-      : buildGenericCSV(lines, staffMap, run, ytdMap);
+    const csv = buildPayrollExportCsv(format, lines, staffMap, run, ytdMap);
     const filename = `payroll_${homeSlug}_${run.period_start}_to_${run.period_end}_${format}.csv`;
       return { csv, filename };
     });

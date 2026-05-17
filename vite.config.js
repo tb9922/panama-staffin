@@ -11,8 +11,18 @@ const allowedHosts = (process.env.VITE_ALLOWED_HOSTS || '')
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    sourcemap: false,
+    sourcemap: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false,
     chunkSizeWarningLimit: 1000, // ExcelJS (937KB) is lazy-loaded on export - not a perf concern
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          sentry: ['@sentry/react'],
+          pdf: ['jspdf', 'jspdf-autotable'],
+          excel: ['exceljs'],
+        },
+      },
+    },
   },
   server: {
     ...(allowedHosts.length ? { allowedHosts } : {}),

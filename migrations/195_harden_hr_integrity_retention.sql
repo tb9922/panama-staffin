@@ -12,16 +12,29 @@ ON CONFLICT (data_category) DO UPDATE SET
   retention_basis = EXCLUDED.retention_basis,
   applies_to_table = EXCLUDED.applies_to_table;
 
-ALTER TABLE hr_grievance_cases
-  ADD CONSTRAINT hr_grievance_cases_home_id_id_unique UNIQUE (home_id, id);
-ALTER TABLE hr_disciplinary_cases
-  ADD CONSTRAINT hr_disciplinary_cases_home_id_id_unique UNIQUE (home_id, id);
-ALTER TABLE hr_flexible_working
-  ADD CONSTRAINT hr_flexible_working_home_id_id_unique UNIQUE (home_id, id);
-ALTER TABLE hr_contracts
-  ADD CONSTRAINT hr_contracts_home_id_id_unique UNIQUE (home_id, id);
-ALTER TABLE hr_oh_referrals
-  ADD CONSTRAINT hr_oh_referrals_home_id_id_unique UNIQUE (home_id, id);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hr_grievance_cases_home_id_id_unique') THEN
+    ALTER TABLE hr_grievance_cases
+      ADD CONSTRAINT hr_grievance_cases_home_id_id_unique UNIQUE (home_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hr_disciplinary_cases_home_id_id_unique') THEN
+    ALTER TABLE hr_disciplinary_cases
+      ADD CONSTRAINT hr_disciplinary_cases_home_id_id_unique UNIQUE (home_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hr_flexible_working_home_id_id_unique') THEN
+    ALTER TABLE hr_flexible_working
+      ADD CONSTRAINT hr_flexible_working_home_id_id_unique UNIQUE (home_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hr_contracts_home_id_id_unique') THEN
+    ALTER TABLE hr_contracts
+      ADD CONSTRAINT hr_contracts_home_id_id_unique UNIQUE (home_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hr_oh_referrals_home_id_id_unique') THEN
+    ALTER TABLE hr_oh_referrals
+      ADD CONSTRAINT hr_oh_referrals_home_id_id_unique UNIQUE (home_id, id);
+  END IF;
+END $$;
 
 ALTER TABLE hr_disciplinary_cases
   DROP CONSTRAINT IF EXISTS hr_disciplinary_cases_linked_grievance_fkey,

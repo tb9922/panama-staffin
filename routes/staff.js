@@ -37,7 +37,7 @@ const staffBodySchema = z.object({
   team:            z.enum(STAFF_TEAMS),
   pref:            z.enum(STAFF_PREFS).nullable().optional(),
   skill:           z.number().min(0).max(5).optional(),
-  hourly_rate:     z.number().positive().optional(),
+  hourly_rate:     z.number().min(0).max(200).optional(),
   active:          z.boolean().optional(),
   wtr_opt_out:     z.boolean().optional(),
   start_date:      optDate,

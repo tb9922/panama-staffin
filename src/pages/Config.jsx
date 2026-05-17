@@ -415,10 +415,24 @@ export default function Config() {
       {/* Overtime & Agency */}
       <section className={`${CARD.padded} mb-5`}>
         <h2 className="mb-4 text-lg font-semibold text-[var(--ink)]">Overtime & Agency</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-          <Field label="OT Premium" path="ot_premium" step={0.5} unit="/hr" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-5">
+          <Field label="OT Premium (GBP/hr extra)" path="ot_premium" step={0.5} unit="/hr" />
           <Field label="Agency Day Rate" path="agency_rate_day" unit="/hr" />
           <Field label="Agency Night Rate" path="agency_rate_night" unit="/hr" />
+          <div>
+            <label htmlFor="config-pension-mode" className={INPUT.label}>Pension Tax Relief</label>
+            <select
+              id="config-pension-mode"
+              value={config.pension_mode || 'npa'}
+              onChange={e => handleChange('pension_mode', e.target.value)}
+              disabled={!canEdit}
+              className={controlClass(INPUT.sm)}
+            >
+              <option value="npa">Net pay arrangement</option>
+              <option value="ras">Relief at source</option>
+              <option value="sacrifice">Salary sacrifice</option>
+            </select>
+          </div>
           <Field label="Sleep-In Rate (£ flat per night)" path="sleep_in_rate" step={0.01} unit="/night" />
         </div>
       </section>

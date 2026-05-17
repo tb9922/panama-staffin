@@ -39,7 +39,7 @@ describe('payrollTax', () => {
     expect(getHMRCPaymentDueDate(2026, 12)).toBe('2027-04-19');
   });
 
-  it('parses standard, Scottish, Welsh, BR, D0, D1, and K tax codes', () => {
+  it('parses standard, Scottish, Welsh, BR, D0, D1, D2, and K tax codes', () => {
     expect(parseTaxCode('1257L')).toMatchObject({
       type: 'standard',
       country: 'england_wales',
@@ -67,6 +67,11 @@ describe('payrollTax', () => {
     });
     expect(parseTaxCode('SD1')).toMatchObject({
       type: 'd1',
+      country: 'scotland',
+      annualAllowance: 0,
+    });
+    expect(parseTaxCode('SD2')).toMatchObject({
+      type: 'd2',
       country: 'scotland',
       annualAllowance: 0,
     });
@@ -121,6 +126,19 @@ describe('payrollTax', () => {
     const refund = calculatePAYE(0, parsed, 2, 12, { gross_pay: 1000, tax_deducted: 400 }, taxBands);
     expect(refund.tax).toBeLessThan(0);
     expect(refund.isRefund).toBe(true);
+  });
+
+  it('taxes Scottish SD2 codes at the flat advanced rate', () => {
+    const taxBands = [
+      { band_name: 'starter', lower_limit: 0, upper_limit: 2306, rate: 0.19 },
+      { band_name: 'basic', lower_limit: 2306, upper_limit: 13991, rate: 0.20 },
+      { band_name: 'intermediate', lower_limit: 13991, upper_limit: 31092, rate: 0.21 },
+      { band_name: 'higher', lower_limit: 31092, upper_limit: 62570, rate: 0.42 },
+      { band_name: 'advanced', lower_limit: 62570, upper_limit: 125140, rate: 0.45 },
+      { band_name: 'top', lower_limit: 125140, upper_limit: null, rate: 0.48 },
+    ];
+    const result = calculatePAYE(5000, parseTaxCode('SD2'), 1, 12, { gross_pay: 0, tax_deducted: 0 }, taxBands);
+    expect(result.tax).toBe(2250);
   });
 
   it('calculates monthly NI from monthly thresholds', () => {
@@ -273,11 +291,11 @@ describe('payrollTax', () => {
 
   it('selects the latest SSP config effective on or before the pay date', () => {
     const configs = [
-      { effective_from: '2025-04-06', weekly_rate: 116.75 },
-      { effective_from: '2026-04-06', weekly_rate: 118.75 },
+      { effective_from: '2025-04-06', weekly_rate: 118.75 },
+      { effective_from: '2026-04-06', weekly_rate: 123.25 },
     ];
-    expect(getSSPConfig('2026-04-20', configs)).toMatchObject({ weekly_rate: 118.75 });
-    expect(getSSPConfig('2025-05-01', configs)).toMatchObject({ weekly_rate: 116.75 });
+    expect(getSSPConfig('2026-04-20', configs)).toMatchObject({ weekly_rate: 123.25 });
+    expect(getSSPConfig('2025-05-01', configs)).toMatchObject({ weekly_rate: 118.75 });
     expect(getSSPConfig('2025-03-01', configs)).toBeNull();
   });
 

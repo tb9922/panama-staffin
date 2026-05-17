@@ -122,7 +122,7 @@ export function getPayPeriodNumber(periodEndDate, payFrequency) {
  *
  * Returns:
  *   { type, country, annualAllowance, basis, missingCode?, addToTaxable? }
- *   type: 'standard' | 'br' | 'd0' | 'd1' | 'nt' | '0t' | 'k_code' | 'default'
+ *   type: 'standard' | 'br' | 'd0' | 'd1' | 'd2' | 'nt' | '0t' | 'k_code' | 'default'
  *   country: 'england_wales' | 'scotland' | 'wales'
  *   annualAllowance: annual tax-free amount (negative for K codes)
  *   basis: 'cumulative' (default) — basis override via separate tax_codes.basis field
@@ -154,6 +154,7 @@ export function parseTaxCode(taxCode) {
   if (code === 'BR')  return { type: 'br',  country, annualAllowance: 0,        basis: 'cumulative' };
   if (code === 'D0')  return { type: 'd0',  country, annualAllowance: 0,        basis: 'cumulative' };
   if (code === 'D1')  return { type: 'd1',  country, annualAllowance: 0,        basis: 'cumulative' };
+  if (code === 'D2')  return { type: 'd2',  country, annualAllowance: 0,        basis: 'cumulative' };
 
   // K code: adds to taxable income rather than deducting from it
   const kMatch = code.match(/^K(\d+)$/);
@@ -242,7 +243,7 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
   if (parsedCode.type === 'k_code') {
     // K code: negative allowance adds to taxable
     cumulativeTaxableIncome = cumulativeGross + Math.abs(totalAllowanceToDate);
-  } else if (parsedCode.type === 'br' || parsedCode.type === 'd0' || parsedCode.type === 'd1') {
+  } else if (parsedCode.type === 'br' || parsedCode.type === 'd0' || parsedCode.type === 'd1' || parsedCode.type === 'd2') {
     cumulativeTaxableIncome = cumulativeGross;
   } else {
     cumulativeTaxableIncome = Math.max(0, cumulativeGross - totalAllowanceToDate);
@@ -275,9 +276,9 @@ function computeTax(annualTaxable, taxBands, parsedCode) {
   if (parsedCode.type === 'br') return annualTaxable * 0.20;
   // D0: flat higher rate (40% England/Wales, 42% Scotland)
   if (parsedCode.type === 'd0') return annualTaxable * (parsedCode.country === 'scotland' ? 0.42 : 0.40);
-  // D1/SD1 flat-rate codes use HMRC table D rates.
-  // SD2 is the separate Scottish advanced-rate code.
+  // D1/SD1 and D2/SD2 flat-rate codes use HMRC table D rates.
   if (parsedCode.type === 'd1') return annualTaxable * (parsedCode.country === 'scotland' ? 0.42 : 0.45);
+  if (parsedCode.type === 'd2') return annualTaxable * (parsedCode.country === 'scotland' ? 0.45 : 0.45);
 
   let tax = 0;
   let remaining = annualTaxable;

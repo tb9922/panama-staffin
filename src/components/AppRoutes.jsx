@@ -1,5 +1,5 @@
-import { lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { lazy, useEffect } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
 import { RequireAnyModule, RequireEvidenceHub, RequireHomeRole, RequireModule, RequireOnboardingAccess, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
 import { SCAN_INTAKE_ACCESS_MODULES } from '../../shared/scanIntake.js';
@@ -86,7 +86,37 @@ const MaintenanceDocsTracker = lazy(() => import('../pages/MaintenanceDocsTracke
 const OnboardingDocsTracker = lazy(() => import('../pages/OnboardingDocsTracker.jsx'));
 const NotFound = lazy(() => import('../pages/NotFound.jsx'));
 
+const ROUTE_TITLES = {
+  '/': 'Dashboard',
+  '/day': 'Daily Status',
+  '/rotation': 'Roster',
+  '/staff': 'Staff Register',
+  '/portfolio': 'Portfolio Dashboard',
+  '/payroll': 'Payroll Dashboard',
+  '/config': 'Configuration',
+  '/cqc': 'CQC Evidence',
+  '/incidents': 'Incidents',
+  '/complaints': 'Complaints',
+  '/gdpr': 'GDPR',
+};
+
+function titleForPath(pathname) {
+  const exact = ROUTE_TITLES[pathname];
+  if (exact) return exact;
+  const segment = pathname.split('/').filter(Boolean).at(-1);
+  if (!segment) return 'Dashboard';
+  return segment
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
 export default function AppRoutes() {
+  const location = useLocation();
+
+  useEffect(() => {
+    document.title = `${titleForPath(location.pathname)} | Panama Staffing`;
+  }, [location.pathname]);
+
   return (
     <Routes>
       {/* Scheduling */}

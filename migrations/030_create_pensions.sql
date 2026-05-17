@@ -1,6 +1,6 @@
 -- 030_create_pensions.sql
 -- Pension auto-enrolment: config, enrolments, contributions.
--- Seeded with 2025/26 qualifying earnings band.
+-- Seeded with current qualifying earnings band.
 
 -- UP
 
@@ -17,11 +17,13 @@ CREATE TABLE IF NOT EXISTS pension_config (
   state_pension_age       INTEGER NOT NULL DEFAULT 67
 );
 
--- 2025/26: trigger £10,000; QE band £6,500-£50,270; minimum contributions 5%+3%
+-- 2025/26 onwards: trigger GBP10,000; QE band GBP6,240-GBP50,270;
+-- minimum contributions 5%+3%. The weekly lower qualifying limit is GBP120.
 INSERT INTO pension_config
   (effective_from, lower_qualifying_weekly, upper_qualifying_weekly, trigger_annual, employee_rate, employer_rate, state_pension_age)
 VALUES
-  ('2025-04-06', 125.00, 967.00, 10000.00, 0.05, 0.03, 67)
+  ('2025-04-06', 120.00, 967.00, 10000.00, 0.05, 0.03, 67),
+  ('2026-04-06', 120.00, 967.00, 10000.00, 0.05, 0.03, 67)
 ON CONFLICT (effective_from) DO NOTHING;
 
 -- Per-staff enrolment record.
@@ -61,10 +63,13 @@ CREATE INDEX IF NOT EXISTS idx_pension_contributions_home ON pension_contributio
 -- Home-level pension and employment allowance settings.
 ALTER TABLE homes ADD COLUMN IF NOT EXISTS employment_allowance_claimed BOOLEAN DEFAULT false;
 ALTER TABLE homes ADD COLUMN IF NOT EXISTS pension_provider_name VARCHAR(200);
+ALTER TABLE homes ADD COLUMN IF NOT EXISTS pension_mode VARCHAR(20) NOT NULL DEFAULT 'npa'
+  CHECK (pension_mode IN ('npa', 'ras', 'sacrifice'));
 
 -- DOWN
 ALTER TABLE homes DROP COLUMN IF EXISTS pension_provider_name;
 ALTER TABLE homes DROP COLUMN IF EXISTS employment_allowance_claimed;
+ALTER TABLE homes DROP COLUMN IF EXISTS pension_mode;
 DROP TABLE IF EXISTS pension_contributions;
 DROP TABLE IF EXISTS pension_enrolments;
 DROP TABLE IF EXISTS pension_config;

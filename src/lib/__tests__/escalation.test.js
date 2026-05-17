@@ -195,6 +195,12 @@ describe('calculateDayCost', () => {
     expect(cost.total).toBe(128);
   });
 
+  it('defaults sleep-in costing to the payroll flat rate when config is missing', () => {
+    const staff = [{ ...makeCarer('S1', 'N', 1, 'Night A', 'Night Carer', 13), sleep_in: true }];
+    const cost = calculateDayCost(staff, config);
+    expect(cost.sleepIn).toBe(50);
+  });
+
   it('uses agency day rate (not staff rate) for AG-E shifts', () => {
     // Agency day rate = £22/hr, 8h E shift: agencyDay = 8 × 22 = £176, base should be 0
     const staff = [makeCarer('S1', 'AG-E', 1, 'Agency', 'Carer', 999)]; // rate should be ignored

@@ -846,6 +846,14 @@ describe('exportRunCSV', () => {
     expect(result.filename).toContain(SLUG);
   }, 15000);
 
+  it('exports xero CSV with the compact Xero schema', async () => {
+    const result = await exportRunCSV(runId, homeId, SLUG, USERNAME, 'xero');
+    const [header] = result.csv.split('\r\n');
+    expect(header).toBe('PayrollCalendarID,EmployeeID,EmployeeName,EarningsRateID,NumberOfUnits,RatePerUnit,GrossPay,PayPeriodStart,PayPeriodEnd');
+    expect(header).not.toContain('Ref:Est_PAYE');
+    expect(result.filename).toContain('xero');
+  }, 15000);
+
   it('marks run as exported after first export', async () => {
     const { rows: [run] } = await pool.query(
       `SELECT status, export_format FROM payroll_runs WHERE id = $1`,

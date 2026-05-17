@@ -154,6 +154,22 @@ describe('Compliance route create flows', () => {
     expect(createRes.body.corrective_actions[0].status).toBe('pending');
   });
 
+  it('requires safeguarding referral for major resident incidents', async () => {
+    await request(app)
+      .post('/api/incidents')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        date: '2026-03-26',
+        type: 'fall',
+        severity: 'major',
+        person_affected: 'resident',
+        description: 'Major resident incident without safeguarding referral',
+        safeguarding_referral: false,
+      })
+      .expect(422);
+  });
+
   it('accepts HH:mm:ss incident time values and returns HH:mm values', async () => {
     const createRes = await request(app)
       .post('/api/incidents')

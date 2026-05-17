@@ -58,10 +58,11 @@ async function fireWebhook(hook, event, payload) {
     ? payload // retries pass the original serialised body
     : JSON.stringify({ event, payload, timestamp });
   const payloadBytes = Buffer.byteLength(body, 'utf8');
+  const requestId = crypto.randomUUID();
   if (payloadBytes > MAX_WEBHOOK_PAYLOAD_BYTES) {
     const error = `Webhook payload exceeds ${MAX_WEBHOOK_PAYLOAD_BYTES} bytes`;
     logger.warn({ webhookId: hook.id, event, payloadBytes }, error);
-    await webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
+    await webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked', { requestId })
       .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
     return;
   }
@@ -79,13 +80,12 @@ async function fireWebhook(hook, event, payload) {
   if (!hook.secret) {
     const error = 'Webhook signing secret missing';
     logger.warn({ webhookId: hook.id, event }, error);
-    await webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'failed')
+    await webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'failed', { requestId })
       .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
     return;
   }
   const signatureBase = `${timestamp}.${body}`;
   const signature = crypto.createHmac('sha256', hook.secret).update(signatureBase).digest('hex');
-  const requestId = crypto.randomUUID();
   const start = Date.now();
   let statusCode = null;
   let error = null;
@@ -94,14 +94,14 @@ async function fireWebhook(hook, event, payload) {
   if (await resolvedToPrivateIp(hook.url)) {
     error = 'Webhook URL resolves to private IP at delivery time — blocked';
     logger.warn({ webhookId: hook.id, url: hook.url }, error);
-    webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
+    webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked', { requestId })
       .catch(logErr => logger.warn({ err: logErr }, 'Webhook delivery log failed'));
     return;
   }
   if (isInternalAppUrl(hook.url, config.allowedOrigin)) {
     error = 'Webhook URL targets Panama internal endpoints — blocked';
     logger.warn({ webhookId: hook.id, url: hook.url }, error);
-    webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
+    webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked', { requestId })
       .catch(logErr => logger.warn({ err: logErr }, 'Webhook delivery log failed'));
     return;
   }
@@ -138,7 +138,7 @@ async function fireWebhook(hook, event, payload) {
   const isSuccess = statusCode !== null && statusCode >= 200 && statusCode < 300;
 
   if (isSuccess) {
-    webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, null, 'delivered')
+    webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, null, 'delivered', { requestId })
       .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
   } else {
     const retryCount = 1;
@@ -152,7 +152,7 @@ async function fireWebhook(hook, event, payload) {
       responseMs,
       error,
       status,
-      { retryCount, nextRetryAt, signingSecret: hook.secret },
+      { retryCount, nextRetryAt, signingSecret: hook.secret, requestId },
     ).catch(logErr => {
       logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed');
     });
@@ -188,7 +188,7 @@ async function processRetryDelivery(delivery) {
   const timestamp = extractTimestamp(body);
   const signatureBase = `${timestamp}.${body}`;
   const signature = crypto.createHmac('sha256', delivery.secret).update(signatureBase).digest('hex');
-  const requestId = crypto.randomUUID();
+  const requestId = delivery.request_id || `whd-${delivery.id}`;
 
   // Re-validate URL at retry time to prevent DNS rebinding SSRF
   if (await resolvedToPrivateIp(delivery.url)) {
